@@ -71,8 +71,8 @@ async function update_challonge_match(
 
       // Iterate through the team1ChallongeId array to find the correct index
       for (let i = 0; i < challongeData.length; i++) {
-        if ((challongeData.match.player1_id === team1ChallongeId[i].challonge_team_id && challongeData.match.player2_id === team2ChallongeId[0].challonge_team_id) ||
-            (challongeData.match.player2_id === team1ChallongeId[i].challonge_team_id && challongeData.match.player1_id === team2ChallongeId[0].challonge_team_id)) {
+        if ((challongeData[i].match.player1_id === team1ChallongeId[0].challonge_team_id && challongeData[i].match.player2_id === team2ChallongeId[0].challonge_team_id) ||
+            (challongeData[i].match.player2_id === team1ChallongeId[0].challonge_team_id && challongeData[i].match.player1_id === team2ChallongeId[0].challonge_team_id)) {
           correctIndex = i;
           break; // Exit the loop once the correct index is found
         }
