@@ -66,6 +66,25 @@ async function update_challonge_match(
     );
     let challongeData: any = await challongeResponse.json();
     if (challongeData) {
+
+      let correctIndex = -1; // Initialize with -1 to indicate not found
+
+      // Iterate through the team1ChallongeId array to find the correct index
+      for (let i = 0; i < team1ChallongeId.length; i++) {
+        if ((challongeData.match.player1_id === team1ChallongeId[i].challonge_team_id && challongeData.match.player2_id === team2ChallongeId[0].challonge_team_id) ||
+            (challongeData.match.player2_id === team1ChallongeId[i].challonge_team_id && challongeData.match.player1_id === team2ChallongeId[0].challonge_team_id)) {
+          correctIndex = i;
+          break; // Exit the loop once the correct index is found
+        }
+      }
+
+      // If correctIndex remains -1, it means no matching index was found based on the conditions
+      if (correctIndex === -1) {
+        console.log("No matching index found.");
+      } else {
+        console.log(`Correct index found: ${correctIndex}`);
+      }
+
       if (num_maps == 1) {
         // Submit the map stats scores instead.
         sql =
@@ -77,12 +96,12 @@ async function update_challonge_match(
       // Admins may just make a match that has teams swapped. This is okay as we can change what we
       // report to Challonge.
       team1Score =
-        challongeData[0].match.player1_id ==
+        challongeData[correctIndex].match.player1_id ==
         team1ChallongeId[0].challonge_team_id
           ? mapStats[0].team1_score
           : mapStats[0].team2_score;
       team2Score =
-        challongeData[0].match.player2_id ==
+        challongeData[correctIndex].match.player2_id ==
         team2ChallongeId[0].challonge_team_id
           ? mapStats[0].team2_score
           : mapStats[0].team1_score;
@@ -105,7 +124,7 @@ async function update_challonge_match(
         "https://api.challonge.com/v1/tournaments/" +
           seasonInfo[0].challonge_url +
           "/matches/" +
-          challongeData[0].match.id +
+          challongeData[correctIndex].match.id +
           ".json",
         {
           method: "PUT",
