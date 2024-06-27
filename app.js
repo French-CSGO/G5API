@@ -75,7 +75,7 @@ if (config.get("server.useRedis")) {
       name: "G5API",
       resave: false,
       saveUninitialized: true,
-      store: new RedisStore(redisCfg),
+      store: RedisStore(redisCfg),
       cookie: { maxAge: 86400000 },
     })
   );
