@@ -310,25 +310,32 @@ router.get(
   async (req, res, next) => {
     try {
       let sql =
-        "SELECT CONCAT('{', GROUP_CONCAT(DISTINCT CONCAT('\"',team.name,'\"',': \"',ts.id,'\"')),'}') as teams " + 
-        "FROM teams_seasons ts " +
-        "INNER JOIN team ON ts.teams_id = team.id " +
-        "WHERE ts.season_id = ?"
-      let team = await db.query(sql, [req.params.season_id]);
-      if (team[0].teams == null) {
-        res.status(404).json({
-          message: "No teams found for season id " + req.params.season_id + ".",
-        });
-        return;
+        "SELECT usr.name as owner, t.id, t.user_id, t.name, t.flag, t.logo, t.tag, t.public_team, " +
+        "CONCAT('{', GROUP_CONCAT( DISTINCT CONCAT('\"',ta.auth, '\"', ': " +
+        "{ \"name\": ', CAST(JSON_QUOTE(ta.name) AS CHAR CHARACTER SET utf8mb4), ', \"captain\": ', ta.captain, ', \"coach\": ', ta.coach, '}') ORDER BY ta.captain desc, ta.id  SEPARATOR ', '), '}') as auth_name " +
+        "FROM team t LEFT OUTER JOIN team_auth_names ta " +
+        "ON t.id = ta.team_id JOIN user usr " + 
+        "ON usr.id = t.user_id " +
+        "INNER JOIN teams_seasons ts " +
+        "ON t.id = ts.teams_id " +
+        "GROUP BY t.id " +
+        "ORDER BY t.id DESC";
+        const teams = await db.query(sql);
+        // Check this and return a 404 if we don't exist.
+        if (teams[0] == null) {
+          res.status(404).json({ message: "No teams found in the system." });
+          return;
+        }
+        for (let row in teams) {
+          if (teams[row].auth_name != null) {
+            teams[row].auth_name = JSON.parse(teams[row].auth_name);
+          }
+        }
+        res.json({ teams });
+      } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: err.toString() });
       }
-      for (let row in team) {
-        if (team[row].teams == null) delete team[row].teams;
-        else team[row].teams = JSON.parse(team[row].teams);
-      }
-      res.json(team[0]);
-    } catch (err) {
-      res.status(500).json({ message: err.toString() });
-    }
   }
 );
 
@@ -414,6 +421,7 @@ router.get("/:season_id", async (req, res, next) => {
 router.post("/", Utils.ensureAuthenticated, async (req, res, next) => {
   try {
     let defaultCvar = req.body[0].season_cvar;
+    let season_teams = req.body[0].season_teams;
     let insertSet = {
       user_id: req.user.id,
       name: req.body[0].name,
@@ -431,6 +439,28 @@ router.post("/", Utils.ensureAuthenticated, async (req, res, next) => {
           cvar_value: typeof defaultCvar[key] === 'string' ? defaultCvar[key].replace(/"/g, '\\"').replace(/\\/g, '\\\\') : defaultCvar[key]
         };
         await db.query(sql, [insertSet]);
+      }
+    }
+    if  (season_teams != null) {
+      //get teamsid from team table
+      sql = "SELECT id FROM team WHERE name IN (?)";
+      let teamNames = [];
+      for (let key in season_teams) {
+        teamNames.push(season_teams[key]);
+      }
+      let teamRows = await db.query(sql, [teamNames]);
+      if (!teamRows.length) {
+        res.status(404).json({ message: "No teams found." });
+        return;
+      }
+      else {
+        //insert teams into teams_seasons table
+        sql = "INSERT INTO teams_seasons (teams_id, season_id) VALUES ?";
+        let teamSeason = [];
+        for (let key in teamRows) {
+          teamSeason.push([teamRows[key].id, insertSeason.insertId]);
+        }
+        await db.query(sql, [teamSeason]);
       }
     }
     res.json({
@@ -533,6 +563,33 @@ router.put("/", Utils.ensureAuthenticated, async (req, res, next) => {
           await db.query(sql, [insertSet]);
         }
       }
+      // delete all entry in teams_seasons table for this season then insert new teams
+      sql = "DELETE FROM teams_seasons WHERE season_id = ?";
+      await db.query(sql, [req.body[0].season_id]);
+      if (req.body[0].season_teams != null) {
+        //get teamsid from team table
+        let season_teams = req.body[0].season_teams;
+        sql = "SELECT id FROM team WHERE name IN (?)";
+        let teamNames = [];
+        for (let key in season_teams) {
+          teamNames.push(season_teams[key]);
+        }
+        let teamRows = await db.query(sql, [teamNames]);
+        if (!teamRows.length) {
+          res.status(404).json({ message: "No teams found." });
+          return;
+        }
+        else {
+          //insert teams into teams_seasons table
+          sql = "INSERT INTO teams_seasons (teams_id, season_id) VALUES ?";
+          let teamSeason = [];
+          for (let key in teamRows) {
+            teamSeason.push([teamRows[key].id, req.body[0].season_id]);
+          }
+          await db.query(sql, [teamSeason]);
+        }
+      }
+
       res.json({ message: "Season updated successfully!" });
     } catch (err) {
       console.error(err);

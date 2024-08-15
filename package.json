@@ -31,7 +31,7 @@
   "scripts": {
     "build": "tsc",
     "clean": "rm -rf ./dist",
-    "start": "tsc-watch --project . --outDir ./dist --onSuccess \"nodemon ./dist/bin/www.js\"",
+    "start": "set NODE_ENV=development&& tsc-watch --project . --outDir ./dist --onSuccess \"nodemon ./dist/bin/www.js\"",
     "tsstart": "yarn build; nodemon ./dist/bin/www.js",
     "startprod": "pm2 start ./prodrun.json --name \"G5API\"",
     "restartprod": "pm2 restart G5API",

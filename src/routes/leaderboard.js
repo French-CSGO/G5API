@@ -126,7 +126,7 @@
   }
 });
 
-/**
+ /**
   * @swagger
   *
   * /leaderboard/teams/:teamid/:seasonid:
@@ -139,10 +139,10 @@
   *         required: true
   *         schema:
   *          type: string
-  *      - name: season_id
-  *        required: true
-  *        schema:
-  *         type: string
+  *       - name: season_id
+  *         required: true
+  *         schema:
+  *          type: string
   *     tags:
   *       - leaderboard
   *     responses:
