@@ -7,6 +7,8 @@ docs/
 public/*.zip
 coverage/
 dump.rdb
+.claude
+
 # Logs
 logs
 *.log
