@@ -1014,4 +1014,47 @@ router.get("/:season_id/toornament/matches/:toornament_match_id/prefill", Utils.
   }
 });
 
+router.get("/:season_id/teams", Utils.ensureAuthenticated, async (req, res, next) => {
+  try {
+    const seasonId = parseInt(req.params.season_id);
+    const sql =
+      "SELECT t.id, t.name, t.tag, t.logo, t.public_team FROM team t " +
+      "INNER JOIN teams_seasons ts ON ts.teams_id = t.id WHERE ts.season_id = ?";
+    const teams: RowDataPacket[] = await db.query(sql, [seasonId]);
+    res.json({ teams });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: (err as Error).toString() });
+  }
+});
+
+router.post("/:season_id/teams", Utils.ensureAuthenticated, async (req, res, next) => {
+  try {
+    const seasonId = parseInt(req.params.season_id);
+    const teamIds: number[] = req.body.team_ids;
+    if (!teamIds || !teamIds.length) {
+      res.status(400).json({ message: "No team IDs provided." });
+      return;
+    }
+    const values = teamIds.map((id) => [seasonId, id]);
+    await db.query("INSERT IGNORE INTO teams_seasons (season_id, teams_id) VALUES ?", [values]);
+    res.json({ message: "Teams added to season successfully!" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: (err as Error).toString() });
+  }
+});
+
+router.delete("/:season_id/teams/:team_id", Utils.ensureAuthenticated, async (req, res, next) => {
+  try {
+    const seasonId = parseInt(req.params.season_id);
+    const teamId = parseInt(req.params.team_id);
+    await db.query("DELETE FROM teams_seasons WHERE season_id = ? AND teams_id = ?", [seasonId, teamId]);
+    res.json({ message: "Team removed from season successfully!" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: (err as Error).toString() });
+  }
+});
+
 export default router;
