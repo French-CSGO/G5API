@@ -30,5 +30,10 @@
   },
   "super_admins": {
     "steam_ids": "$SUPERADMINS"
+  },
+  "toornament": {
+    "clientId": "$TOORNAMENT_CLIENT_ID",
+    "clientSecret": "$TOORNAMENT_CLIENT_SECRET",
+    "apiKey": "$TOORNAMENT_API_KEY"
   }
 }

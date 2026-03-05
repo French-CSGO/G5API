@@ -17,6 +17,13 @@ import { RowDataPacket } from "mysql2";
 import { SeasonObject } from "../types/seasons/SeasonObject.js";
 import { SeasonCvarObject } from "../types/seasons/SeasonCvarObject.js";
 
+
+import { ToornamentTournament } from "../types/toornament/ToornamentTournament.js";
+import { ToornamentParticipant } from "../types/toornament/ToornamentParticipant.js";
+import { ToornamentTokenResponse } from "../types/toornament/ToornamentTokenResponse.js";
+
+import config from "config";
+
 /**
  * @swagger
  *
@@ -285,135 +292,6 @@ router.get(
       res.json(cvar[0]);
     } catch (err) {
       res.status(500).json({ message: (err as Error).toString() });
-    }
-  }
-);
-
-/**
- * @swagger
- *
- * /seasons/:season_id/teams:
- *   get:
- *     description: Get all teams present of a given season ID.
- *     produces:
- *       - application/json
- *     parameters:
- *       - name: season_id
- *         required: true
- *         schema:
- *          type: integer
- *     tags:
- *       - seasons
- *     responses:
- *       200:
- *         description: All matches within the system.
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/cvars'
- *       404:
- *         $ref: '#/components/responses/NotFound'
- *       500:
- *         $ref: '#/components/responses/Error'
- */
-router.get(
-  "/:season_id/teams",
-  Utils.ensureAuthenticated,
-  async (req, res, next) => {
-    try {
-      let sql =
-        "SELECT t.id, t.name, t.flag, t.logo, t.tag, t.public_team " +
-        "FROM teams_seasons ts " +
-        "INNER JOIN team t ON ts.teams_id = t.id " +
-        "WHERE ts.season_id = ? " +
-        "ORDER BY t.name";
-      let teams: RowDataPacket[] = await db.query(sql, [req.params.season_id]);
-      if (!teams.length) {
-        res.status(404).json({
-          message: "No teams found for season id " + req.params.season_id + ".",
-        });
-        return;
-      }
-      res.json({ teams });
-    } catch (err) {
-      if (err instanceof Error) {
-        res.status(500).json({ message: err.message });
-      } else {
-        res.status(500).json({ message: String(err) });
-      }
-    }
-  }
-);
-
-router.post(
-  "/:season_id/teams",
-  Utils.ensureAuthenticated,
-  async (req, res, next) => {
-    try {
-      let seasonId: number = parseInt(req.params.season_id);
-      let seasonUserId: string = "SELECT user_id FROM season WHERE id = ?";
-      const seasonRow: RowDataPacket[] = await db.query(seasonUserId, [seasonId]);
-      if (!seasonRow.length) {
-        res.status(404).json({ message: "No season found." });
-        return;
-      }
-      if (
-        req.user &&
-        seasonRow[0].user_id != req.user.id &&
-        !Utils.superAdminCheck(req.user)
-      ) {
-        res.status(403).json({ message: "User is not authorized to perform action." });
-        return;
-      }
-      let teamIds: number[] = req.body.team_ids;
-      if (!Array.isArray(teamIds) || teamIds.length === 0) {
-        res.status(400).json({ message: "No team IDs provided." });
-        return;
-      }
-      let insertValues = teamIds.map((id: number) => [seasonId, id]);
-      let sql = "INSERT IGNORE INTO teams_seasons (season_id, teams_id) VALUES ?";
-      await db.query(sql, [insertValues]);
-      res.json({ message: "Teams added to season successfully!" });
-    } catch (err) {
-      if (err instanceof Error) {
-        res.status(500).json({ message: err.message });
-      } else {
-        res.status(500).json({ message: String(err) });
-      }
-    }
-  }
-);
-
-router.delete(
-  "/:season_id/teams/:team_id",
-  Utils.ensureAuthenticated,
-  async (req, res, next) => {
-    try {
-      let seasonId: number = parseInt(req.params.season_id);
-      let teamId: number = parseInt(req.params.team_id);
-      let seasonUserId: string = "SELECT user_id FROM season WHERE id = ?";
-      const seasonRow: RowDataPacket[] = await db.query(seasonUserId, [seasonId]);
-      if (!seasonRow.length) {
-        res.status(404).json({ message: "No season found." });
-        return;
-      }
-      if (
-        req.user &&
-        seasonRow[0].user_id != req.user.id &&
-        !Utils.superAdminCheck(req.user)
-      ) {
-        res.status(403).json({ message: "User is not authorized to perform action." });
-        return;
-      }
-      let sql = "DELETE FROM teams_seasons WHERE season_id = ? AND teams_id = ?";
-      await db.query(sql, [seasonId, teamId]);
-      res.json({ message: "Team removed from season successfully!" });
-    } catch (err) {
-      if (err instanceof Error) {
-        res.status(500).json({ message: err.message });
-      } else {
-        res.status(500).json({ message: String(err) });
-      }
     }
   }
 );
@@ -740,11 +618,22 @@ router.delete("/", async (req, res, next) => {
  */
 router.post("/challonge", Utils.ensureAuthenticated, async (req, res, next) => {
   try {
+
+    const rawTournamentId: string = req.body[0].tournament_id;
+
+    if (rawTournamentId.startsWith("t:")) {
+      console.log("Toornament id : ",rawTournamentId)
+      const result = await handleToornamentImport(rawTournamentId, req.user!.id, req.body[0]);
+      return res.json(result);
+    }
+
+
     const userInfo: RowDataPacket[] = await db.query("SELECT challonge_api_key FROM user WHERE id = ?", [req.user!.id]);
     let challongeAPIKey: string | undefined | null = Utils.decrypt(userInfo[0].challonge_api_key);
     if (!challongeAPIKey) {
       throw "No challonge API key provided for user.";
     }
+
     let tournamentId: string = req.body[0].tournament_id;
     let challongeResponse: any = await fetch(
       "https://api.challonge.com/v1/tournaments/" +
@@ -752,6 +641,7 @@ router.post("/challonge", Utils.ensureAuthenticated, async (req, res, next) => {
       ".json?api_key=" +
       challongeAPIKey +
       "&include_participants=1");
+
     let challongeData = await challongeResponse.json()
     if (challongeData) {
       // Insert the season.
@@ -779,6 +669,10 @@ router.post("/challonge", Utils.ensureAuthenticated, async (req, res, next) => {
         });
         await db.query(sqlString, [teamArray]);
       }
+
+
+
+      
       res.json({
         message: "Challonge season imported successfully!",
         chal_res: challongeData.tournament.created_at,
@@ -793,5 +687,112 @@ router.post("/challonge", Utils.ensureAuthenticated, async (req, res, next) => {
     res.status(500).json({ message: (err as Error).toString() });
   }
 });
+
+
+async function handleToornamentImport(tournamentId: string, userId: number, reqBody: any) {
+
+  const clientId: string = config.get("toornament.clientId") || '';
+  const clientSecret: string = config.get("toornament.clientSecret") || '';
+  const apiKey: string = config.get("toornament.apiKey") || '';
+
+  if (!clientId || !clientSecret || !apiKey) {
+    throw new Error("Missing Toornament credentials in environment variables");
+  }
+
+
+  const tokenResponse = await fetch("https://api.toornament.com/oauth/v2/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "client_credentials",
+      client_id: clientId,
+      client_secret: clientSecret,
+      scope: 'organizer:admin organizer:view organizer:result organizer:participant'
+    }),
+  });
+
+  const tokenData = await tokenResponse.json() as ToornamentTokenResponse;
+  if (!tokenData.access_token) throw new Error("Toornament Auth Failed");
+
+  const cleanId = tournamentId.replace(/^t:/, '');
+  
+  const toornamentResponse = await fetch(
+    `https://api.toornament.com/organizer/v2/tournaments/${cleanId}`,
+    {
+      headers: {
+        "Authorization": `Bearer ${tokenData.access_token}`,
+        "x-api-key": apiKey 
+      }
+    }
+  );
+
+  const tournamentData = await toornamentResponse.json() as ToornamentTournament;
+
+  const logoUrl = tournamentData.logo ? tournamentData.logo.logo_medium : null;
+  
+  let sqlString = "INSERT INTO season SET ?";
+  let seasonData = {
+    user_id: userId,
+    name: tournamentData.name,
+    start_date: new Date(tournamentData.scheduled_date_start), 
+    is_challonge: true, 
+    challonge_url: tournamentId ,
+    challonge_svg : logoUrl
+  };
+  
+  const insertSeason: any = await db.query(sqlString, seasonData);
+
+  if (reqBody?.import_teams) {
+  let allParticipants: ToornamentParticipant[] = [];
+  let rangeStart = 0;
+  let hasMore = true;
+
+  while (hasMore) {
+    const participantsResponse = await fetch(
+      `https://api.toornament.com/organizer/v2/participants?tournament_ids=${cleanId}`,
+      {
+        headers: {
+          "Authorization": `Bearer ${tokenData.access_token}`,
+          "x-api-key": apiKey,
+          "Range": `participants=${rangeStart}-${rangeStart + 49}`
+        }
+      }
+    );
+
+    const data = await participantsResponse.json() as ToornamentParticipant[];
+    allParticipants = allParticipants.concat(data);
+
+    const contentRange = participantsResponse.headers.get("Content-Range");
+    if (contentRange) {
+      const [range, total] = contentRange.split("/");
+      if (allParticipants.length >= parseInt(total)) {
+        hasMore = false;
+      } else {
+        rangeStart += 50;
+      }
+    } else {
+      hasMore = false;
+    }
+  }
+
+  if (allParticipants.length > 0) {
+    const sqlTeams = "INSERT INTO team (user_id, name, tag, challonge_team_id) VALUES ?";
+    const teamArray = allParticipants.map(p => [
+      userId,
+      p.name.substring(0, 40),
+      p.name.substring(0, 40),
+      p.id 
+    ]);
+
+    await db.query(sqlTeams, [teamArray]);
+    console.log(`${allParticipants.length} participants importés.`);
+  }
+}
+  
+  return {
+    message: "Toornament season imported successfully!",
+    id: insertSeason.insertId,
+  };
+}
 
 export default router;

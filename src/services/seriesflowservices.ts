@@ -170,6 +170,17 @@ class SeriesFlowService {
         );
       }
 
+      if (matchInfo[0].season_id) {
+        await update_challonge_match(
+          event.matchid,
+          matchInfo[0].season_id,
+          matchInfo[0].team1_id,
+          matchInfo[0].team2_id,
+          matchInfo[0].max_maps,
+          event.winner.team
+        );
+      }
+      
       GlobalEmitter.emit("mapStatUpdate");
       return res.status(200).send({ message: "Success" });
     } catch (error: unknown) {
