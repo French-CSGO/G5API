@@ -302,14 +302,14 @@ class MapFlowService {
       }
       await db.query(sqlString, [insUpdStatement, mapStatInfo[0].id]);
       // Update Challonge info if needed.
-      sqlString = "SELECT max_maps, season_id FROM `match` WHERE id = ?";
+      sqlString = "SELECT max_maps, season_id, team1_id, team2_id FROM `match` WHERE id = ?";
       matchSeasonInfo = await db.query(sqlString, [event.matchid]);
-      if (matchSeasonInfo[0]?.season_id && matchSeasonInfo[0].max_maps == 1) {
+      if (matchSeasonInfo[0]?.season_id) {
         await update_challonge_match(
           event.matchid,
           matchSeasonInfo[0].season_id,
-          +event.team1.id,
-          +event.team2.id,
+          matchSeasonInfo[0].team1_id,
+          matchSeasonInfo[0].team2_id,
           matchSeasonInfo[0].max_maps
         );
       }
