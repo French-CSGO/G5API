@@ -11,7 +11,8 @@
     "uploadDemos": false,
     "localLoginEnabled": true,
     "redisUrl": "redis://:super_secure@localhost:6379",
-    "redisTTL": 86400
+    "redisTTL": 86400,
+    "queueTTL": 3600
   },
   "test": {
     "driver": "mysql",
@@ -29,6 +30,11 @@
   },
   "super_admins": {
     "steam_ids": "super_admins,go,here"
+  },
+  "toornament": {
+    "clientId": "toornament_client_id_go_here",
+    "clientSecret": "toornament_client_secret_go_here",
+    "apiKey": "toornament_api_key_go_here"
   }
 }
   
