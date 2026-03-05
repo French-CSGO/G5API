@@ -49,7 +49,7 @@ export class QueueService {
       ownerId,
       maxSize: maxPlayers,
       isPrivate: isPrivate,
-      currentPlayers: 1,
+      currentPlayers: 0,
     };
 
     await redis.sAdd("queues", slug!);
@@ -60,7 +60,8 @@ export class QueueService {
 
     await this.addUserToQueue(slug!, ownerId, nickname);
 
-    return descriptor;
+    const updatedMeta = await getQueueMetaOrThrow(slug!);
+    return updatedMeta;
   }
 
   /**
