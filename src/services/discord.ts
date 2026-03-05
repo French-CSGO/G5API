@@ -8,7 +8,7 @@ import { RowDataPacket } from "mysql2/typings/mysql";
 import GlobalEmitter from "../utility/emitter.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const MESSAGE_ID_FILE = path.join(__dirname, "../../data/discord_scoreboard_id.json");
+const MESSAGE_ID_FILE = path.join(__dirname, "../../../public/discord_scoreboard_id.json");
 
 let client: Client | null = null;
 let announceChannelId = "";
