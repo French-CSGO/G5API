@@ -90,7 +90,7 @@ export async function updateScoreboard(): Promise<void> {
   if (!client?.isReady() || !scoreboardChannelId) return;
   try {
     const matchSql =
-      "SELECT m.id, m.team1_string, m.team2_string, m.team1_series_score, m.team2_series_score, " +
+      "SELECT m.id, m.team1_string, m.team2_string, m.team1_score, m.team2_score, " +
       "gs.ip_string, gs.port " +
       "FROM `match` m LEFT JOIN game_server gs ON m.server_id = gs.id " +
       "WHERE m.end_time IS NULL AND m.cancelled = 0 ORDER BY m.id ASC";
@@ -110,7 +110,7 @@ export async function updateScoreboard(): Promise<void> {
           .join("");
         content +=
           `• **${match.team1_string}** vs **${match.team2_string}**` +
-          ` | Série: **${match.team1_series_score}-${match.team2_series_score}**` +
+          ` | Série: **${match.team1_score}-${match.team2_score}**` +
           ` | 🖥️ \`connect ${serverIP}\`` +
           `${mapsFormatted}\n\n`;
       }
