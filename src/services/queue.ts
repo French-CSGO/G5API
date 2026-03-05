@@ -318,6 +318,15 @@ export class QueueService {
       maxSize: meta.maxSize,
       player: item,
     });
+
+    if (meta.currentPlayers >= meta.maxSize) {
+      try {
+        const teamIds = await QueueService.createTeamsFromQueue(slug);
+        await QueueService.createMatchFromQueue(slug, teamIds);
+      } catch (err) {
+        console.error("Failed to auto-create match from full queue:", err);
+      }
+    }
   }
 
   static async removeUserFromQueue(
