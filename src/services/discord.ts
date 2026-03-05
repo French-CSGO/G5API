@@ -41,7 +41,7 @@ export async function initDiscord(): Promise<void> {
     loadMessageId();
 
     client = new Client({ intents: [GatewayIntentBits.Guilds] });
-    client.once("ready", () => {
+    client.once("clientReady", () => {
       console.log(`Discord bot connected as ${client!.user!.tag}`);
       updateScoreboard();
     });
@@ -65,7 +65,7 @@ export async function announceNewMatch(matchId: number): Promise<void> {
 
     const match = rows[0];
     const serverIP = match.ip_string ? `${match.ip_string}:${match.port}` : "N/A";
-    const time = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    const time = new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Paris" });
 
     const channel = await client.channels.fetch(announceChannelId) as TextChannel;
     const guild = channel.guild;

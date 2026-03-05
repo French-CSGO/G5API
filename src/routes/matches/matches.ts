@@ -1550,6 +1550,9 @@ router.put("/", Utils.ensureAuthenticated, async (req, res, next) => {
           await db.query(sql, [req.body[0].match_id, key, newCvars[key]]);
         }
       }
+      if (req.body[0].cancelled == 1 || req.body[0].forfeit == 1 || req.body[0].end_time != null) {
+        updateScoreboard();
+      }
       res.json({ message: message });
       return;
     }
@@ -1628,9 +1631,10 @@ router.delete("/", Utils.ensureAuthenticated, async (req, res, next) => {
           await db.query(spectatorDeleteSql, [matchId]);
           const delRows: RowDataPacket[] = await db.query(deleteMatchsql, [matchId]);
           // @ts-ignore
-          if (delRows.affectedRows > 0)
+          if (delRows.affectedRows > 0) {
+            updateScoreboard();
             res.json({ message: "Match deleted successfully!" });
-          else throw "We found an issue deleting the match values.";
+          } else throw "We found an issue deleting the match values.";
           return;
         } else {
           res.status(403).json({
@@ -1657,9 +1661,10 @@ router.delete("/", Utils.ensureAuthenticated, async (req, res, next) => {
       await db.query(deleteCancelledSpecs, [userId]);
       const delRows: RowDataPacket[] = await db.query(deleteMatch, [userId]);
       //@ts-ignore
-      if (delRows.affectedRows > 0)
+      if (delRows.affectedRows > 0) {
+        updateScoreboard();
         res.json({ message: "Matches deleted successfully!" });
-      else res.json({ message: "No cancelled matches to delete." });
+      } else res.json({ message: "No cancelled matches to delete." });
       return;
     } catch (err) {
       console.error(err);
