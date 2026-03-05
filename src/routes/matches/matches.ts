@@ -18,6 +18,7 @@ import GameServer from "../../utility/serverrcon.js";
 import config from "config";
 
 import GlobalEmitter from "../../utility/emitter.js";
+import { announceNewMatch, updateScoreboard } from "../../services/discord.js";
 
 import { compare } from "compare-versions";
 import { MatchJSON } from "../../types/matches/MatchJson.js";
@@ -1314,6 +1315,8 @@ router.post("/", Utils.ensureAuthenticated, async (req, res, next) => {
         }
       }
     }
+    announceNewMatch(insertMatch.insertId);
+    updateScoreboard();
     res.json({
       message: "Match inserted successfully!",
       id: insertMatch.insertId
