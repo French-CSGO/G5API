@@ -20,7 +20,7 @@ export class QueueService {
     maxPlayers: number = 10,
     isPrivate: boolean = false,
     ttlSeconds: number = DEFAULT_TTL_SECONDS
-  ): Promise<QueueDescriptor> {
+  ): Promise<{ queue: QueueDescriptor; matchId?: number | null }> {
     let slug: string;
     let key: string;
     let attempts: number = 0;
@@ -58,10 +58,12 @@ export class QueueService {
       EX: ttlSeconds,
     });
 
-    await this.addUserToQueue(slug!, ownerId, nickname);
+    const { matchId } = await this.addUserToQueue(slug!, ownerId, nickname);
 
-    const updatedMeta = await getQueueMetaOrThrow(slug!);
-    return updatedMeta;
+    // If match was auto-created (queue filled immediately), return stale descriptor
+    // The queue is already deleted from Redis at this point
+    descriptor.currentPlayers = 1;
+    return { queue: descriptor, matchId };
   }
 
   /**
@@ -294,7 +296,7 @@ export class QueueService {
     slug: string,
     steamId: string,
     name: string
-  ): Promise<void> {
+  ): Promise<{ matchId?: number | null }> {
     const key = `queue:${slug}`;
     const meta = await getQueueMetaOrThrow(slug);
 
@@ -337,11 +339,13 @@ export class QueueService {
     if (meta.currentPlayers >= meta.maxSize) {
       try {
         const teamIds = await QueueService.createTeamsFromQueue(slug);
-        await QueueService.createMatchFromQueue(slug, teamIds);
+        const matchId = await QueueService.createMatchFromQueue(slug, teamIds);
+        return { matchId };
       } catch (err) {
         console.error("Failed to auto-create match from full queue:", err);
       }
     }
+    return {};
   }
 
   static async removeUserFromQueue(

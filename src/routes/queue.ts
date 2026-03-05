@@ -265,7 +265,7 @@ router.post("/", Utils.ensureAuthenticated, async (req, res) => {
   const isPrivate: boolean = req.body[0]?.private ? true : false;
 
   try {
-    const descriptor = await QueueService.createQueue(
+    const { queue, matchId } = await QueueService.createQueue(
       req.user?.steam_id!,
       req.user?.name!,
       maxPlayers,
@@ -273,8 +273,9 @@ router.post("/", Utils.ensureAuthenticated, async (req, res) => {
     );
     res.json({
       message: "Queue created successfully!",
-      queue: descriptor,
-      url: `${config.get("server.apiURL")}/queue/${descriptor.name}`,
+      queue,
+      matchId: matchId ?? null,
+      url: `${config.get("server.apiURL")}/queue/${queue.name}`,
     });
   } catch (error) {
     console.error("Error creating queue:", error);
@@ -322,32 +323,18 @@ router.put("/:slug", Utils.ensureAuthenticated, async (req, res) => {
 
   try {
     if (action === "join") {
-      await QueueService.addUserToQueue(
+      const { matchId } = await QueueService.addUserToQueue(
         slug,
         req.user?.steam_id!,
         req.user?.name!
       );
 
-      const currentQueueCount = await QueueService.getCurrentQueuePlayerCount(slug);
-      const maxQueueCount = await QueueService.getCurrentQueueMaxCount(slug);
-
-      if (currentQueueCount >= maxQueueCount) {
-        try {
-          const teamIds = await QueueService.createTeamsFromQueue(slug);
-          const matchId = await QueueService.createMatchFromQueue(slug, teamIds);
-          return res
-            .status(200)
-            .json({
-              success: true,
-              matchId,
-              message: "Match created successfully from full queue.",
-            });
-        } catch (err) {
-          console.error("Error creating teams or match from queue:", err);
-          return res
-            .status(500)
-            .json({ error: "Failed to create teams or match from queue." });
-        }
+      if (matchId) {
+        return res.status(200).json({
+          success: true,
+          matchId,
+          message: "Match created successfully from full queue.",
+        });
       }
 
       return res.status(200).json({ success: true });
