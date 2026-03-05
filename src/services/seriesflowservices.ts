@@ -125,7 +125,7 @@ class SeriesFlowService {
         .replace("T", " ");
       let winnerId: number | null | string = null;
       sqlString =
-        "SELECT is_pug, max_maps, season_id FROM `match` WHERE id = ?";
+        "SELECT is_pug, max_maps, season_id, team1_id, team2_id FROM `match` WHERE id = ?";
       matchInfo = await db.query(sqlString, [event.matchid]);
       sqlString =
         "SELECT id FROM `map_stats` WHERE match_id = ? AND map_number = ?";
