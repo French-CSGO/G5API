@@ -43,6 +43,11 @@ export default
     const team2ToornamentId: RowDataPacket[] = await db.query(sql, [team2_id]);
 
 
+    if (!team1ToornamentId[0] || !team2ToornamentId[0]) {
+        console.warn(`Toornament: team not found in DB (team1_id=${team1_id}, team2_id=${team2_id})`);
+        return;
+    }
+
     const team1Id = team1ToornamentId[0].challonge_team_id;
     const team2Id = team2ToornamentId[0].challonge_team_id;
 

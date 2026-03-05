@@ -21,6 +21,7 @@ import { SeasonCvarObject } from "../types/seasons/SeasonCvarObject.js";
 import { ToornamentTournament } from "../types/toornament/ToornamentTournament.js";
 import { ToornamentParticipant } from "../types/toornament/ToornamentParticipant.js";
 import { ToornamentTokenResponse } from "../types/toornament/ToornamentTokenResponse.js";
+import { ToornamentMatch } from "../types/toornament/ToornamentMatch.js";
 
 import config from "config";
 
@@ -794,5 +795,223 @@ async function handleToornamentImport(tournamentId: string, userId: number, reqB
     id: insertSeason.insertId,
   };
 }
+
+async function getToornamentToken(): Promise<string> {
+  const clientId: string = config.get("toornament.clientId") || '';
+  const clientSecret: string = config.get("toornament.clientSecret") || '';
+  const apiKey: string = config.get("toornament.apiKey") || '';
+  if (!clientId || !clientSecret || !apiKey) {
+    throw new Error("Missing Toornament credentials in config");
+  }
+  const tokenResponse = await fetch("https://api.toornament.com/oauth/v2/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "client_credentials",
+      client_id: clientId,
+      client_secret: clientSecret,
+      scope: "organizer:admin organizer:view organizer:result organizer:participant"
+    })
+  });
+  const tokenData = await tokenResponse.json() as ToornamentTokenResponse;
+  if (!tokenData.access_token) throw new Error("Toornament Auth Failed");
+  return tokenData.access_token;
+}
+
+async function getSeasonToornamentId(seasonId: number): Promise<string> {
+  const seasons: RowDataPacket[] = await db.query(
+    "SELECT challonge_url FROM season WHERE id = ? AND is_challonge = 1 AND challonge_url LIKE 't:%'",
+    [seasonId]
+  );
+  if (!seasons.length) throw new Error("Season not found or not a Toornament season");
+  return (seasons[0].challonge_url as string).replace(/^t:/, "");
+}
+
+router.get("/:season_id/toornament/matches", Utils.ensureAuthenticated, async (req, res, next) => {
+  try {
+    const seasonId = parseInt(req.params.season_id);
+    const tournamentId = await getSeasonToornamentId(seasonId);
+    const token = await getToornamentToken();
+    const apiKey: string = config.get("toornament.apiKey");
+
+    const { team_id, status, stage_id, group_id, round_id } = req.query;
+
+    // Resolve local team_id -> toornament participant_id
+    let participantId: string | undefined;
+    if (team_id) {
+      const teamRows: RowDataPacket[] = await db.query(
+        "SELECT challonge_team_id FROM team WHERE id = ?",
+        [team_id]
+      );
+      if (teamRows.length && teamRows[0].challonge_team_id) {
+        participantId = teamRows[0].challonge_team_id;
+      }
+    }
+
+    let url = `https://api.toornament.com/organizer/v2/matches?tournament_ids=${tournamentId}`;
+    if (participantId) url += `&participant_ids=${participantId}`;
+    if (status) url += `&statuses=${status}`;
+    if (stage_id) url += `&stage_ids=${stage_id}`;
+    if (group_id) url += `&group_ids=${group_id}`;
+    if (round_id) url += `&round_ids=${round_id}`;
+    url += "&sort=structure";
+
+    // Paginate through all matches
+    let allMatches: ToornamentMatch[] = [];
+    let rangeStart = 0;
+    let hasMore = true;
+    while (hasMore) {
+      const response = await fetch(url, {
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "x-api-key": apiKey,
+          "Range": `matches=${rangeStart}-${rangeStart + 99}`
+        }
+      });
+      const data = await response.json() as ToornamentMatch[];
+      allMatches = allMatches.concat(data);
+      const contentRange = response.headers.get("Content-Range");
+      if (contentRange) {
+        const total = parseInt(contentRange.split("/")[1]);
+        hasMore = allMatches.length < total;
+        rangeStart += 100;
+      } else {
+        hasMore = false;
+      }
+    }
+
+    // Enrich opponents with local team IDs
+    const challongeIds = allMatches.flatMap(m =>
+      m.opponents.map(o => o.participant?.id).filter(Boolean)
+    );
+    let localTeams: RowDataPacket[] = [];
+    if (challongeIds.length > 0) {
+      localTeams = await db.query(
+        `SELECT id, name, challonge_team_id FROM team WHERE challonge_team_id IN (${challongeIds.map(() => "?").join(",")})`,
+        challongeIds
+      );
+    }
+    const teamByChallongeId = new Map(localTeams.map(t => [String(t.challonge_team_id), t]));
+
+    const enriched = allMatches.map(match => ({
+      ...match,
+      opponents: match.opponents.map(opp => ({
+        ...opp,
+        local_team: opp.participant ? (teamByChallongeId.get(String(opp.participant.id)) ?? null) : null
+      }))
+    }));
+
+    res.json({ matches: enriched });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: (err as Error).toString() });
+  }
+});
+
+router.get("/:season_id/toornament/stages", Utils.ensureAuthenticated, async (req, res, next) => {
+  try {
+    const seasonId = parseInt(req.params.season_id);
+    const tournamentId = await getSeasonToornamentId(seasonId);
+    const token = await getToornamentToken();
+    const apiKey: string = config.get("toornament.apiKey");
+
+    const response = await fetch(
+      `https://api.toornament.com/organizer/v2/stages?tournament_ids=${tournamentId}`,
+      {
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "x-api-key": apiKey,
+          "Range": "stages=0-49"
+        }
+      }
+    );
+    const stages = await response.json();
+    res.json({ stages });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: (err as Error).toString() });
+  }
+});
+
+router.get("/:season_id/toornament/matches/:toornament_match_id/prefill", Utils.ensureAuthenticated, async (req, res, next) => {
+  try {
+    const seasonId = parseInt(req.params.season_id);
+    const toornamentMatchId = req.params.toornament_match_id;
+    const tournamentId = await getSeasonToornamentId(seasonId);
+    const token = await getToornamentToken();
+    const apiKey: string = config.get("toornament.apiKey");
+
+    // Get season info + CVARs
+    const seasonRows: RowDataPacket[] = await db.query(
+      "SELECT s.id, s.name, CONCAT('{', GROUP_CONCAT(DISTINCT CONCAT('\"',sc.cvar_name,'\": \"',sc.cvar_value,'\"')),'}') as cvars " +
+      "FROM season s LEFT OUTER JOIN season_cvar sc ON s.id = sc.season_id WHERE s.id = ? GROUP BY s.id",
+      [seasonId]
+    );
+    const season = seasonRows[0];
+    if (season?.cvars) season.cvars = JSON.parse(season.cvars);
+
+    // Get the Toornament match
+    const matchResponse = await fetch(
+      `https://api.toornament.com/organizer/v2/matches/${toornamentMatchId}?tournament_ids=${tournamentId}`,
+      {
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "x-api-key": apiKey
+        }
+      }
+    );
+    const tMatch = await matchResponse.json() as ToornamentMatch;
+
+    // Resolve local team IDs from opponents
+    const opponents = await Promise.all(
+      tMatch.opponents.map(async opp => {
+        if (!opp.participant?.id) return { ...opp, local_team: null };
+        const rows: RowDataPacket[] = await db.query(
+          "SELECT id, name FROM team WHERE challonge_team_id = ?",
+          [opp.participant.id]
+        );
+        return { ...opp, local_team: rows[0] ?? null };
+      })
+    );
+
+    // Determine max_maps from Toornament format
+    let max_maps = 1;
+    const fmt = tMatch.settings?.format;
+    if (fmt?.type === "best_of" && fmt.options?.nb_match_sets) {
+      max_maps = fmt.options.nb_match_sets;
+    }
+
+    // Get available servers (not in use, accessible by user)
+    const serverSql =
+      "SELECT gs.id, gs.display_name, gs.ip_string, gs.port, gs.public_server, gs.flag " +
+      "FROM game_server gs WHERE gs.in_use = 0 AND (gs.public_server = 1 OR gs.user_id = ?) " +
+      "ORDER BY gs.display_name";
+    const availableServers: RowDataPacket[] = await db.query(serverSql, [req.user!.id]);
+
+    res.json({
+      season_id: seasonId,
+      season_name: season?.name ?? null,
+      season_cvars: season?.cvars ?? null,
+      team1: opponents[0]?.local_team ?? null,
+      team2: opponents[1]?.local_team ?? null,
+      max_maps,
+      toornament_match_id: toornamentMatchId,
+      toornament_match: {
+        id: tMatch.id,
+        status: tMatch.status,
+        scheduled_datetime: tMatch.scheduled_datetime,
+        stage_id: tMatch.stage_id,
+        group_id: tMatch.group_id,
+        round_id: tMatch.round_id,
+        number: tMatch.number,
+        opponents
+      },
+      available_servers: availableServers
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: (err as Error).toString() });
+  }
+});
 
 export default router;
