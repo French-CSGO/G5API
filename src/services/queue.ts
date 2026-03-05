@@ -103,10 +103,25 @@ export class QueueService {
     }
     if (!mapPool || mapPool.length === 0) mapPool = defaultCs2Maps;
 
+    let team1Name: string | null = null;
+    let team2Name: string | null = null;
+    try {
+      if (teamIds[0]) {
+        const t1 = await db.query("SELECT name FROM team WHERE id = ?", [teamIds[0]]);
+        team1Name = t1[0]?.name ?? null;
+      }
+      if (teamIds[1]) {
+        const t2 = await db.query("SELECT name FROM team WHERE id = ?", [teamIds[1]]);
+        team2Name = t2[0]?.name ?? null;
+      }
+    } catch { /* non-critical */ }
+
     const baseMatch: any = {
       user_id: ownerUserId || 0,
       team1_id: teamIds[0] || null,
       team2_id: teamIds[1] || null,
+      team1_string: team1Name,
+      team2_string: team2Name,
       start_time: new Date(),
       max_maps: 1,
       title: `[PUG] ${slug}`,
