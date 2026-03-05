@@ -81,7 +81,7 @@ export default
     const matches = await toornamentResponse.json() as ToornamentMatch[];
 
     const targetMatch = matches.find(match => {
-        const participants = match.opponents.map((opp: any) => opp.participant.id);
+        const participants = match.opponents.map((opp: any) => opp.participant?.id);
         return participants.includes(team1Id) && participants.includes(team2Id);
     });
 
