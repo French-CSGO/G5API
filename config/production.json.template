@@ -39,6 +39,7 @@
   "discord": {
     "token": "$DISCORD_TOKEN",
     "announceChannelId": "$DISCORD_ANNOUNCECHANNEL",
-    "scoreboardChannelId": "$DISCORD_SCOREBOARD"
+    "scoreboardChannelId": "$DISCORD_SCOREBOARD",
+    "scheduleChannelId": "$DISCORD_CHANNEL"
   }
 }
