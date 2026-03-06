@@ -1030,6 +1030,15 @@ router.get("/:season_id/toornament/rounds", Utils.ensureAuthenticated, async (re
       })
     ]);
 
+    if (!stagesResp.ok) {
+      const body = await stagesResp.text();
+      throw new Error(`Toornament stages error ${stagesResp.status}: ${body}`);
+    }
+    if (!roundsResp.ok) {
+      const body = await roundsResp.text();
+      throw new Error(`Toornament rounds error ${roundsResp.status}: ${body}`);
+    }
+
     const stages = await stagesResp.json() as any[];
     const rounds = await roundsResp.json() as any[];
 
