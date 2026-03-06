@@ -1021,26 +1021,38 @@ router.get("/:season_id/toornament/rounds", Utils.ensureAuthenticated, async (re
     const token = await getToornamentToken();
     const apiKey: string = config.get("toornament.apiKey");
 
-    const [stagesResp, roundsResp] = await Promise.all([
-      fetch(`https://api.toornament.com/organizer/v2/stages?tournament_ids=${tournamentId}`, {
-        headers: { "Authorization": `Bearer ${token}`, "x-api-key": apiKey, "Range": "stages=0-49" }
-      }),
-      fetch(`https://api.toornament.com/organizer/v2/rounds?tournament_ids=${tournamentId}`, {
-        headers: { "Authorization": `Bearer ${token}`, "x-api-key": apiKey, "Range": "rounds=0-199" }
-      })
-    ]);
-
+    const stagesResp = await fetch(`https://api.toornament.com/organizer/v2/stages?tournament_ids=${tournamentId}`, {
+      headers: { "Authorization": `Bearer ${token}`, "x-api-key": apiKey, "Range": "stages=0-49" }
+    });
     if (!stagesResp.ok) {
       const body = await stagesResp.text();
       throw new Error(`Toornament stages error ${stagesResp.status}: ${body}`);
     }
-    if (!roundsResp.ok) {
-      const body = await roundsResp.text();
-      throw new Error(`Toornament rounds error ${roundsResp.status}: ${body}`);
-    }
-
     const stages = await stagesResp.json() as any[];
-    const rounds = await roundsResp.json() as any[];
+
+    let rounds: any[] = [];
+    let roundsStart = 0;
+    let roundsMore = true;
+    while (roundsMore) {
+      const resp = await fetch(`https://api.toornament.com/organizer/v2/rounds?tournament_ids=${tournamentId}`, {
+        headers: { "Authorization": `Bearer ${token}`, "x-api-key": apiKey, "Range": `rounds=${roundsStart}-${roundsStart + 49}` }
+      });
+      if (!resp.ok) {
+        const body = await resp.text();
+        throw new Error(`Toornament rounds error ${resp.status}: ${body}`);
+      }
+      const page = await resp.json() as any[];
+      if (!Array.isArray(page) || !page.length) break;
+      rounds = rounds.concat(page);
+      const cr = resp.headers.get("Content-Range");
+      if (cr) {
+        const total = parseInt(cr.split("/")[1]);
+        roundsMore = rounds.length < total;
+        roundsStart += 50;
+      } else {
+        roundsMore = false;
+      }
+    }
 
     const stageMap = new Map(stages.map((s: any) => [s.id, s.name]));
     const enriched = rounds.map((r: any) => ({
