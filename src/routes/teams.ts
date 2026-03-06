@@ -461,6 +461,9 @@ router.post("/", Utils.ensureAuthenticated, async (req, res) => {
     ]);
     //@ts-ignore
     teamID = insertTeam.insertId;
+    if (req.body[0].challonge_team_id) {
+      await db.query("UPDATE team SET challonge_team_id = ? WHERE id = ?", [req.body[0].challonge_team_id, teamID]);
+    }
     sql =
       "INSERT INTO team_auth_names (team_id, auth, name, captain, coach) VALUES (?, ?, ?, ?, ?)";
     for (let key in auths) {
@@ -551,6 +554,7 @@ router.put("/", Utils.ensureAuthenticated, async (req, res) => {
     tag: teamTag,
     public_team: publicTeam,
     id: teamID,
+    ...(req.body[0].challonge_team_id !== undefined && { challonge_team_id: req.body[0].challonge_team_id }),
   };
   if (teamLogo) {
     // Overwrite the current file.
