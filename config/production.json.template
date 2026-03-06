@@ -42,5 +42,11 @@
     "scoreboardChannelId": "$DISCORD_SCOREBOARD",
     "scheduleChannelId": "$DISCORD_CHANNEL",
     "guildId": "$DISCORD_GUILD_ID"
+  },
+  "pterodactyl": {
+    "enabled": $PTERODACTYL_ENABLED,
+    "url": "$PTERODACTYL_URL",
+    "apiKey": "$PTERODACTYL_API_KEY",
+    "shutdownDelay": $PTERODACTYL_SHUTDOWN_DELAY
   }
 }

@@ -43,5 +43,11 @@
     "scheduleChannelId": "",
     "guildId": ""
   }
+,
+  "pterodactyl": {
+    "enabled": false,
+    "url": "https://panel.example.com",
+    "apiKey": "ptlc_your_client_api_key",
+    "shutdownDelay": 300000
+  }
 }
-  
