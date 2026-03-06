@@ -294,7 +294,7 @@ export async function updateSchedule(): Promise<void> {
             ? new Date(match.scheduled_datetime).toLocaleString("fr-FR", { timeZone: "Europe/Paris", hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit" })
             : null;
           content += `• **${team1.name}** vs **${team2.name}**`;
-          if (scheduled) content += ` | 📅 \`${scheduled}\``;
+          if (scheduled) content += ` — match prévu pour le \`${scheduled}\``;
           content += `\n`;
         }
         content += `\n`;
