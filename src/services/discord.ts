@@ -1,4 +1,4 @@
-import { Client, GatewayIntentBits, TextChannel } from "discord.js";
+import { Client, GatewayIntentBits, TextChannel, REST, Routes, SlashCommandBuilder } from "discord.js";
 import config from "config";
 import { db } from "./db.js";
 import fs from "fs";
@@ -87,12 +87,32 @@ export async function initDiscord(): Promise<void> {
     loadScheduleMessageId();
 
     client = new Client({ intents: [GatewayIntentBits.Guilds] });
-    client.once("clientReady", () => {
-      console.log(`Discord bot connected as ${client!.user!.tag}`);
+    client.once("clientReady", async (c) => {
+      console.log(`Discord bot connected as ${c.user.tag}`);
+
+      const commands = [
+        new SlashCommandBuilder()
+          .setName("refresh-schedule")
+          .setDescription("Rafraîchit le message des matchs disponibles")
+          .toJSON()
+      ];
+      const rest = new REST().setToken(token);
+      await rest.put(Routes.applicationCommands(c.user.id), { body: commands });
+
       updateScoreboard();
       updateSchedule();
       setInterval(updateSchedule, 5 * 60 * 1000);
     });
+
+    client.on("interactionCreate", async (interaction) => {
+      if (!interaction.isChatInputCommand()) return;
+      if (interaction.commandName === "refresh-schedule") {
+        await interaction.deferReply({ ephemeral: true });
+        await updateSchedule();
+        await interaction.editReply("✅ Schedule rafraîchi.");
+      }
+    });
+
     await client.login(token);
 
     GlobalEmitter.on("matchUpdate", updateScoreboard);
@@ -200,18 +220,33 @@ export async function updateSchedule(): Promise<void> {
       for (const season of seasons) {
         const tournamentId = (season.challonge_url as string).replace(/^t:/, "");
 
-        const response = await fetch(
-          `https://api.toornament.com/organizer/v2/matches?tournament_ids=${tournamentId}&statuses=pending&sort=structure`,
-          {
-            headers: {
-              "Authorization": `Bearer ${token}`,
-              "x-api-key": apiKey,
-              "Range": "matches=0-99"
+        let matches: any[] = [];
+        let rangeStart = 0;
+        let hasMore = true;
+        while (hasMore) {
+          const response = await fetch(
+            `https://api.toornament.com/organizer/v2/matches?tournament_ids=${tournamentId}&statuses=pending&sort=structure`,
+            {
+              headers: {
+                "Authorization": `Bearer ${token}`,
+                "x-api-key": apiKey,
+                "Range": `matches=${rangeStart}-${rangeStart + 99}`
+              }
             }
+          );
+          const page = await response.json() as any[];
+          if (!Array.isArray(page) || !page.length) break;
+          matches = matches.concat(page);
+          const contentRange = response.headers.get("Content-Range");
+          if (contentRange) {
+            const total = parseInt(contentRange.split("/")[1]);
+            hasMore = matches.length < total;
+            rangeStart += 100;
+          } else {
+            hasMore = false;
           }
-        );
-        const matches = await response.json() as any[];
-        if (!Array.isArray(matches) || !matches.length) continue;
+        }
+        if (!matches.length) continue;
 
         // Resolve local team names
         const challongeIds = matches.flatMap((m: any) =>
