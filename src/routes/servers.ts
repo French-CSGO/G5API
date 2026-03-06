@@ -15,6 +15,8 @@ import GameServer from "../utility/serverrcon.js";
 import Utils from "../utility/utils.js";
 import { RowDataPacket } from "mysql2";
 import { GameServerObject } from "../types/servers/GameServerObject.js";
+import fetch from "node-fetch";
+import config from "config";
 
 /**
  * @swagger
@@ -143,6 +145,49 @@ router.get("/", Utils.ensureAuthenticated, async (req, res, next) => {
  *       500:
  *         $ref: '#/components/responses/Error'
  */
+router.get("/pterodactyl-list", Utils.ensureAuthenticated, async (req, res, next) => {
+  try {
+    if (req.user && !Utils.adminCheck(req.user)) {
+      res.status(403).json({ message: "User is not authorized to perform action." });
+      return;
+    }
+    let enabled = false;
+    try { enabled = config.get("pterodactyl.enabled"); } catch {}
+    if (!enabled) {
+      res.status(503).json({ message: "Pterodactyl integration is not enabled." });
+      return;
+    }
+    const url: string = (config.get("pterodactyl.url") as string).replace(/\/$/, "");
+    const apiKey: string = config.get("pterodactyl.apiKey");
+
+    let servers: any[] = [];
+    let nextPage: string | null = `${url}/api/client?per_page=100`;
+    while (nextPage) {
+      const resp = await fetch(nextPage, {
+        headers: { Authorization: `Bearer ${apiKey}`, Accept: "application/json" },
+      });
+      if (!resp.ok) {
+        res.status(502).json({ message: `Pterodactyl API error: HTTP ${resp.status}` });
+        return;
+      }
+      const data: any = await resp.json();
+      servers = servers.concat(
+        (data.data || []).map((s: any) => ({
+          identifier:  s.attributes?.identifier,
+          name:        s.attributes?.name,
+          description: s.attributes?.description,
+          status:      s.attributes?.status ?? "unknown",
+        }))
+      );
+      nextPage = data.meta?.pagination?.links?.next || null;
+    }
+    res.json({ servers });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: (err as Error).toString() });
+  }
+});
+
  router.get("/publiccount", async (req, res, next) => {
   try {
     let sql: string = 
