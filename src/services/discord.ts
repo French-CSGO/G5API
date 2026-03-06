@@ -97,7 +97,12 @@ export async function initDiscord(): Promise<void> {
           .toJSON()
       ];
       const rest = new REST().setToken(token);
-      await rest.put(Routes.applicationCommands(c.user.id), { body: commands });
+      const guildId: string = config.get("discord.guildId");
+      if (guildId) {
+        await rest.put(Routes.applicationGuildCommands(c.user.id, guildId), { body: commands });
+      } else {
+        await rest.put(Routes.applicationCommands(c.user.id), { body: commands });
+      }
 
       updateScoreboard();
       updateSchedule();

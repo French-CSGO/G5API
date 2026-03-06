@@ -40,6 +40,7 @@
     "token": "$DISCORD_TOKEN",
     "announceChannelId": "$DISCORD_ANNOUNCECHANNEL",
     "scoreboardChannelId": "$DISCORD_SCOREBOARD",
-    "scheduleChannelId": "$DISCORD_CHANNEL"
+    "scheduleChannelId": "$DISCORD_CHANNEL",
+    "guildId": "$DISCORD_GUILD_ID"
   }
 }
