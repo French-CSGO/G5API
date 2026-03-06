@@ -15,6 +15,7 @@ import app from '../app.js';
 import debug from 'debug';
 import { createServer } from 'http';
 import config from 'config';
+import { initDiscord } from '../src/services/discord.js';
 
 /**
  * Get port from environment and store in Express.
@@ -36,6 +37,8 @@ var server = createServer(app);
 server.listen(port);
 server.on('error', onError);
 server.on('listening', onListening);
+
+initDiscord();
 
 /**
  * Normalize a port into a number, string, or false.
