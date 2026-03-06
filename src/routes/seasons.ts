@@ -97,11 +97,11 @@ import config from "config";
 router.get("/", async (req, res, next) => {
   try {
     let sql: string =
-      "SELECT s.id, s.user_id, s.name, s.start_date, s.end_date, " +
+      "SELECT s.id, s.user_id, s.name, s.start_date, s.end_date, s.challonge_url, s.is_challonge, " +
       "CONCAT('{', GROUP_CONCAT(DISTINCT CONCAT('\"',sc.cvar_name,'\": \"',sc.cvar_value,'\"')),'}') as cvars " +
       "FROM season s LEFT OUTER JOIN season_cvar sc " +
       "ON s.id = sc.season_id " +
-      "GROUP BY s.id, s.user_id, s.name, s.start_date, s.end_date";
+      "GROUP BY s.id, s.user_id, s.name, s.start_date, s.end_date, s.challonge_url, s.is_challonge";
     let seasons: RowDataPacket[] = await db.query(sql);
     if (!seasons.length) {
       res.status(404).json({ message: "No seasons found." });
