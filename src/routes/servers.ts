@@ -176,11 +176,29 @@ router.get("/pterodactyl-list", Utils.ensureAuthenticated, async (req, res, next
           identifier:  s.attributes?.identifier,
           name:        s.attributes?.name,
           description: s.attributes?.description,
-          status:      s.attributes?.status ?? "unknown",
         }))
       );
       nextPage = data.meta?.pagination?.links?.next || null;
     }
+
+    // Fetch live status for each server in parallel
+    const headers = { Authorization: `Bearer ${apiKey}`, Accept: "application/json" };
+    await Promise.all(
+      servers.map(async (s) => {
+        try {
+          const r = await fetch(`${url}/api/client/servers/${s.identifier}/resources`, { headers });
+          if (r.ok) {
+            const d: any = await r.json();
+            s.status = d.attributes?.current_state ?? "unknown";
+          } else {
+            s.status = "unknown";
+          }
+        } catch {
+          s.status = "unknown";
+        }
+      })
+    );
+
     res.json({ servers });
   } catch (err) {
     console.error(err);
