@@ -39,7 +39,8 @@
   "discord": {
     "token": "",
     "announceChannelId": "",
-    "scoreboardChannelId": ""
+    "scoreboardChannelId": "",
+    "scheduleChannelId": ""
   }
 }
   

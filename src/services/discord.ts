@@ -9,11 +9,14 @@ import GlobalEmitter from "../utility/emitter.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const MESSAGE_ID_FILE = path.join(__dirname, "../../../public/discord_scoreboard_id.json");
+const SCHEDULE_MESSAGE_ID_FILE = path.join(__dirname, "../../../public/discord_schedule_id.json");
 
 let client: Client | null = null;
 let announceChannelId = "";
 let scoreboardChannelId = "";
 let scoreboardMessageId = "0";
+let scheduleChannelId = "";
+let scheduleMessageId = "0";
 
 function loadMessageId() {
   try {
@@ -32,23 +35,69 @@ function saveMessageId(id: string) {
   } catch {}
 }
 
+function loadScheduleMessageId() {
+  try {
+    if (fs.existsSync(SCHEDULE_MESSAGE_ID_FILE)) {
+      const json = JSON.parse(fs.readFileSync(SCHEDULE_MESSAGE_ID_FILE, "utf-8"));
+      scheduleMessageId = json.messageId || "0";
+    }
+  } catch {}
+}
+
+function saveScheduleMessageId(id: string) {
+  scheduleMessageId = id;
+  try {
+    fs.mkdirSync(path.dirname(SCHEDULE_MESSAGE_ID_FILE), { recursive: true });
+    fs.writeFileSync(SCHEDULE_MESSAGE_ID_FILE, JSON.stringify({ messageId: id }));
+  } catch {}
+}
+
+async function getToornamentToken(): Promise<string | null> {
+  try {
+    const clientId: string = config.get("toornament.clientId") || "";
+    const clientSecret: string = config.get("toornament.clientSecret") || "";
+    const apiKey: string = config.get("toornament.apiKey") || "";
+    if (!clientId || !clientSecret || !apiKey ||
+        clientId === "toornament_client_id_go_here") return null;
+    const tokenResponse = await fetch("https://api.toornament.com/oauth/v2/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "client_credentials",
+        client_id: clientId,
+        client_secret: clientSecret,
+        scope: "organizer:admin organizer:view organizer:result organizer:participant"
+      })
+    });
+    const tokenData = await tokenResponse.json() as { access_token?: string };
+    return tokenData.access_token || null;
+  } catch {
+    return null;
+  }
+}
+
 export async function initDiscord(): Promise<void> {
   try {
     const token: string = config.get("discord.token");
     if (!token) return;
     announceChannelId = config.get("discord.announceChannelId");
     scoreboardChannelId = config.get("discord.scoreboardChannelId");
+    scheduleChannelId = config.get("discord.scheduleChannelId");
     loadMessageId();
+    loadScheduleMessageId();
 
     client = new Client({ intents: [GatewayIntentBits.Guilds] });
     client.once("clientReady", () => {
       console.log(`Discord bot connected as ${client!.user!.tag}`);
       updateScoreboard();
+      updateSchedule();
+      setInterval(updateSchedule, 5 * 60 * 1000);
     });
     await client.login(token);
 
     GlobalEmitter.on("matchUpdate", updateScoreboard);
     GlobalEmitter.on("mapStatUpdate", updateScoreboard);
+    GlobalEmitter.on("matchUpdate", updateSchedule);
   } catch (err) {
     console.error("Discord init failed:", (err as Error).message);
   }
@@ -131,5 +180,103 @@ export async function updateScoreboard(): Promise<void> {
     }
   } catch (err) {
     console.error("Discord updateScoreboard error:", (err as Error).message);
+  }
+}
+
+export async function updateSchedule(): Promise<void> {
+  if (!client?.isReady() || !scheduleChannelId) return;
+  try {
+    const token = await getToornamentToken();
+    const apiKey: string = config.get("toornament.apiKey") || "";
+
+    const seasons: RowDataPacket[] = await db.query(
+      "SELECT id, name, challonge_url FROM season WHERE challonge_url LIKE 't:%'",
+      []
+    );
+
+    let content = "";
+
+    if (token && apiKey && seasons.length > 0) {
+      for (const season of seasons) {
+        const tournamentId = (season.challonge_url as string).replace(/^t:/, "");
+
+        const response = await fetch(
+          `https://api.toornament.com/organizer/v2/matches?tournament_ids=${tournamentId}&statuses=pending&sort=structure`,
+          {
+            headers: {
+              "Authorization": `Bearer ${token}`,
+              "x-api-key": apiKey,
+              "Range": "matches=0-99"
+            }
+          }
+        );
+        const matches = await response.json() as any[];
+        if (!Array.isArray(matches) || !matches.length) continue;
+
+        // Resolve local team names
+        const challongeIds = matches.flatMap((m: any) =>
+          m.opponents.map((o: any) => o.participant?.id).filter(Boolean)
+        );
+        const teamByChallongeId = new Map<string, any>();
+        if (challongeIds.length > 0) {
+          const localTeams: RowDataPacket[] = await db.query(
+            `SELECT id, name, challonge_team_id FROM team WHERE challonge_team_id IN (${challongeIds.map(() => "?").join(",")})`,
+            challongeIds
+          );
+          for (const t of localTeams) teamByChallongeId.set(String(t.challonge_team_id), t);
+        }
+
+        // Per group, only keep matches from the first pending round (sorted by structure)
+        const firstRoundByGroup = new Map<string, string>();
+        const toShow: any[] = [];
+        for (const match of matches) {
+          const groupId: string = match.group_id || "none";
+          const roundId: string = match.round_id || "none";
+          if (!firstRoundByGroup.has(groupId)) firstRoundByGroup.set(groupId, roundId);
+          if (roundId !== firstRoundByGroup.get(groupId)) continue;
+
+          const opp1 = match.opponents[0];
+          const opp2 = match.opponents[1];
+          const team1 = opp1?.participant
+            ? (teamByChallongeId.get(String(opp1.participant.id)) ?? { name: opp1.participant.name })
+            : null;
+          const team2 = opp2?.participant
+            ? (teamByChallongeId.get(String(opp2.participant.id)) ?? { name: opp2.participant.name })
+            : null;
+          if (team1 && team2) toShow.push({ match, team1, team2 });
+        }
+
+        if (!toShow.length) continue;
+
+        content += `**${season.name}**\n`;
+        for (const { match, team1, team2 } of toShow) {
+          const scheduled = match.scheduled_datetime
+            ? new Date(match.scheduled_datetime).toLocaleString("fr-FR", { timeZone: "Europe/Paris", hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit" })
+            : null;
+          content += `• **${team1.name}** vs **${team2.name}**`;
+          if (scheduled) content += ` | 📅 \`${scheduled}\``;
+          content += `\n`;
+        }
+        content += `\n`;
+      }
+    }
+
+    if (!content.trim()) content = "🟡 Aucun match disponible actuellement.";
+
+    const channel = await client.channels.fetch(scheduleChannelId) as TextChannel;
+    if (scheduleMessageId === "0") {
+      const msg = await channel.send(content);
+      saveScheduleMessageId(msg.id);
+    } else {
+      try {
+        const msg = await channel.messages.fetch(scheduleMessageId);
+        await msg.edit(content);
+      } catch {
+        const msg = await channel.send(content);
+        saveScheduleMessageId(msg.id);
+      }
+    }
+  } catch (err) {
+    console.error("Discord updateSchedule error:", (err as Error).message);
   }
 }
