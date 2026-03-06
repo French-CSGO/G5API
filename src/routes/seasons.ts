@@ -980,18 +980,18 @@ router.get("/:season_id/toornament/matches/:toornament_match_id/prefill", Utils.
 
     if (!fmt && tMatch.stage_id) {
       const stageResp = await fetch(
-        `https://api.toornament.com/organizer/v2/stages?tournament_ids=${tournamentId}&stage_ids=${tMatch.stage_id}`,
+        `https://api.toornament.com/organizer/v2/stages?tournament_ids=${tournamentId}`,
         {
           headers: {
             "Authorization": `Bearer ${token}`,
             "x-api-key": apiKey,
-            "Range": "stages=0-0"
+            "Range": "stages=0-49"
           }
         }
       );
       if (stageResp.ok) {
         const stages = await stageResp.json() as any[];
-        const stage = stages[0];
+        const stage = stages.find((s: any) => s.id === tMatch.stage_id);
         fmt = stage?.match_settings?.format
            ?? stage?.settings?.match_settings?.format;
       }
