@@ -1108,6 +1108,31 @@ router.patch("/:season_id/toornament/rounds/:round_id/schedule", Utils.ensureAut
   }
 });
 
+router.patch("/:season_id/toornament/matches/:match_id/schedule", Utils.ensureAuthenticated, async (req, res) => {
+  try {
+    const matchId = req.params.match_id;
+    const { scheduled_datetime } = req.body;
+    if (!scheduled_datetime) return res.status(400).json({ message: "scheduled_datetime is required" });
+
+    const token = await getToornamentToken();
+    const apiKey: string = config.get("toornament.apiKey");
+
+    await fetch(`https://api.toornament.com/organizer/v2/matches/${matchId}`, {
+      method: "PATCH",
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "x-api-key": apiKey,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ scheduled_datetime })
+    });
+    res.json({ message: "Match mis à jour." });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: (err as Error).toString() });
+  }
+});
+
 router.get("/:season_id/teams", Utils.ensureAuthenticated, async (req, res, next) => {
   try {
     const seasonId = parseInt(req.params.season_id);
