@@ -1014,6 +1014,100 @@ router.get("/:season_id/toornament/matches/:toornament_match_id/prefill", Utils.
   }
 });
 
+router.get("/:season_id/toornament/rounds", Utils.ensureAuthenticated, async (req, res, next) => {
+  try {
+    const seasonId = parseInt(req.params.season_id);
+    const tournamentId = await getSeasonToornamentId(seasonId);
+    const token = await getToornamentToken();
+    const apiKey: string = config.get("toornament.apiKey");
+
+    const [stagesResp, roundsResp] = await Promise.all([
+      fetch(`https://api.toornament.com/organizer/v2/stages?tournament_ids=${tournamentId}`, {
+        headers: { "Authorization": `Bearer ${token}`, "x-api-key": apiKey, "Range": "stages=0-49" }
+      }),
+      fetch(`https://api.toornament.com/organizer/v2/rounds?tournament_ids=${tournamentId}`, {
+        headers: { "Authorization": `Bearer ${token}`, "x-api-key": apiKey, "Range": "rounds=0-199" }
+      })
+    ]);
+
+    const stages = await stagesResp.json() as any[];
+    const rounds = await roundsResp.json() as any[];
+
+    const stageMap = new Map(stages.map((s: any) => [s.id, s.name]));
+    const enriched = rounds.map((r: any) => ({
+      ...r,
+      stage_name: stageMap.get(r.stage_id) ?? r.stage_id
+    }));
+
+    res.json({ rounds: enriched });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: (err as Error).toString() });
+  }
+});
+
+router.patch("/:season_id/toornament/rounds/:round_id/schedule", Utils.ensureAuthenticated, async (req, res, next) => {
+  try {
+    const seasonId = parseInt(req.params.season_id);
+    const roundId = req.params.round_id;
+    const { scheduled_datetime } = req.body;
+
+    if (!scheduled_datetime) {
+      return res.status(400).json({ message: "scheduled_datetime is required" });
+    }
+
+    const tournamentId = await getSeasonToornamentId(seasonId);
+    const token = await getToornamentToken();
+    const apiKey: string = config.get("toornament.apiKey");
+
+    // Fetch all matches for this round
+    let allMatches: ToornamentMatch[] = [];
+    let rangeStart = 0;
+    let hasMore = true;
+    while (hasMore) {
+      const response = await fetch(
+        `https://api.toornament.com/organizer/v2/matches?tournament_ids=${tournamentId}&round_ids=${roundId}`,
+        {
+          headers: {
+            "Authorization": `Bearer ${token}`,
+            "x-api-key": apiKey,
+            "Range": `matches=${rangeStart}-${rangeStart + 99}`
+          }
+        }
+      );
+      const data = await response.json() as ToornamentMatch[];
+      if (!Array.isArray(data) || !data.length) break;
+      allMatches = allMatches.concat(data);
+      const contentRange = response.headers.get("Content-Range");
+      if (contentRange) {
+        const total = parseInt(contentRange.split("/")[1]);
+        hasMore = allMatches.length < total;
+        rangeStart += 100;
+      } else {
+        hasMore = false;
+      }
+    }
+
+    // PATCH each match
+    await Promise.all(allMatches.map(match =>
+      fetch(`https://api.toornament.com/organizer/v2/matches/${match.id}`, {
+        method: "PATCH",
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "x-api-key": apiKey,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ scheduled_datetime })
+      })
+    ));
+
+    res.json({ message: `${allMatches.length} match(s) mis à jour.` });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: (err as Error).toString() });
+  }
+});
+
 router.get("/:season_id/teams", Utils.ensureAuthenticated, async (req, res, next) => {
   try {
     const seasonId = parseInt(req.params.season_id);
