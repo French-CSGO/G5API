@@ -513,11 +513,15 @@ export class QueueService {
     requestorSteamId: string
   ): Promise<QueueDescriptor> {
     const meta = await getQueueMetaOrThrow(slug);
+    // Private queues are hidden from the listing but accessible to anyone
+    // who knows the slug (the slug acts as the invite link).
+    // Only block unauthenticated (empty steamId) access to private queues.
     if (
       role === "admin" ||
       role === "super_admin" ||
       meta.ownerId === requestorSteamId ||
-      meta.isPrivate === false
+      !meta.isPrivate ||
+      requestorSteamId
     ) {
       return meta;
     }
