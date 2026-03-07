@@ -158,7 +158,7 @@ export class QueueService {
     const minPlayerReady = seasonCvars["min_players_to_ready"] != null
       ? parseInt(seasonCvars["min_players_to_ready"]) : Math.ceil(meta.maxSize / 2);
     const mapSides = seasonCvars["map_sides"]
-      ? seasonCvars["map_sides"].trim().split(/\s+/).join(",") : null;
+      ? seasonCvars["map_sides"].trim().split(/\s+/).join(",") : "";
 
     const baseMatch: any = {
       user_id: ownerUserId || 0,
@@ -170,6 +170,7 @@ export class QueueService {
       max_maps: maxMaps,
       title: `[PUG] ${slug}`,
       skip_veto: skipVeto,
+      veto_first: "team1",
       veto_mappool: mapPool.join(" "),
       side_type: sideType,
       wingman,
