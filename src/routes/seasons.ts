@@ -974,11 +974,33 @@ router.get("/:season_id/toornament/matches/:toornament_match_id/prefill", Utils.
       })
     );
 
-    // Determine max_maps from Toornament format
+    // Determine max_maps from Toornament format (match → stage fallback)
     let max_maps = 1;
-    const fmt = tMatch.settings?.format;
+    let fmt: any = tMatch.settings?.format;
+
+    if (!fmt && tMatch.stage_id) {
+      const stageResp = await fetch(
+        `https://api.toornament.com/organizer/v2/stages?tournament_ids=${tournamentId}`,
+        {
+          headers: {
+            "Authorization": `Bearer ${token}`,
+            "x-api-key": apiKey,
+            "Range": "stages=0-49"
+          }
+        }
+      );
+      if (stageResp.ok) {
+        const stages = await stageResp.json() as any[];
+        const stage = stages.find((s: any) => s.id === tMatch.stage_id);
+        fmt = stage?.match_settings?.format
+           ?? stage?.settings?.match_settings?.format;
+      }
+    }
+
     if (fmt?.type === "best_of" && fmt.options?.nb_match_sets) {
       max_maps = fmt.options.nb_match_sets;
+    } else if (fmt?.type === "single_set") {
+      max_maps = 1;
     }
 
     // Get available servers (not in use, accessible by user)

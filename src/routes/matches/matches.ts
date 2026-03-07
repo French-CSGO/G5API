@@ -26,6 +26,7 @@ import { MatchData } from "../../types/matches/MatchData.js";
 import { TeamData } from "../../types/teams/TeamData.js";
 import { RowDataPacket } from "mysql2";
 import { AccessMessage } from "../../types/mapstats/AccessMessage.js";
+import { startAndWait, isEnabled as pterodactylEnabled } from "../../services/pterodactyl.js";
 
 
 /**
@@ -1275,8 +1276,19 @@ router.post("/", Utils.ensureAuthenticated, async (req, res, next) => {
     }
     if (!req.body[0].ignore_server) {
       let ourServerSql: string =
-        "SELECT rcon_password, ip_string, port FROM game_server WHERE id=?";
+        "SELECT rcon_password, ip_string, port, pterodactyl_id FROM game_server WHERE id=?";
       const serveInfo: RowDataPacket[] = await db.query(ourServerSql, [req.body[0].server_id]);
+
+      // If Pterodactyl is enabled and the server has a pterodactyl_id, start it and wait for readiness
+      if (pterodactylEnabled() && serveInfo[0].pterodactyl_id) {
+        await startAndWait(
+          serveInfo[0].pterodactyl_id,
+          serveInfo[0].ip_string,
+          serveInfo[0].port,
+          serveInfo[0].rcon_password
+        );
+      }
+
       const newServer: GameServer = new GameServer(
         serveInfo[0].ip_string,
         serveInfo[0].port,

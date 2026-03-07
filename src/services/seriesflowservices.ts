@@ -10,6 +10,7 @@ import { RowDataPacket } from "mysql2";
 import { Response } from "express";
 import Utils from "../utility/utils.js";
 import update_challonge_match from "../services/challonge.js";
+import { stopAfterDelay, isEnabled as pterodactylEnabled, getShutdownDelay } from "./pterodactyl.js";
 
 class SeriesFlowService {
   static async OnSeriesResult(event: Get5_OnSeriesResult, res: Response) {
@@ -24,7 +25,8 @@ class SeriesFlowService {
       let updateObject: {};
 
       const matchInfo: RowDataPacket[] = await db.query(
-        "SELECT team1_id, team2_id, max_maps, start_time, server_id, is_pug, season_id FROM `match` WHERE id = ?",
+        "SELECT m.team1_id, m.team2_id, m.max_maps, m.start_time, m.server_id, m.is_pug, m.season_id, gs.pterodactyl_id " +
+        "FROM `match` m LEFT JOIN game_server gs ON gs.id = m.server_id WHERE m.id = ?",
         [event.matchid]
       );
       if (event.winner?.team === "team1") winnerId = matchInfo[0]?.team1_id;
@@ -56,8 +58,24 @@ class SeriesFlowService {
       let updateSql: string = "UPDATE `match` SET ? WHERE id = ?";
       await db.query(updateSql, [updateObject, event.matchid]);
       // Set server to not be in use.
-      updateSql = "UPDATE game_server SET in_use = 0 WHERE id = ?";
-      await db.query(updateSql, [matchInfo[0].server_id]);
+      // If Pterodactyl is enabled and the server has a pterodactyl_id, delay shutdown and release.
+      if (pterodactylEnabled() && matchInfo[0].pterodactyl_id) {
+        const shutdownDelay = getShutdownDelay();
+        const serverId = matchInfo[0].server_id;
+        const pterodactylId = matchInfo[0].pterodactyl_id;
+        stopAfterDelay(pterodactylId, shutdownDelay);
+        setTimeout(async () => {
+          try {
+            await db.query("UPDATE game_server SET in_use = 0 WHERE id = ?", [serverId]);
+            console.log(`[Pterodactyl] Server ${pterodactylId} released (in_use = 0)`);
+          } catch (err) {
+            console.error(`[Pterodactyl] Failed to release server ${pterodactylId}:`, err);
+          }
+        }, shutdownDelay);
+      } else {
+        updateSql = "UPDATE game_server SET in_use = 0 WHERE id = ?";
+        await db.query(updateSql, [matchInfo[0].server_id]);
+      }
 
       // Check if we are pugging.
       if (matchInfo[0].is_pug != null && matchInfo[0].is_pug == 1) {

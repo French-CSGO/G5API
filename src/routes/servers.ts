@@ -15,6 +15,8 @@ import GameServer from "../utility/serverrcon.js";
 import Utils from "../utility/utils.js";
 import { RowDataPacket } from "mysql2";
 import { GameServerObject } from "../types/servers/GameServerObject.js";
+import fetch from "node-fetch";
+import config from "config";
 
 /**
  * @swagger
@@ -96,10 +98,10 @@ router.get("/", Utils.ensureAuthenticated, async (req, res, next) => {
     let sql: string;
     if (req.user && Utils.superAdminCheck(req.user)) {
       sql =
-        "SELECT gs.id, gs.in_use, gs.ip_string, gs.port, gs.rcon_password, gs.display_name, gs.public_server, usr.name, usr.id as user_id, gs.flag, gs.gotv_port FROM game_server gs, user usr WHERE usr.id = gs.user_id ORDER BY SUBSTRING_INDEX(gs.display_name, ' ', 1), CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(gs.display_name, ' ', -1), '.', 1) AS UNSIGNED), CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(gs.display_name, '.', -1), ' ', 1) AS UNSIGNED)";
+        "SELECT gs.id, gs.in_use, gs.ip_string, gs.port, gs.rcon_password, gs.display_name, gs.public_server, usr.name, usr.id as user_id, gs.flag, gs.gotv_port, gs.pterodactyl_id FROM game_server gs, user usr WHERE usr.id = gs.user_id ORDER BY SUBSTRING_INDEX(gs.display_name, ' ', 1), CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(gs.display_name, ' ', -1), '.', 1) AS UNSIGNED), CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(gs.display_name, '.', -1), ' ', 1) AS UNSIGNED)";
     } else if (req.user && Utils.adminCheck(req.user)) {
       sql =
-        "SELECT gs.id, gs.in_use, gs.display_name, gs.ip_string, gs.port, gs.public_server, usr.name, usr.id as user_id, gs.flag, gs.gotv_port  FROM game_server gs, user usr WHERE usr.id = gs.user_id ORDER BY SUBSTRING_INDEX(gs.display_name, ' ', 1), CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(gs.display_name, ' ', -1), '.', 1) AS UNSIGNED), CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(gs.display_name, '.', -1), ' ', 1) AS UNSIGNED)";
+        "SELECT gs.id, gs.in_use, gs.display_name, gs.ip_string, gs.port, gs.public_server, usr.name, usr.id as user_id, gs.flag, gs.gotv_port, gs.pterodactyl_id FROM game_server gs, user usr WHERE usr.id = gs.user_id ORDER BY SUBSTRING_INDEX(gs.display_name, ' ', 1), CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(gs.display_name, ' ', -1), '.', 1) AS UNSIGNED), CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(gs.display_name, '.', -1), ' ', 1) AS UNSIGNED)";
     } else {
       sql =
         "SELECT gs.id, gs.in_use, gs.display_name, usr.name, gs.public_server, gs.flag FROM game_server gs, user usr WHERE gs.public_server=1 AND usr.id = gs.user_id ORDER BY SUBSTRING_INDEX(gs.display_name, ' ', 1), CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(gs.display_name, ' ', -1), '.', 1) AS UNSIGNED), CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(gs.display_name, '.', -1), ' ', 1) AS UNSIGNED)";
@@ -143,6 +145,67 @@ router.get("/", Utils.ensureAuthenticated, async (req, res, next) => {
  *       500:
  *         $ref: '#/components/responses/Error'
  */
+router.get("/pterodactyl-list", Utils.ensureAuthenticated, async (req, res, next) => {
+  try {
+    if (req.user && !Utils.adminCheck(req.user)) {
+      res.status(403).json({ message: "User is not authorized to perform action." });
+      return;
+    }
+    let enabled = false;
+    try { enabled = config.get("pterodactyl.enabled"); } catch {}
+    if (!enabled) {
+      res.status(503).json({ message: "Pterodactyl integration is not enabled." });
+      return;
+    }
+    const url: string = (config.get("pterodactyl.url") as string).replace(/\/$/, "");
+    const apiKey: string = config.get("pterodactyl.apiKey");
+
+    let servers: any[] = [];
+    let nextPage: string | null = `${url}/api/client?per_page=100`;
+    while (nextPage) {
+      const resp = await fetch(nextPage, {
+        headers: { Authorization: `Bearer ${apiKey}`, Accept: "application/json" },
+      });
+      if (!resp.ok) {
+        res.status(502).json({ message: `Pterodactyl API error: HTTP ${resp.status}` });
+        return;
+      }
+      const data: any = await resp.json();
+      servers = servers.concat(
+        (data.data || []).map((s: any) => ({
+          identifier:  s.attributes?.identifier,
+          name:        s.attributes?.name,
+          description: s.attributes?.description,
+        }))
+      );
+      nextPage = data.meta?.pagination?.links?.next || null;
+    }
+
+    // Fetch live status for each server in parallel
+    const headers = { Authorization: `Bearer ${apiKey}`, Accept: "application/json" };
+    await Promise.all(
+      servers.map(async (s) => {
+        try {
+          const r = await fetch(`${url}/api/client/servers/${s.identifier}/resources`, { headers });
+          if (r.ok) {
+            const d: any = await r.json();
+            s.status = d.attributes?.current_state ?? "unknown";
+          } else {
+            s.status = "unknown";
+          }
+        } catch {
+          s.status = "unknown";
+        }
+      })
+    );
+
+    res.json({ servers });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: (err as Error).toString() });
+  }
+});
+
  router.get("/publiccount", async (req, res, next) => {
   try {
     let sql: string = 
@@ -189,13 +252,13 @@ router.get("/available", Utils.ensureAuthenticated, async (req, res, next) => {
     let servers: RowDataPacket[];
     if (req.user && Utils.superAdminCheck(req.user)) {
       sql =
-        "SELECT gs.id, gs.ip_string, gs.port, gs.rcon_password, gs.display_name, gs.public_server, usr.name, usr.id as user_id, gs.flag, gs.gotv_port FROM game_server gs, user usr WHERE usr.id = gs.user_id AND gs.in_use=0 ORDER BY SUBSTRING_INDEX(gs.display_name, ' ', 1), CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(gs.display_name, ' ', -1), '.', 1) AS UNSIGNED), CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(gs.display_name, '.', -1), ' ', 1) AS UNSIGNED)";
+        "SELECT gs.id, gs.ip_string, gs.port, gs.rcon_password, gs.display_name, gs.public_server, usr.name, usr.id as user_id, gs.flag, gs.gotv_port, gs.pterodactyl_id FROM game_server gs, user usr WHERE usr.id = gs.user_id AND gs.in_use=0 ORDER BY SUBSTRING_INDEX(gs.display_name, ' ', 1), CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(gs.display_name, ' ', -1), '.', 1) AS UNSIGNED), CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(gs.display_name, '.', -1), ' ', 1) AS UNSIGNED)";
     } else if (req.user && Utils.adminCheck(req.user)) {
       sql =
-        "SELECT gs.id, gs.display_name, gs.ip_string, gs.port, gs.public_server, usr.name, usr.id as user_id, gs.flag, gs.gotv_port FROM game_server gs, user usr WHERE usr.id = gs.user_id AND gs.in_use=0 ORDER BY SUBSTRING_INDEX(gs.display_name, ' ', 1), CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(gs.display_name, ' ', -1), '.', 1) AS UNSIGNED), CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(gs.display_name, '.', -1), ' ', 1) AS UNSIGNED)";
+        "SELECT gs.id, gs.display_name, gs.ip_string, gs.port, gs.public_server, usr.name, usr.id as user_id, gs.flag, gs.gotv_port, gs.pterodactyl_id FROM game_server gs, user usr WHERE usr.id = gs.user_id AND gs.in_use=0 ORDER BY SUBSTRING_INDEX(gs.display_name, ' ', 1), CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(gs.display_name, ' ', -1), '.', 1) AS UNSIGNED), CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(gs.display_name, '.', -1), ' ', 1) AS UNSIGNED)";
     } else if (req.user) {
       sql =
-        "SELECT gs.id, gs.display_name, gs.ip_string, gs.port, gs.public_server, usr.name, usr.id as user_id, gs.flag, gs.gotv_port FROM game_server gs, user usr WHERE usr.id = gs.user_id AND (gs.public_server=1 OR gs.user_id = ?) AND gs.in_use=0 ORDER BY SUBSTRING_INDEX(gs.display_name, ' ', 1), CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(gs.display_name, ' ', -1), '.', 1) AS UNSIGNED), CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(gs.display_name, '.', -1), ' ', 1) AS UNSIGNED)";
+        "SELECT gs.id, gs.display_name, gs.ip_string, gs.port, gs.public_server, usr.name, usr.id as user_id, gs.flag, gs.gotv_port, gs.pterodactyl_id FROM game_server gs, user usr WHERE usr.id = gs.user_id AND (gs.public_server=1 OR gs.user_id = ?) AND gs.in_use=0 ORDER BY SUBSTRING_INDEX(gs.display_name, ' ', 1), CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(gs.display_name, ' ', -1), '.', 1) AS UNSIGNED), CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(gs.display_name, '.', -1), ' ', 1) AS UNSIGNED)";
     } else {
       sql =
         "SELECT gs.id, gs.display_name, usr.name, usr.id as user_id, gs.flag FROM game_server gs, user usr WHERE gs.public_server=1 AND usr.id = gs.user_id AND gs.in_use=0 ORDER BY SUBSTRING_INDEX(gs.display_name, ' ', 1), CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(gs.display_name, ' ', -1), '.', 1) AS UNSIGNED), CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(gs.display_name, '.', -1), ' ', 1) AS UNSIGNED)";
@@ -245,7 +308,7 @@ router.get("/myservers", Utils.ensureAuthenticated, async (req, res, next) => {
   try {
     // Check if admin, if they are use this query.
     let sql: string =
-      "SELECT gs.id, gs.in_use, gs.ip_string, gs.port, gs.rcon_password, gs.display_name, gs.public_server, usr.name, usr.id as user_id, gs.flag, gs.gotv_port FROM game_server gs, user usr WHERE usr.id = gs.user_id AND usr.id=? ORDER BY SUBSTRING_INDEX(gs.display_name, ' ', 1), CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(gs.display_name, ' ', -1), '.', 1) AS UNSIGNED), CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(gs.display_name, '.', -1), ' ', 1) AS UNSIGNED)";
+      "SELECT gs.id, gs.in_use, gs.ip_string, gs.port, gs.rcon_password, gs.display_name, gs.public_server, usr.name, usr.id as user_id, gs.flag, gs.gotv_port, gs.pterodactyl_id FROM game_server gs, user usr WHERE usr.id = gs.user_id AND usr.id=? ORDER BY SUBSTRING_INDEX(gs.display_name, ' ', 1), CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(gs.display_name, ' ', -1), '.', 1) AS UNSIGNED), CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(gs.display_name, '.', -1), ' ', 1) AS UNSIGNED)";
     let servers: RowDataPacket[] = await db.query(sql, [req.user?.id]);
     for (let serverRow of servers) {
       serverRow.rcon_password = Utils.decrypt(serverRow.rcon_password);
@@ -296,11 +359,11 @@ router.get("/:server_id", Utils.ensureAuthenticated, async (req, res, next) => {
     let server: RowDataPacket[];
     if (req.user && Utils.superAdminCheck(req.user)) {
       sql =
-        "SELECT gs.id, gs.in_use, gs.ip_string, gs.port, gs.rcon_password, gs.display_name, gs.public_server, usr.name, gs.flag, gs.gotv_port FROM game_server gs, user usr WHERE usr.id = gs.user_id AND gs.id = ?";
+        "SELECT gs.id, gs.in_use, gs.ip_string, gs.port, gs.rcon_password, gs.display_name, gs.public_server, usr.name, gs.flag, gs.gotv_port, gs.pterodactyl_id FROM game_server gs, user usr WHERE usr.id = gs.user_id AND gs.id = ?";
       server = await db.query(sql, [serverID]);
     } else {
       sql =
-        "SELECT gs.id, gs.in_use, gs.ip_string, gs.port, gs.rcon_password, gs.display_name, gs.public_server, usr.name, gs.flag, gs.gotv_port FROM game_server gs, user usr WHERE usr.id = gs.user_id AND gs.id = ? AND usr.id = ?";
+        "SELECT gs.id, gs.in_use, gs.ip_string, gs.port, gs.rcon_password, gs.display_name, gs.public_server, usr.name, gs.flag, gs.gotv_port, gs.pterodactyl_id FROM game_server gs, user usr WHERE usr.id = gs.user_id AND gs.id = ? AND usr.id = ?";
       server = await db.query(sql, [serverID, req.user?.id]);
     }
     if (server.length < 1) {
@@ -444,8 +507,9 @@ router.post("/", Utils.ensureAuthenticated, async (req, res, next) => {
     let publicServer: number = req.body[0].public_server;
     let flagCode: string = req.body[0].flag;
     let gotvPort: number = req.body[0].gotv_port;
+    let pterodactylId: string | null = req.body[0].pterodactyl_id || null;
     let sql: string =
-      "INSERT INTO game_server (user_id, ip_string, port, rcon_password, display_name, public_server, flag, gotv_port) VALUES (?,?,?,?,?,?,?,?)";
+      "INSERT INTO game_server (user_id, ip_string, port, rcon_password, display_name, public_server, flag, gotv_port, pterodactyl_id) VALUES (?,?,?,?,?,?,?,?,?)";
     insertServer = await db.query(sql, [
       userId,
       ipString,
@@ -455,6 +519,7 @@ router.post("/", Utils.ensureAuthenticated, async (req, res, next) => {
       publicServer,
       flagCode,
       gotvPort,
+      pterodactylId,
     ]);
     let ourServer: GameServer = new GameServer(
       req.body[0].ip_string,
@@ -547,6 +612,7 @@ router.put("/", Utils.ensureAuthenticated, async (req, res, next) => {
         user_id: req.body[0].user_id,
         flag: req.body[0].flag,
         gotv_port: req.body[0].gotv_port,
+        pterodactyl_id: req.body[0].pterodactyl_id !== undefined ? (req.body[0].pterodactyl_id || null) : undefined,
       };
       // Remove any unwanted nulls.
       updateStmt = await db.buildUpdateStatement(updateStmt);

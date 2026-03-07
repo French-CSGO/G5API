@@ -217,14 +217,21 @@ router.get("/:slug/stream", async (req, res) => {
     res.write(`event: queueFull\ndata: ${JSON.stringify(data)}\n\n`);
   };
 
+  const onQueueStarting = (data: any) => {
+    if (data.slug !== slug) return;
+    res.write(`event: queueStarting\ndata: ${JSON.stringify(data)}\n\n`);
+  };
+
   (GlobalEmitter as any).on("queue:playerJoined", onPlayerJoined);
   (GlobalEmitter as any).on("queue:playerLeft", onPlayerLeft);
   (GlobalEmitter as any).on("queue:full", onQueueFull);
+  (GlobalEmitter as any).on("queue:starting", onQueueStarting);
 
   const cleanup = () => {
     (GlobalEmitter as any).removeListener("queue:playerJoined", onPlayerJoined);
     (GlobalEmitter as any).removeListener("queue:playerLeft", onPlayerLeft);
     (GlobalEmitter as any).removeListener("queue:full", onQueueFull);
+    (GlobalEmitter as any).removeListener("queue:starting", onQueueStarting);
     res.end();
   };
 
