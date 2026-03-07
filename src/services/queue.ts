@@ -8,6 +8,7 @@ import { db } from "./db.js";
 import GameServer from "../utility/serverrcon.js";
 import GlobalEmitter from "../utility/emitter.js";
 import { generate } from "randomstring";
+import { startAndWait, isEnabled as pterodactylEnabled } from "./pterodactyl.js";
 
 const redis = createClient({ url: config.get("server.redisUrl") });
 const DEFAULT_TTL_SECONDS: number =
@@ -141,12 +142,12 @@ export class QueueService {
     try {
       if (ownerUserId && ownerUserId > 0) {
         candidates = await db.query(
-          "SELECT id, ip_string, port, rcon_password FROM game_server WHERE (public_server=1 OR user_id = ?) AND in_use=0",
+          "SELECT id, ip_string, port, rcon_password, pterodactyl_id FROM game_server WHERE (public_server=1 OR user_id = ?) AND in_use=0",
           [ownerUserId]
         );
       } else {
         candidates = await db.query(
-          "SELECT id, ip_string, port, rcon_password FROM game_server WHERE public_server=1 AND in_use=0"
+          "SELECT id, ip_string, port, rcon_password, pterodactyl_id FROM game_server WHERE public_server=1 AND in_use=0"
         );
       }
     } catch (err) {
@@ -156,6 +157,10 @@ export class QueueService {
     // Try each available server
     for (const cand of candidates) {
       try {
+        if (pterodactylEnabled() && cand.pterodactyl_id) {
+          await startAndWait(cand.pterodactyl_id, cand.ip_string, cand.port, cand.rcon_password);
+        }
+
         const newServer: GameServer = new GameServer(
           cand.ip_string,
           cand.port,
