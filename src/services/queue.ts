@@ -110,26 +110,26 @@ export class QueueService {
       "min_spectators_to_ready", "spectators", "map_sides",
     ]);
 
-    // Build map pool: season map_pool cvar > owner map list > default
+    // Build map pool: season_cvar map_pool > season.veto_mappool > default CS2 maps
     let mapPool: string[] = [];
     if (seasonCvars["map_pool"]) {
       mapPool = seasonCvars["map_pool"].trim().split(/\s+/).filter(Boolean);
     }
 
-    let ownerUserId: number | null = await getUserIdFromMetaSlug(slug);
     if (!mapPool.length) {
       try {
-        if (ownerUserId && ownerUserId > 0) {
-          const rows: RowDataPacket[] = await db.query(
-            "SELECT map_name FROM map_list WHERE user_id = ? ORDER BY id",
-            [ownerUserId]
-          );
-          if (rows.length) {
-            mapPool = rows.map((r: any) => r.map_name).filter(Boolean);
-          }
+        const seasonRows = await db.query(
+          "SELECT veto_mappool FROM season WHERE id = ?",
+          [QUEUE_SEASON_ID]
+        );
+        const vetoMappool = (seasonRows as any[])[0]?.veto_mappool;
+        if (vetoMappool) {
+          mapPool = vetoMappool.trim().split(/\s+/).filter(Boolean);
         }
-      } catch { mapPool = []; }
+      } catch { /* use default */ }
     }
+
+    let ownerUserId: number | null = await getUserIdFromMetaSlug(slug);
     if (!mapPool.length) mapPool = defaultCs2Maps;
 
     let team1Name: string | null = null;
