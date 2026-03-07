@@ -79,6 +79,8 @@ export class QueueService {
     const meta = await getQueueMetaOrThrow(slug);
     const apiKey = generate({ length: 24, capitalization: "uppercase" });
 
+    const QUEUE_SEASON_ID = 25;
+
     const defaultCs2Maps = [
       "de_inferno",
       "de_ancient",
@@ -89,22 +91,46 @@ export class QueueService {
       "de_vertigo",
     ];
 
-    let mapPool: string[] = [];
-    let ownerUserId: number | null = await getUserIdFromMetaSlug(slug);
+    // Fetch season params and cvars
+    let seasonCvars: Record<string, string> = {};
     try {
-      if (ownerUserId && ownerUserId > 0) {
-        const rows: RowDataPacket[] = await db.query(
-          "SELECT map_name FROM map_list WHERE user_id = ? ORDER BY id",
-          [ownerUserId]
-        );
-        if (rows.length) {
-          mapPool = rows.map((r: any) => r.map_name).filter(Boolean);
-        }
+      const cvarRows: RowDataPacket[] = await db.query(
+        "SELECT cvar_name, cvar_value FROM season_cvar WHERE season_id = ?",
+        [QUEUE_SEASON_ID]
+      );
+      for (const row of cvarRows as any[]) {
+        seasonCvars[row.cvar_name] = row.cvar_value;
       }
-    } catch (err) {
-      mapPool = [];
+    } catch { /* use defaults */ }
+
+    // Reserved cvars that map to match columns (not inserted into match_cvar)
+    const RESERVED_CVARS = new Set([
+      "skip_veto", "map_pool", "side_type", "wingman",
+      "players_per_team", "maps_to_win", "min_players_to_ready",
+      "min_spectators_to_ready", "spectators", "map_sides",
+    ]);
+
+    // Build map pool: season map_pool cvar > owner map list > default
+    let mapPool: string[] = [];
+    if (seasonCvars["map_pool"]) {
+      mapPool = seasonCvars["map_pool"].trim().split(/\s+/).filter(Boolean);
     }
-    if (!mapPool || mapPool.length === 0) mapPool = defaultCs2Maps;
+
+    let ownerUserId: number | null = await getUserIdFromMetaSlug(slug);
+    if (!mapPool.length) {
+      try {
+        if (ownerUserId && ownerUserId > 0) {
+          const rows: RowDataPacket[] = await db.query(
+            "SELECT map_name FROM map_list WHERE user_id = ? ORDER BY id",
+            [ownerUserId]
+          );
+          if (rows.length) {
+            mapPool = rows.map((r: any) => r.map_name).filter(Boolean);
+          }
+        }
+      } catch { mapPool = []; }
+    }
+    if (!mapPool.length) mapPool = defaultCs2Maps;
 
     let team1Name: string | null = null;
     let team2Name: string | null = null;
@@ -119,6 +145,21 @@ export class QueueService {
       }
     } catch { /* non-critical */ }
 
+    // Parse season cvars into match fields
+    const maxMaps = seasonCvars["maps_to_win"] != null
+      ? parseInt(seasonCvars["maps_to_win"]) : 1;
+    const skipVeto = seasonCvars["skip_veto"] != null
+      ? parseInt(seasonCvars["skip_veto"]) : 0;
+    const sideType = seasonCvars["side_type"] ?? "standard";
+    const wingman = seasonCvars["wingman"] != null
+      ? parseInt(seasonCvars["wingman"]) : 0;
+    const playersPerTeam = seasonCvars["players_per_team"] != null
+      ? parseInt(seasonCvars["players_per_team"]) : Math.ceil(meta.maxSize / 2);
+    const minPlayerReady = seasonCvars["min_players_to_ready"] != null
+      ? parseInt(seasonCvars["min_players_to_ready"]) : Math.ceil(meta.maxSize / 2);
+    const mapSides = seasonCvars["map_sides"]
+      ? seasonCvars["map_sides"].trim().split(/\s+/).join(",") : null;
+
     const baseMatch: any = {
       user_id: ownerUserId || 0,
       team1_id: teamIds[0] || null,
@@ -126,16 +167,29 @@ export class QueueService {
       team1_string: team1Name,
       team2_string: team2Name,
       start_time: new Date(),
-      max_maps: 1,
+      max_maps: maxMaps,
       title: `[PUG] ${slug}`,
-      skip_veto: 0,
+      skip_veto: skipVeto,
       veto_mappool: mapPool.join(" "),
+      side_type: sideType,
+      wingman,
+      players_per_team: playersPerTeam,
+      map_sides: mapSides,
       private_match: meta.isPrivate ? 1 : 0,
       enforce_teams: 1,
       is_pug: 1,
       api_key: apiKey,
-      min_player_ready: Math.ceil(meta.maxSize / 2),
+      min_player_ready: minPlayerReady,
+      season_id: QUEUE_SEASON_ID,
     };
+
+    // Non-reserved cvars to insert into match_cvar after match creation
+    const extraCvars: Array<{ name: string; value: string }> = [];
+    for (const [k, v] of Object.entries(seasonCvars)) {
+      if (!RESERVED_CVARS.has(k)) {
+        extraCvars.push({ name: k, value: v });
+      }
+    }
 
     // Fetch candidate servers
     let candidates: RowDataPacket[] = [];
@@ -181,6 +235,15 @@ export class QueueService {
           [insertSet]
         );
         const matchId = (insertRes as any).insertId;
+
+        // Insert non-reserved season cvars into match_cvar
+        if (extraCvars.length > 0) {
+          const cvarValues = extraCvars.map(c => [matchId, c.name, c.value]);
+          await db.query(
+            "INSERT INTO match_cvar (match_id, cvar_name, cvar_value) VALUES ?",
+            [cvarValues]
+          );
+        }
 
         await db.query("UPDATE game_server SET in_use = 1 WHERE id = ?", [
           cand.id,
@@ -264,6 +327,16 @@ export class QueueService {
         [insertSet]
       );
       const matchId = (insertRes as any).insertId;
+
+      // Insert non-reserved season cvars into match_cvar
+      if (extraCvars.length > 0) {
+        const cvarValues = extraCvars.map(c => [matchId, c.name, c.value]);
+        await db.query(
+          "INSERT INTO match_cvar (match_id, cvar_name, cvar_value) VALUES ?",
+          [cvarValues]
+        ).catch(() => { /* non-critical */ });
+      }
+
       (GlobalEmitter as any).emit("queue:full", {
         slug,
         matchId,
