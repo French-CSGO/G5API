@@ -195,7 +195,7 @@ class SeriesFlowService {
           matchInfo[0].team1_id,
           matchInfo[0].team2_id,
           matchInfo[0].max_maps,
-          event.winner.team
+          matchInfo[0].winner.team
         );
       }
       
