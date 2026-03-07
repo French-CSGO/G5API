@@ -19,11 +19,18 @@ If you've donated and would like to have your name listed as a sponsor, please m
 ---
 
 ## What does it do?
-G5API is an API that will allow users to create, manage, and control Counter-Strike 2 (CS2) matches. Add teams, create matches, and most importantly, track statistics across matches, and create Seasons/Tournaments to track stats within date ranges.  
+G5API is an API that will allow users to create, manage, and control Counter-Strike 2 (CS2) matches. Add teams, create matches, and most importantly, track statistics across matches, and create Seasons/Tournaments to track stats within date ranges.
 
 This API is complete enough to provide the most functionality out of [get5](https://github.com/splewis/get5), and has support for events that are fired off from [MatchZy](https://shobhit-pathak.github.io/MatchZy/) and [PugSharp](https://github.com/Lan2Play/PugSharp).
 
 There is also Challonge integration within the API. If a user provides a tournament ID to create a season, it will auto-fill a season start date, empty teams, and will auto-update the brackets at the end of each match if the match exists under the Season/Tournament.
+
+### Additional features (French-CSGO fork)
+- **Queue 5v5** — système de file d'attente Redis avec création automatique de match, événements SSE temps réel (`playerJoined`, `playerLeft`, `queueFull`, `queueStarting`)
+- **Pterodactyl** — intégration complète du panel Pterodactyl : démarrage automatique du serveur (`startAndWait`) avant la création de match depuis la queue, endpoint `GET /servers/pterodactyl-list` avec statut live par serveur
+- **Toornament** — synchronisation des matchs, rounds et stages ; endpoint de planification (`PATCH`) par match et par batch ; fallback du format (`max_maps`) depuis les paramètres du stage
+- **Discord** — annonce de match, scoreboard live, canal de calendrier, commande slash `/refresh-schedule` avec enregistrement instantané via `guildId`
+- **Saisons** — exposition de `challonge_url`, `is_challonge`, support de `challonge_team_id` sur les équipes
 
 # What does it NOT do?
 As stated, this is an API and does not contain a front end. You can either create your own front-end, or use [G5V](https://github.com/phlexplexico/g5v) to provide a simple, but effective front-end experience.
