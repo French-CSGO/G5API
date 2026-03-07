@@ -158,6 +158,7 @@ export class QueueService {
     for (const cand of candidates) {
       try {
         if (pterodactylEnabled() && cand.pterodactyl_id) {
+          (GlobalEmitter as any).emit("queue:starting", { slug });
           await startAndWait(cand.pterodactyl_id, cand.ip_string, cand.port, cand.rcon_password);
         }
 
