@@ -45,6 +45,22 @@ const router = Router();
  *        currentPlayers:
  *          type: integer
  *          description: Current number of players in queue
+ *        manualTeams:
+ *          type: boolean
+ *          nullable: true
+ *          description: If true, the owner manually assigns players to teams before the match starts
+ *        predefinedTeam1:
+ *          type: array
+ *          nullable: true
+ *          description: SteamIDs assigned to team 1 (manual mode only)
+ *          items:
+ *            type: string
+ *        predefinedTeam2:
+ *          type: array
+ *          nullable: true
+ *          description: SteamIDs assigned to team 2 (manual mode only)
+ *          items:
+ *            type: string
  */
 
 /**
@@ -268,6 +284,10 @@ router.get("/:slug/stream", async (req, res) => {
  *                 private:
  *                   type: boolean
  *                   example: false
+ *                 manualTeams:
+ *                   type: boolean
+ *                   example: false
+ *                   description: If true, the owner will manually assign players to teams once the queue is full
  *     responses:
  *       200:
  *         description: Queue created successfully.
