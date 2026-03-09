@@ -1223,41 +1223,53 @@ router.post(
           return;
         }
 
-        // End match on old server before switching.
-        if (oldServerId && oldServerId !== newServerId) {
-          try {
-            let oldServer: GameServer = await getGameServer(req.params.match_id);
-            await oldServer.endGet5Match();
-          } catch (_) {
-            // Best-effort: continue even if old server is unreachable.
-          }
-        }
-
         let serverUpdate: GameServer = new GameServer(
           newServerRow[0].ip_string,
           newServerRow[0].port,
           newServerRow[0].rcon_password
         );
+
+        // Verify MatchZy is present on server B before proceeding.
+        if (!(await serverUpdate.isGet5Available())) {
+          res.status(412).json({ message: "MatchZy is unavailable on the target server." });
+          return;
+        }
+
         try {
-          if (await serverUpdate.isGet5Available()) {
-            let rconResponse: string = await serverUpdate.restoreBackupFromURL(
-              config.get("server.apiURL") + `/backups/${req.params.match_id}/${configString}`
-            );
-            // Fix: correct param order — SET server_id = newServerId WHERE match id = match_id
-            await db.query("UPDATE `match` SET server_id = ? WHERE id = ?", [newServerId, req.params.match_id]);
+          // 1. End match on server A + set in_use = 0.
+          if (oldServerId && oldServerId !== newServerId) {
+            try {
+              let oldServer: GameServer = await getGameServer(req.params.match_id);
+              await oldServer.endGet5Match();
+            } catch (_) {
+              // Best-effort: continue even if old server is unreachable.
+            }
             await db.query("UPDATE game_server SET in_use = 0 WHERE id = ?", [oldServerId]);
-            await db.query("UPDATE game_server SET in_use = 1 WHERE id = ?", [newServerId]);
-            res.json({ message: `Restored backup ${configString} on server ${newServerId}.`, response: rconResponse });
-          } else {
-            res
-              .status(412)
-              .json({ message: "Match is already in progress on chosen server, or get5 is unavailable." });
-            return;
           }
+
+          // 2. Set server B in_use = 1.
+          await db.query("UPDATE game_server SET in_use = 1 WHERE id = ?", [newServerId]);
+
+          // 3. Send get5_loadbackup_url to server B.
+          let rconResponse: string = await serverUpdate.restoreBackupFromURL(
+            config.get("server.apiURL") + `/backups/${req.params.match_id}/${configString}`
+          );
+
+          // 4. Update match server_id.
+          await db.query("UPDATE `match` SET server_id = ? WHERE id = ?", [newServerId, req.params.match_id]);
+
+          // 5. Verify state with get5_web_available.
+          const verifyState: string = await serverUpdate.isServerAlive()
+            ? await serverUpdate.execute("get5_web_available")
+            : "unreachable";
+
+          res.json({
+            message: `Restored backup ${configString} on server ${newServerId}.`,
+            response: rconResponse,
+            server_state: verifyState
+          });
         } catch (err) {
-          res
-            .status(500)
-            .json({ message: "Error on game server.", response: err });
+          res.status(500).json({ message: "Error on game server.", response: err });
         } finally {
           return;
         }
