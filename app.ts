@@ -129,7 +129,12 @@ const options = {
 };
 const swaggerSpec = swaggerJSDoc(options);
 
-app.use("/api-docs", serve as any, setup(swaggerSpec) as any);
+app.use(
+  "/api-docs",
+  (_req: any, res: any, next: any) => { res.setHeader("Content-Security-Policy", ""); next(); },
+  serve as any,
+  setup(swaggerSpec) as any
+);
 
 // END API SETUP
 
