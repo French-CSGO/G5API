@@ -3,22 +3,29 @@
   "version": "2.2.0",
   "private": true,
   "type": "module",
+  "description": "MatchZy API — Node.js/TypeScript REST API for CS2 competitive match management using MatchZy",
   "licenses": [
     {
       "type": "MIT",
       "url": "http://opensource.org/licenses/MIT"
     }
   ],
-  "homepage": "https://github.com/phlexplexico/G5API/issues",
+  "homepage": "https://github.com/French-CSGO/G5API",
   "repository": {
     "type": "git",
-    "url": "https://github.com/phlexplexico/G5API.git"
+    "url": "https://github.com/French-CSGO/G5API.git"
   },
   "author": {
     "name": "Phlex Plexico",
     "email": "flexing@phlexplexi.co",
     "url": "https://phlexplexi.co"
   },
+  "contributors": [
+    {
+      "name": "Iwhite",
+      "url": "https://x.com/Iwhitecs"
+    }
+  ],
   "engines": {
     "node": ">=16.17.0"
   },

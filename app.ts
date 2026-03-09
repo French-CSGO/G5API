@@ -72,7 +72,7 @@ if (config.get("server.useRedis")) {
   };
   sessionType = session({
     secret: config.get("server.sharedSecret"),
-    name: "G5API",
+    name: "MatchZy",
     resave: false,
     saveUninitialized: true,
     store: new RedisStore(redisCfg),
@@ -84,7 +84,7 @@ if (config.get("server.useRedis")) {
 } else {
   sessionType = session({
     secret: config.get("server.sharedSecret"),
-    name: "G5API",
+    name: "MatchZy",
     resave: false,
     saveUninitialized: true,
     cookie: { maxAge: 2628000000 },
@@ -116,7 +116,7 @@ const options = {
   definition: {
     openapi: "3.0.0", // Specification (optional, defaults to swagger: '2.0')
     info: {
-      title: "G5API", // Title (required)
+      title: "MatchZy API", // Title (required)
       version: "2.0.2.4" // Version (required)
     }
   },
