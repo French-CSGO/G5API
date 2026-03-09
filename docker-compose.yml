@@ -38,8 +38,7 @@ services:
       - CADDY_INGRESS_NETWORKS=get5
 
   g5api:
-    build: .
-    image: g5api-local
+    image: ghcr.io/phlexplexico/g5api:latest
     depends_on:
       - get5db
     container_name: G5API
@@ -75,10 +74,7 @@ services:
     restart: always
 
   g5v:
-    build:
-      context: ../G5V
-      dockerfile: DockerfileFull
-    image: g5v-local
+    image: ghcr.io/phlexplexico/g5v:latest
     depends_on:
       - g5api
     container_name: G5V-Front-End
