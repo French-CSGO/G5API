@@ -57,7 +57,7 @@ class ServerRcon {
    */
   async getGet5Version(): Promise<string> {
     if (process.env.NODE_ENV === "test") {
-      return "unknown";
+      return "0.15.0";
     }
     let get5Status = await this.execute("get5_status");
     if (get5Status.includes("Unknown command")) {
