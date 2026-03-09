@@ -20,6 +20,7 @@ export class QueueService {
     nickname: string,
     maxPlayers: number = 10,
     isPrivate: boolean = false,
+    manualTeams: boolean = false,
     ttlSeconds: number = DEFAULT_TTL_SECONDS
   ): Promise<{ queue: QueueDescriptor; matchId?: number | null }> {
     let slug: string;
@@ -51,6 +52,7 @@ export class QueueService {
       maxSize: maxPlayers,
       isPrivate: isPrivate,
       currentPlayers: 0,
+      manualTeams: manualTeams,
     };
 
     await redis.sAdd("queues", slug!);
@@ -417,6 +419,10 @@ export class QueueService {
     });
 
     if (meta.currentPlayers >= meta.maxSize) {
+      if (meta.manualTeams) {
+        (GlobalEmitter as any).emit("queue:readyForTeams", { slug });
+        return {};
+      }
       try {
         const teamIds = await QueueService.createTeamsFromQueue(slug);
         const matchId = await QueueService.createMatchFromQueue(slug, teamIds);
@@ -426,6 +432,110 @@ export class QueueService {
       }
     }
     return {};
+  }
+
+  static async setQueueTeams(
+    slug: string,
+    team1SteamIds: string[],
+    team2SteamIds: string[],
+    requestorSteamId: string
+  ): Promise<void> {
+    const meta = await getQueueMetaOrThrow(slug);
+    if (meta.ownerId !== requestorSteamId) {
+      throw new Error("Only the queue owner can assign teams.");
+    }
+    if (!meta.manualTeams) {
+      throw new Error("This queue does not use manual team assignment.");
+    }
+
+    // Validate all steamIds are actually in the queue
+    const key = `queue:${slug}`;
+    const rawItems = await redis.lRange(key, 0, -1);
+    const inQueue = new Set(rawItems.map((r: string) => JSON.parse(r).steamId));
+    const allAssigned = [...team1SteamIds, ...team2SteamIds];
+    for (const sid of allAssigned) {
+      if (!inQueue.has(sid)) {
+        throw new Error(`Player ${sid} is not in this queue.`);
+      }
+    }
+
+    const metaKey = `queue-meta:${slug}`;
+    const ttl = await redis.ttl(metaKey);
+    const updated: QueueDescriptor = {
+      ...meta,
+      predefinedTeam1: team1SteamIds,
+      predefinedTeam2: team2SteamIds,
+    };
+    await redis.set(metaKey, JSON.stringify(updated), { EX: ttl > 0 ? ttl : DEFAULT_TTL_SECONDS });
+  }
+
+  static async startManualQueue(
+    slug: string,
+    requestorSteamId: string
+  ): Promise<number | null> {
+    const meta = await getQueueMetaOrThrow(slug);
+    if (meta.ownerId !== requestorSteamId) {
+      throw new Error("Only the queue owner can start the match.");
+    }
+    if (!meta.manualTeams) {
+      throw new Error("This queue does not use manual team assignment.");
+    }
+    if (!meta.predefinedTeam1?.length || !meta.predefinedTeam2?.length) {
+      throw new Error("Teams have not been assigned yet.");
+    }
+
+    const teamIds = await QueueService.createTeamsFromQueueManual(
+      slug,
+      meta.predefinedTeam1,
+      meta.predefinedTeam2
+    );
+    return await QueueService.createMatchFromQueue(slug, teamIds);
+  }
+
+  static async createTeamsFromQueueManual(
+    slug: string,
+    team1SteamIds: string[],
+    team2SteamIds: string[]
+  ): Promise<number[]> {
+    const key = `queue:${slug}`;
+    const rawItems = await redis.lRange(key, 0, -1);
+    const playerMap = new Map<string, QueueItem>();
+    for (const r of rawItems) {
+      const p: QueueItem = JSON.parse(r);
+      playerMap.set(p.steamId, p);
+    }
+
+    const teams = [
+      { name: null as string | null, members: team1SteamIds.map(id => playerMap.get(id)).filter(Boolean) as QueueItem[] },
+      { name: null as string | null, members: team2SteamIds.map(id => playerMap.get(id)).filter(Boolean) as QueueItem[] },
+    ];
+
+    teams[0].name = `team_${teams[0].members[0]?.nickname ?? "A"}`;
+    teams[1].name = `team_${teams[1].members[0]?.nickname ?? "B"}`;
+
+    let ownerUserId: number | null = await getUserIdFromMetaSlug(slug);
+    const teamIds: number[] = [];
+    for (const t of teams) {
+      const teamInsert = await db.query(
+        "INSERT INTO team (user_id, name, flag, logo, tag, public_team) VALUES ?",
+        [[[ownerUserId, t.name, null, null, null, 0]]]
+      );
+      const insertedTeamId = (teamInsert as any).insertId || null;
+      if (insertedTeamId) {
+        teamIds.push(insertedTeamId);
+        const authRows: Array<Array<any>> = [];
+        for (let i = 0; i < t.members.length; i++) {
+          authRows.push([insertedTeamId, t.members[i].steamId, "", i === 0 ? 1 : 0, 0]);
+        }
+        if (authRows.length > 0) {
+          await db.query(
+            "INSERT INTO team_auth_names (team_id, auth, name, captain, coach) VALUES ?",
+            [authRows]
+          );
+        }
+      }
+    }
+    return teamIds;
   }
 
   static async removeUserFromQueue(

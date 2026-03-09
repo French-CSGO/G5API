@@ -222,16 +222,23 @@ router.get("/:slug/stream", async (req, res) => {
     res.write(`event: queueStarting\ndata: ${JSON.stringify(data)}\n\n`);
   };
 
+  const onQueueReadyForTeams = (data: any) => {
+    if (data.slug !== slug) return;
+    res.write(`event: queueReadyForTeams\ndata: ${JSON.stringify(data)}\n\n`);
+  };
+
   (GlobalEmitter as any).on("queue:playerJoined", onPlayerJoined);
   (GlobalEmitter as any).on("queue:playerLeft", onPlayerLeft);
   (GlobalEmitter as any).on("queue:full", onQueueFull);
   (GlobalEmitter as any).on("queue:starting", onQueueStarting);
+  (GlobalEmitter as any).on("queue:readyForTeams", onQueueReadyForTeams);
 
   const cleanup = () => {
     (GlobalEmitter as any).removeListener("queue:playerJoined", onPlayerJoined);
     (GlobalEmitter as any).removeListener("queue:playerLeft", onPlayerLeft);
     (GlobalEmitter as any).removeListener("queue:full", onQueueFull);
     (GlobalEmitter as any).removeListener("queue:starting", onQueueStarting);
+    (GlobalEmitter as any).removeListener("queue:readyForTeams", onQueueReadyForTeams);
     res.end();
   };
 
@@ -270,13 +277,15 @@ router.get("/:slug/stream", async (req, res) => {
 router.post("/", Utils.ensureAuthenticated, async (req, res) => {
   const maxPlayers: number = req.body[0]?.maxPlayers ?? 10;
   const isPrivate: boolean = req.body[0]?.private ? true : false;
+  const manualTeams: boolean = req.body[0]?.manualTeams ? true : false;
 
   try {
     const { queue, matchId } = await QueueService.createQueue(
       req.user?.steam_id!,
       req.user?.name!,
       maxPlayers,
-      isPrivate
+      isPrivate,
+      manualTeams
     );
     res.json({
       message: "Queue created successfully!",
@@ -369,6 +378,95 @@ router.put("/:slug", Utils.ensureAuthenticated, async (req, res) => {
   } catch (error: any) {
     console.error(`Error processing ${action} for queue ${slug}:`, error);
     res.status(500).json({ error: `Failed to ${action} queue.` });
+  }
+});
+
+/**
+ * @swagger
+ * /queue/:slug/teams:
+ *   put:
+ *     description: Set manual team assignments for a queue (owner only, manualTeams mode).
+ *     tags:
+ *       - queue
+ *     parameters:
+ *       - name: slug
+ *         in: path
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               team1:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *               team2:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *     responses:
+ *       200:
+ *         description: Teams saved.
+ *       403:
+ *         description: Permission denied.
+ *       500:
+ *         $ref: '#/components/responses/Error'
+ */
+router.put("/:slug/teams", Utils.ensureAuthenticated, async (req, res) => {
+  const slug: string = req.params.slug;
+  const team1: string[] = req.body?.team1 ?? [];
+  const team2: string[] = req.body?.team2 ?? [];
+
+  try {
+    await QueueService.setQueueTeams(slug, team1, team2, req.user?.steam_id!);
+    res.status(200).json({ success: true });
+  } catch (error: any) {
+    if (error.message?.includes("permission") || error.message?.includes("owner")) {
+      return res.status(403).json({ error: error.message });
+    }
+    console.error("Error setting queue teams:", error);
+    res.status(500).json({ error: error.message || "Failed to set teams." });
+  }
+});
+
+/**
+ * @swagger
+ * /queue/:slug/start:
+ *   post:
+ *     description: Start a match from a manual-team queue (owner only).
+ *     tags:
+ *       - queue
+ *     parameters:
+ *       - name: slug
+ *         in: path
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Match started.
+ *       403:
+ *         description: Permission denied.
+ *       500:
+ *         $ref: '#/components/responses/Error'
+ */
+router.post("/:slug/start", Utils.ensureAuthenticated, async (req, res) => {
+  const slug: string = req.params.slug;
+
+  try {
+    const matchId = await QueueService.startManualQueue(slug, req.user?.steam_id!);
+    res.status(200).json({ success: true, matchId });
+  } catch (error: any) {
+    if (error.message?.includes("owner") || error.message?.includes("permission")) {
+      return res.status(403).json({ error: error.message });
+    }
+    console.error("Error starting manual queue:", error);
+    res.status(500).json({ error: error.message || "Failed to start match." });
   }
 });
 

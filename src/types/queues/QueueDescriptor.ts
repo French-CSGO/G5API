@@ -6,4 +6,7 @@ export interface QueueDescriptor {
   maxSize: number;        // Max number of players allowed in the queue
   isPrivate?: boolean;    // Optional flag for visibility
   currentPlayers: number; // Current number of players in the queue
+  manualTeams?: boolean;  // If true, owner manually assigns teams before starting match
+  predefinedTeam1?: string[]; // SteamIDs assigned to team 1 (manual mode only)
+  predefinedTeam2?: string[]; // SteamIDs assigned to team 2 (manual mode only)
 }
