@@ -1251,22 +1251,15 @@ router.post(
           await db.query("UPDATE game_server SET in_use = 1 WHERE id = ?", [newServerId]);
 
           // 3. Send get5_loadbackup_url to server B.
-          let rconResponse: string = await serverUpdate.restoreBackupFromURL(
+          await serverUpdate.restoreBackupFromURL(
             config.get("server.apiURL") + `/backups/${req.params.match_id}/${configString}`
           );
 
           // 4. Update match server_id.
           await db.query("UPDATE `match` SET server_id = ? WHERE id = ?", [newServerId, req.params.match_id]);
 
-          // 5. Verify state with get5_web_available.
-          const verifyState: string = await serverUpdate.isServerAlive()
-            ? await serverUpdate.execute("get5_web_available")
-            : "unreachable";
-
           res.json({
-            message: `Restored backup ${configString} on server ${newServerId}.`,
-            response: rconResponse,
-            server_state: verifyState
+            message: `Backup ${configString} successfully restored on server ${newServerId}.`
           });
         } catch (err) {
           res.status(500).json({ message: "Error on game server.", response: err });
