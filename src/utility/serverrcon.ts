@@ -337,12 +337,13 @@ class ServerRcon {
    * @function
    * @returns Returns the response from the server.
    */
-  async getBackups(): Promise<string> {
+  async getBackups(matchId?: string): Promise<string> {
     try {
       if (process.env.NODE_ENV === "test") {
         return "Cannot get backups on a test instance. Please use a development or production environment.";
       }
-      let loadMatchResponse = await this.execute("get5_listbackups");
+      const cmd = matchId ? `get5_listbackups ${matchId}` : "get5_listbackups";
+      let loadMatchResponse = await this.execute(cmd);
       return loadMatchResponse;
     } catch (err) {
       console.error("RCON error on getBackups: " + (err as Error).toString());

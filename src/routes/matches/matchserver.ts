@@ -1019,7 +1019,7 @@ router.get(
       } else {
         let serverUpdate: GameServer = await getGameServer(req.params.match_id);
         try {
-          let rconResponse: string = await serverUpdate.getBackups();
+          let rconResponse: string = await serverUpdate.getBackups(req.params.match_id);
           res.json({ message: "Backups retrieved.", response: rconResponse });
         } catch (err) {
           res
