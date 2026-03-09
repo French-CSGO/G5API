@@ -1020,7 +1020,13 @@ router.get(
         let serverUpdate: GameServer = await getGameServer(req.params.match_id);
         try {
           let rconResponse: string = await serverUpdate.getBackups(req.params.match_id);
-          res.json({ message: "Backups retrieved.", response: rconResponse });
+          // RCON captures all console output — filter to only backup info lines.
+          // MatchZy backup lines start with a filename: matchzy_<matchId>_<mapNum>_round<N>.json
+          const backupLines: string = rconResponse
+            .split("\n")
+            .filter((line) => /matchzy_\d+_\d+_round\d+\.json/i.test(line))
+            .join("\n");
+          res.json({ message: "Backups retrieved.", response: backupLines });
         } catch (err) {
           res
             .status(500)
