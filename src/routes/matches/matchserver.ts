@@ -1116,7 +1116,7 @@ router.post(
           let rconResponse: string = await serverUpdate.restoreBackup(
             backupFile
           );
-          res.json({ message: "Restored backup.", response: rconResponse });
+          res.json({ message: `Restored backup: ${backupFile}`, response: rconResponse });
         } catch (err) {
           res
             .status(500)
@@ -1195,14 +1195,17 @@ router.post(
         return;
       } else {
         let newServerId: number = parseInt(req.body[0].server_id);
-        let currentMatchInfo: string = "SELECT server_id FROM `match` WHERE id = ?";
         let newServerInfo: string =
           "SELECT id, user_id, ip_string, port, rcon_password, public_server FROM game_server WHERE id = ?";
         let configString: string = req.body[0].backup_file;
+
+        // Retrieve OLD server_id before any updates.
         const matchServerId: RowDataPacket[] = await db.query(
-          currentMatchInfo,
+          "SELECT server_id FROM `match` WHERE id = ?",
           [req.params.match_id]
         );
+        const oldServerId: number = matchServerId[0].server_id;
+
         const newServerRow: RowDataPacket[] = await db.query(newServerInfo, [
           newServerId
         ]);
@@ -1216,11 +1219,20 @@ router.post(
 
         // Check to see if file exists in our public directory.
         if (!existsSync(`public/backups/${req.params.match_id}/${configString}`)) {
-          res
-            .status(412)
-            .json({ message: "Backup name invalid." });
+          res.status(412).json({ message: "Backup name invalid." });
           return;
         }
+
+        // End match on old server before switching.
+        if (oldServerId && oldServerId !== newServerId) {
+          try {
+            let oldServer: GameServer = await getGameServer(req.params.match_id);
+            await oldServer.endGet5Match();
+          } catch (_) {
+            // Best-effort: continue even if old server is unreachable.
+          }
+        }
+
         let serverUpdate: GameServer = new GameServer(
           newServerRow[0].ip_string,
           newServerRow[0].port,
@@ -1231,11 +1243,11 @@ router.post(
             let rconResponse: string = await serverUpdate.restoreBackupFromURL(
               config.get("server.apiURL") + `/backups/${req.params.match_id}/${configString}`
             );
-            currentMatchInfo = "UPDATE `match` SET server_id = ? WHERE id = ?";
-            await db.query(currentMatchInfo, [req.params.match_id, newServerId]);
-            currentMatchInfo = "UPDATE game_server SET in_use = 0 WHERE id = ?";
-            await db.query(currentMatchInfo, [matchServerId[0].server_id]);
-            res.json({ message: "Restored backup.", response: rconResponse });
+            // Fix: correct param order — SET server_id = newServerId WHERE match id = match_id
+            await db.query("UPDATE `match` SET server_id = ? WHERE id = ?", [newServerId, req.params.match_id]);
+            await db.query("UPDATE game_server SET in_use = 0 WHERE id = ?", [oldServerId]);
+            await db.query("UPDATE game_server SET in_use = 1 WHERE id = ?", [newServerId]);
+            res.json({ message: `Restored backup ${configString} on server ${newServerId}.`, response: rconResponse });
           } else {
             res
               .status(412)
