@@ -1103,8 +1103,12 @@ router.post(
           return;
         }
         try {
+          // MatchZy's get5_listbackups returns full info lines like:
+          // "matchzy_123_0_round05.json 2024-01-01 12:00:00 Team1 Team2 de_dust2 5 3"
+          // Extract just the filename (first token) before sending to RCON.
+          const backupFile: string = req.body[0].backup_name.trim().split(/\s+/)[0];
           let rconResponse: string = await serverUpdate.restoreBackup(
-            req.body[0].backup_name
+            backupFile
           );
           res.json({ message: "Restored backup.", response: rconResponse });
         } catch (err) {
