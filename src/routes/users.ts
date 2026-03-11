@@ -102,9 +102,16 @@ import { UserObject } from "../types/users/UserObject.js";
  */
 router.get("/", async (req, res) => {
   try {
+    const search = req.query.search as string | undefined;
     let sql: string =
       "SELECT id, name, steam_id, small_image, medium_image, large_image, admin, super_admin FROM user";
-    const users: RowDataPacket[] = await db.query(sql);
+    let params: any[] = [];
+    if (search) {
+      sql += " WHERE name LIKE ? OR steam_id LIKE ?";
+      params = [`%${search}%`, `%${search}%`];
+    }
+    sql += " ORDER BY name ASC";
+    const users: RowDataPacket[] = await db.query(sql, params);
     res.json({ users });
   } catch (err) {
     console.error(err);
