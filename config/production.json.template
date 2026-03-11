@@ -24,37 +24,5 @@
     "host": "$SQLHOST",
     "port": $SQLPORT,
     "connectionLimit": 15
-  },
-  "admins": {
-    "steam_ids": "$ADMINS"
-  },
-  "super_admins": {
-    "steam_ids": "$SUPERADMINS"
-  },
-  "toornament": {
-    "clientId": "$TOORNAMENT_CLIENT_ID",
-    "clientSecret": "$TOORNAMENT_CLIENT_SECRET",
-    "apiKey": "$TOORNAMENT_API_KEY"
-  },
-  "discord": {
-    "token": "$DISCORD_TOKEN",
-    "announceChannelId": "$DISCORD_ANNOUNCECHANNEL",
-    "scoreboardChannelId": "$DISCORD_SCOREBOARD",
-    "scheduleChannelId": "$DISCORD_CHANNEL",
-    "guildId": "$DISCORD_GUILD_ID"
-  },
-  "pterodactyl": {
-    "enabled": $PTERODACTYL_ENABLED,
-    "url": "$PTERODACTYL_URL",
-    "apiKey": "$PTERODACTYL_API_KEY",
-    "shutdownDelay": $PTERODACTYL_SHUTDOWN_DELAY
-  },
-  "twitch": {
-    "enabled": $TWITCH_ENABLED,
-    "username": "$TWITCH_USERNAME",
-    "token": "$TWITCH_TOKEN",
-    "channels": ["$TWITCH_CHANNEL"],
-    "announceMapEnd": true,
-    "announceSeriesEnd": true
   }
 }

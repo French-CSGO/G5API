@@ -16,10 +16,6 @@ const dbCfg = {
 const connPool = createPool(dbCfg);
 
 class Database {
-  constructor() {
-    this.setupAdmins();
-  }
-
   async query(sql: string, args?: object): Promise<RowDataPacket[]> {
     try {
       let result: [RowDataPacket[], FieldPacket[]];
@@ -30,26 +26,12 @@ class Database {
       throw error;
     }
   }
-  
+
   async buildUpdateStatement(objValues: IStringIndex): Promise<IStringIndex> {
     for (let key in objValues) {
       if (objValues[key] == null || objValues[key] == undefined) delete objValues[key];
     }
     return objValues;
-  }
-
-  async setupAdmins(): Promise<void> {
-    try {
-      let listOfAdmins: Array<string> = (config.get("admins.steam_ids") as string).split(',');
-      let listofSuperAdmins: Array<string> = (config.get("super_admins.steam_ids") as string).split(',');
-      // Get list of admins from database and compare list and add new admins.
-      let updateAdmins: string = "UPDATE user SET admin = 1 WHERE steam_id IN (?)";
-      let updateSuperAdmins: string = "UPDATE user SET super_admin = 1 WHERE steam_id in(?)";
-      await connPool.query(updateAdmins, [listOfAdmins]);
-      await connPool.query(updateSuperAdmins, [listofSuperAdmins]);
-    } catch (err) {
-      console.error("Failed to import users. " + err);
-    }
   }
 }
 let db = new Database();

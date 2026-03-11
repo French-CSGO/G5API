@@ -13,7 +13,7 @@ import { db } from "../services/db.js";
 
 import { RowDataPacket } from "mysql2";
 
-import config from "config";
+import { getSetting } from "./settings.js";
 
 import { ToornamentTokenResponse } from "../types/toornament/ToornamentTokenResponse.js";
 import { ToornamentMatch } from "../types/toornament/ToornamentMatch.js";
@@ -30,12 +30,12 @@ export default
     ): Promise<void> {
 
 
-    const clientId: string = config.get("toornament.clientId") || '';
-    const clientSecret: string = config.get("toornament.clientSecret") || '';
-    const apiKey: string = config.get("toornament.apiKey") || '';
+    const clientId: string = getSetting("toornament.clientId");
+    const clientSecret: string = getSetting("toornament.clientSecret");
+    const apiKey: string = getSetting("toornament.apiKey");
 
     if (!clientId || !clientSecret || !apiKey) {
-        throw new Error("Missing Toornament credentials in environment variables");
+        throw new Error("Missing Toornament credentials in settings");
     }
 
     let sql: string = "SELECT challonge_team_id FROM team WHERE id = ?";

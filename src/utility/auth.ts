@@ -52,15 +52,7 @@ async function returnStrategy(identifier: any, profile: any, done: any) {
       let defaultMaps = [];
       let isAdmin = 0;
       let isSuperAdmin = 0;
-      let superAdminList = (config.get("super_admins.steam_ids") as String).split(",");
-      let adminList = (config.get("admins.steam_ids") as String).split(",");
       let sql = "SELECT * FROM user WHERE steam_id = ?";
-      // If we are an admin, check!
-      if (superAdminList.indexOf(profile.id!.toString()) >= 0) {
-        isSuperAdmin = 1;
-      } else if (adminList.indexOf(profile.id!.toString()) >= 0) {
-        isAdmin = 1;
-      }
       let curUser = await db.query(sql, profile.id);
       if (curUser.length < 1) {
         //Generate API key in user session to allow posting/getting/etc with
@@ -94,6 +86,8 @@ async function returnStrategy(identifier: any, profile: any, done: any) {
         sql = "INSERT INTO map_list (map_name, map_display_name, user_id) VALUES ?";
         await db.query(sql, [defaultMaps]);
       } else {
+        isAdmin = curUser[0].admin;
+        isSuperAdmin = curUser[0].super_admin;
         let updateUser = {
           small_image: profile.photos[0].value,
           medium_image: profile.photos[1].value,
@@ -186,9 +180,8 @@ passport.use('local-register',
       }
       let sql = "SELECT * FROM user WHERE username = ? OR steam_id = ?";
       let defaultMaps = [];
-      let superAdminList = (config.get("super_admins.steam_ids") as String).split(",");
-      let adminList = (config.get("admins.steam_ids") as String).split(",");
-      let isAdmin, isSuperAdmin = 0;
+      let isAdmin = 0;
+      let isSuperAdmin = 0;
       if (!req.body.steam_id) {
         return done(null, false, {message: "Steam ID was not provided"});
       }
@@ -199,11 +192,6 @@ passport.use('local-register',
         // Check if steam64 is correct.
         if(await Utils.convertToSteam64(req.body.steam_id) == "") {
           return done(null, false, {message: "Not a valid Steam64 ID."});
-        }
-        if (superAdminList.indexOf(req.body.steam_id) >= 0) {
-          isSuperAdmin = 1;
-        } else if (adminList.indexOf(req.body.steam_id) >= 0) {
-          isAdmin = 1;
         }
         let apiKey = generate({
           length: 64,

@@ -16,7 +16,7 @@ import Utils from "../utility/utils.js";
 import { RowDataPacket } from "mysql2";
 import { GameServerObject } from "../types/servers/GameServerObject.js";
 import fetch from "node-fetch";
-import config from "config";
+import { getSetting, getSettingBool } from "../services/settings.js";
 
 /**
  * @swagger
@@ -151,14 +151,13 @@ router.get("/pterodactyl-list", Utils.ensureAuthenticated, async (req, res, next
       res.status(403).json({ message: "User is not authorized to perform action." });
       return;
     }
-    let enabled = false;
-    try { enabled = config.get("pterodactyl.enabled"); } catch {}
+    const enabled = getSettingBool("pterodactyl.enabled");
     if (!enabled) {
       res.status(503).json({ message: "Pterodactyl integration is not enabled." });
       return;
     }
-    const url: string = (config.get("pterodactyl.url") as string).replace(/\/$/, "");
-    const apiKey: string = config.get("pterodactyl.apiKey");
+    const url: string = getSetting("pterodactyl.url").replace(/\/$/, "");
+    const apiKey: string = getSetting("pterodactyl.apiKey");
 
     let servers: any[] = [];
     let nextPage: string | null = `${url}/api/client?per_page=100`;
@@ -352,7 +351,7 @@ router.get("/myservers", Utils.ensureAuthenticated, async (req, res, next) => {
  *       500:
  *         $ref: '#/components/responses/Error'
  */
-router.get("/:server_id", Utils.ensureAuthenticated, async (req, res, next) => {
+router.get("/:server_id", async (req, res, next) => {
   try {
     let serverID: number = parseInt(req.params.server_id);
     let sql: string;
@@ -361,14 +360,16 @@ router.get("/:server_id", Utils.ensureAuthenticated, async (req, res, next) => {
       sql =
         "SELECT gs.id, gs.in_use, gs.ip_string, gs.port, gs.rcon_password, gs.display_name, gs.public_server, usr.name, gs.flag, gs.gotv_port, gs.pterodactyl_id FROM game_server gs, user usr WHERE usr.id = gs.user_id AND gs.id = ?";
       server = await db.query(sql, [serverID]);
-    } else {
+    } else if (req.user) {
       sql =
         "SELECT gs.id, gs.in_use, gs.ip_string, gs.port, gs.rcon_password, gs.display_name, gs.public_server, usr.name, gs.flag, gs.gotv_port, gs.pterodactyl_id FROM game_server gs, user usr WHERE usr.id = gs.user_id AND gs.id = ? AND usr.id = ?";
-      server = await db.query(sql, [serverID, req.user?.id]);
+      server = await db.query(sql, [serverID, req.user.id]);
+    } else {
+      server = [];
     }
     if (server.length < 1) {
       // Grab bare min. so a user can see a connect button or the like.
-      sql = "SELECT gs.ip_string, gs.port FROM game_server gs WHERE gs.id = ?";
+      sql = "SELECT gs.ip_string, gs.port, gs.gotv_port, gs.display_name FROM game_server gs WHERE gs.id = ?";
       server = await db.query(sql, [serverID]);
       if (server[0]) {
         server = JSON.parse(JSON.stringify(server[0]));

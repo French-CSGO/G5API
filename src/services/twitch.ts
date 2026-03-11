@@ -14,8 +14,8 @@
  */
 
 import tmi from "tmi.js";
-import config from "config";
 import { db } from "./db.js";
+import { getSetting, getSettingBool, onSettingsReload } from "./settings.js";
 import GlobalEmitter from "../utility/emitter.js";
 import { RowDataPacket } from "mysql2";
 
@@ -61,25 +61,31 @@ const COMMAND_COOLDOWN_SEC = 5;
 
 export async function initTwitch(): Promise<void> {
   try {
-    // Lecture de la config (token, channel, etc.)
-    const twitchConfig = config.has("twitch") ? config.get<Record<string, any>>("twitch") : {};
-    enabled = !!(twitchConfig as any)?.enabled;
+    // Lecture de la config depuis la DB
+    enabled = getSettingBool("twitch.enabled");
 
     if (!enabled) {
-      console.log("[Twitch] Bot désactivé (twitch.enabled = false dans la config).");
+      console.log("[Twitch] Bot désactivé (twitch.enabled = false).");
       return;
     }
 
-    const token: string = (twitchConfig as any)?.token || "";
-    const username: string = (twitchConfig as any)?.username || "";
-    const rawChannels: string | string[] = (twitchConfig as any)?.channels || [];
+    const token: string = getSetting("twitch.token");
+    const username: string = getSetting("twitch.username");
+    // channels stocké en JSON : '["channel1","channel2"]' ou "channel1"
+    let rawChannels: string = getSetting("twitch.channels");
 
     if (!token || !username) {
-      console.warn("[Twitch] token ou username manquant dans la config — bot non démarré.");
+      console.warn("[Twitch] token ou username manquant — bot non démarré.");
       return;
     }
 
-    channels = Array.isArray(rawChannels) ? rawChannels : [rawChannels];
+    try {
+      const parsed = JSON.parse(rawChannels);
+      channels = Array.isArray(parsed) ? parsed : [String(parsed)];
+    } catch {
+      channels = rawChannels ? [rawChannels] : [];
+    }
+
     if (!channels.length) {
       console.warn("[Twitch] Aucun channel configuré (twitch.channels) — bot non démarré.");
       return;
@@ -112,6 +118,18 @@ export async function initTwitch(): Promise<void> {
     GlobalEmitter.on("matchUpdate", onMatchUpdate);
     GlobalEmitter.on("mapStatUpdate", onMapStatUpdate);
     GlobalEmitter.on("playerStatsUpdate", onPlayerStatsUpdate);
+
+    // Enregistre le rechargement automatique si les settings changent
+    onSettingsReload(async () => {
+      if (client) {
+        try { await client.disconnect(); } catch {}
+        client = null;
+      }
+      GlobalEmitter.removeListener("matchUpdate", onMatchUpdate);
+      GlobalEmitter.removeListener("mapStatUpdate", onMapStatUpdate);
+      GlobalEmitter.removeListener("playerStatsUpdate", onPlayerStatsUpdate);
+      await initTwitch();
+    });
 
     console.log("[Twitch] Bot prêt.");
   } catch (err) {
