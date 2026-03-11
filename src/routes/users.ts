@@ -103,7 +103,7 @@ import { UserObject } from "../types/users/UserObject.js";
 router.get("/", async (req, res) => {
   try {
     let sql: string =
-      "SELECT id, name, steam_id, small_image, medium_image, large_image FROM user";
+      "SELECT id, name, steam_id, small_image, medium_image, large_image, admin, super_admin FROM user";
     const users: RowDataPacket[] = await db.query(sql);
     res.json({ users });
   } catch (err) {
