@@ -377,8 +377,6 @@ router.get("/", async (req, res, next) => {
       "mtch.cancelled, mtch.forfeit, mtch.start_time, mtch.end_time, mtch.max_maps, mtch.title, mtch.skip_veto, mtch.private_match, " +
       "mtch.enforce_teams, mtch.min_player_ready, mtch.season_id, mtch.is_pug, usr.name as owner, mp.team1_score as team1_mapscore, mp.team2_score as team2_mapscore " +
       "FROM `match` mtch JOIN user usr ON mtch.user_id = usr.id LEFT JOIN map_stats mp ON mp.match_id = mtch.id " +
-      "WHERE cancelled = 0 " +
-      "OR cancelled IS NULL " +
       "GROUP BY mtch.id " +
       "ORDER BY id DESC";
     const matches: RowDataPacket[] = await db.query(sql);
