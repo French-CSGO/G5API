@@ -55,7 +55,7 @@ const matchCache = new Map<number, MatchState>();
 const commandCooldowns = new Map<string, number>();
 
 /** Cooldown en secondes entre deux commandes du même channel */
-const COMMAND_COOLDOWN_SEC = 15;
+const COMMAND_COOLDOWN_SEC = 5;
 
 // ─── Initialisation ──────────────────────────────────────────────────────────
 
