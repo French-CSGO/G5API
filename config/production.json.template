@@ -48,5 +48,13 @@
     "url": "$PTERODACTYL_URL",
     "apiKey": "$PTERODACTYL_API_KEY",
     "shutdownDelay": $PTERODACTYL_SHUTDOWN_DELAY
+  },
+  "twitch": {
+    "enabled": $TWITCH_ENABLED,
+    "username": "$TWITCH_USERNAME",
+    "token": "$TWITCH_TOKEN",
+    "channels": ["$TWITCH_CHANNEL"],
+    "announceMapEnd": true,
+    "announceSeriesEnd": true
   }
 }

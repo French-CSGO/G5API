@@ -74,6 +74,7 @@
   },
   "dependencies": {
     "@node-steam/id": "^1.2.0",
+    "@types/tmi.js": "^1.8.6",
     "aes-js": "^3.1.2",
     "bcrypt": "^6.0.0",
     "compare-versions": "^6.1.0",
@@ -105,7 +106,8 @@
     "redis": "^4.6.13",
     "steamapi": "^3.0.8",
     "swagger-jsdoc": "^6.2.8",
-    "swagger-ui-express": "^5.0.0"
+    "swagger-ui-express": "^5.0.0",
+    "tmi.js": "^1.8.5"
   },
   "devDependencies": {
     "@types/aes-js": "^3.1.1",

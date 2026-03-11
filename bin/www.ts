@@ -16,6 +16,7 @@ import debug from 'debug';
 import { createServer } from 'http';
 import config from 'config';
 import { initDiscord } from '../src/services/discord.js';
+import { initTwitch } from '../src/services/twitch.js';
 
 /**
  * Get port from environment and store in Express.
@@ -39,6 +40,7 @@ server.on('error', onError);
 server.on('listening', onListening);
 
 initDiscord();
+initTwitch();
 
 /**
  * Normalize a port into a number, string, or false.

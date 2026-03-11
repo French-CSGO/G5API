@@ -48,6 +48,14 @@
     "url": "https://panel.example.com",
     "apiKey": "ptlc_your_client_api_key",
     "shutdownDelay": 300000
+  },
+  "twitch": {
+    "enabled": false,
+    "username": "nom_du_bot",
+    "token": "oauth:votre_token_ici",
+    "channels": ["votre_channel_twitch"],
+    "announceMapEnd": true,
+    "announceSeriesEnd": true
   }
 }
   
