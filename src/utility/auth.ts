@@ -86,12 +86,14 @@ async function returnStrategy(identifier: any, profile: any, done: any) {
         sql = "INSERT INTO map_list (map_name, map_display_name, user_id) VALUES ?";
         await db.query(sql, [defaultMaps]);
       } else {
+        isAdmin = curUser[0].admin;
+        isSuperAdmin = curUser[0].super_admin;
         let updateUser = {
           small_image: profile.photos[0].value,
           medium_image: profile.photos[1].value,
           large_image: profile.photos[2].value,
-          super_admin: curUser[0].super_admin,
-          admin: curUser[0].admin
+          super_admin: isSuperAdmin,
+          admin: isAdmin
         };
         sql = "UPDATE user SET ? WHERE steam_id=?";
         await db.query(sql, [updateUser, profile.id]);
