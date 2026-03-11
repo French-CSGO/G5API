@@ -16,7 +16,7 @@ import Utils from "../utility/utils.js";
 import { RowDataPacket } from "mysql2";
 import { GameServerObject } from "../types/servers/GameServerObject.js";
 import fetch from "node-fetch";
-import config from "config";
+import { getSetting, getSettingBool } from "../services/settings.js";
 
 /**
  * @swagger
@@ -151,14 +151,13 @@ router.get("/pterodactyl-list", Utils.ensureAuthenticated, async (req, res, next
       res.status(403).json({ message: "User is not authorized to perform action." });
       return;
     }
-    let enabled = false;
-    try { enabled = config.get("pterodactyl.enabled"); } catch {}
+    const enabled = getSettingBool("pterodactyl.enabled");
     if (!enabled) {
       res.status(503).json({ message: "Pterodactyl integration is not enabled." });
       return;
     }
-    const url: string = (config.get("pterodactyl.url") as string).replace(/\/$/, "");
-    const apiKey: string = config.get("pterodactyl.apiKey");
+    const url: string = getSetting("pterodactyl.url").replace(/\/$/, "");
+    const apiKey: string = getSetting("pterodactyl.apiKey");
 
     let servers: any[] = [];
     let nextPage: string | null = `${url}/api/client?per_page=100`;

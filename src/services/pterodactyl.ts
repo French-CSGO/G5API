@@ -4,20 +4,16 @@
  */
 
 import fetch from "node-fetch";
-import config from "config";
 import GameServer from "../utility/serverrcon.js";
+import { getSetting, getSettingBool, getSettingInt } from "./settings.js";
 
 function isEnabled(): boolean {
-  try {
-    return config.get("pterodactyl.enabled") === true;
-  } catch {
-    return false;
-  }
+  return getSettingBool("pterodactyl.enabled");
 }
 
 function getConfig() {
-  const url: string = config.get("pterodactyl.url");
-  const apiKey: string = config.get("pterodactyl.apiKey");
+  const url: string = getSetting("pterodactyl.url");
+  const apiKey: string = getSetting("pterodactyl.apiKey");
   return { url: url.replace(/\/$/, ""), apiKey };
 }
 
@@ -126,11 +122,7 @@ export async function stopAfterDelay(
 
   let delay = delayMs;
   if (delay === undefined) {
-    try {
-      delay = config.get<number>("pterodactyl.shutdownDelay");
-    } catch {
-      delay = 300000; // 5 minutes default
-    }
+    delay = getSettingInt("pterodactyl.shutdownDelay") || 300000;
   }
 
   console.log(`[Pterodactyl] Scheduling stop of server ${pterodactylId} in ${delay! / 1000}s`);
@@ -146,11 +138,7 @@ export async function stopAfterDelay(
 }
 
 export function getShutdownDelay(): number {
-  try {
-    return config.get<number>("pterodactyl.shutdownDelay");
-  } catch {
-    return 300000;
-  }
+  return getSettingInt("pterodactyl.shutdownDelay") || 300000;
 }
 
 export { isEnabled };

@@ -23,7 +23,7 @@ import { ToornamentParticipant } from "../types/toornament/ToornamentParticipant
 import { ToornamentTokenResponse } from "../types/toornament/ToornamentTokenResponse.js";
 import { ToornamentMatch } from "../types/toornament/ToornamentMatch.js";
 
-import config from "config";
+import { getSetting, getSettingBool } from "../services/settings.js";
 
 /**
  * @swagger
@@ -692,9 +692,9 @@ router.post("/challonge", Utils.ensureAuthenticated, async (req, res, next) => {
 
 async function handleToornamentImport(tournamentId: string, userId: number, reqBody: any) {
 
-  const clientId: string = config.get("toornament.clientId") || '';
-  const clientSecret: string = config.get("toornament.clientSecret") || '';
-  const apiKey: string = config.get("toornament.apiKey") || '';
+  const clientId: string = getSetting("toornament.clientId");
+  const clientSecret: string = getSetting("toornament.clientSecret");
+  const apiKey: string = getSetting("toornament.apiKey");
 
   if (!clientId || !clientSecret || !apiKey) {
     throw new Error("Missing Toornament credentials in environment variables");
@@ -797,9 +797,9 @@ async function handleToornamentImport(tournamentId: string, userId: number, reqB
 }
 
 async function getToornamentToken(): Promise<string> {
-  const clientId: string = config.get("toornament.clientId") || '';
-  const clientSecret: string = config.get("toornament.clientSecret") || '';
-  const apiKey: string = config.get("toornament.apiKey") || '';
+  const clientId: string = getSetting("toornament.clientId");
+  const clientSecret: string = getSetting("toornament.clientSecret");
+  const apiKey: string = getSetting("toornament.apiKey");
   if (!clientId || !clientSecret || !apiKey) {
     throw new Error("Missing Toornament credentials in config");
   }
@@ -832,7 +832,7 @@ router.get("/:season_id/toornament/matches", Utils.ensureAuthenticated, async (r
     const seasonId = parseInt(req.params.season_id);
     const tournamentId = await getSeasonToornamentId(seasonId);
     const token = await getToornamentToken();
-    const apiKey: string = config.get("toornament.apiKey");
+    const apiKey: string = getSetting("toornament.apiKey");
 
     const { team_id, status, stage_id, group_id, round_id } = req.query;
 
@@ -913,7 +913,7 @@ router.get("/:season_id/toornament/stages", Utils.ensureAuthenticated, async (re
     const seasonId = parseInt(req.params.season_id);
     const tournamentId = await getSeasonToornamentId(seasonId);
     const token = await getToornamentToken();
-    const apiKey: string = config.get("toornament.apiKey");
+    const apiKey: string = getSetting("toornament.apiKey");
 
     const response = await fetch(
       `https://api.toornament.com/organizer/v2/stages?tournament_ids=${tournamentId}`,
@@ -939,7 +939,7 @@ router.get("/:season_id/toornament/matches/:toornament_match_id/prefill", Utils.
     const toornamentMatchId = req.params.toornament_match_id;
     const tournamentId = await getSeasonToornamentId(seasonId);
     const token = await getToornamentToken();
-    const apiKey: string = config.get("toornament.apiKey");
+    const apiKey: string = getSetting("toornament.apiKey");
 
     // Get season info + CVARs
     const seasonRows: RowDataPacket[] = await db.query(
@@ -1041,7 +1041,7 @@ router.get("/:season_id/toornament/rounds", Utils.ensureAuthenticated, async (re
     const seasonId = parseInt(req.params.season_id);
     const tournamentId = await getSeasonToornamentId(seasonId);
     const token = await getToornamentToken();
-    const apiKey: string = config.get("toornament.apiKey");
+    const apiKey: string = getSetting("toornament.apiKey");
 
     const stagesResp = await fetch(`https://api.toornament.com/organizer/v2/stages?tournament_ids=${tournamentId}`, {
       headers: { "Authorization": `Bearer ${token}`, "x-api-key": apiKey, "Range": "stages=0-49" }
@@ -1101,7 +1101,7 @@ router.patch("/:season_id/toornament/rounds/:round_id/schedule", Utils.ensureAut
 
     const tournamentId = await getSeasonToornamentId(seasonId);
     const token = await getToornamentToken();
-    const apiKey: string = config.get("toornament.apiKey");
+    const apiKey: string = getSetting("toornament.apiKey");
 
     // Fetch all matches for this round
     let allMatches: ToornamentMatch[] = [];
@@ -1158,7 +1158,7 @@ router.patch("/:season_id/toornament/matches/:match_id/schedule", Utils.ensureAu
     if (!scheduled_datetime) return res.status(400).json({ message: "scheduled_datetime is required" });
 
     const token = await getToornamentToken();
-    const apiKey: string = config.get("toornament.apiKey");
+    const apiKey: string = getSetting("toornament.apiKey");
 
     await fetch(`https://api.toornament.com/organizer/v2/matches/${matchId}`, {
       method: "PATCH",

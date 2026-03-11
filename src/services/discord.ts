@@ -1,6 +1,6 @@
 import { Client, GatewayIntentBits, TextChannel, REST, Routes, SlashCommandBuilder } from "discord.js";
-import config from "config";
 import { db } from "./db.js";
+import { getSetting } from "./settings.js";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -54,9 +54,9 @@ function saveScheduleMessageId(id: string) {
 
 async function getToornamentToken(): Promise<string | null> {
   try {
-    const clientId: string = config.get("toornament.clientId") || "";
-    const clientSecret: string = config.get("toornament.clientSecret") || "";
-    const apiKey: string = config.get("toornament.apiKey") || "";
+    const clientId: string = getSetting("toornament.clientId");
+    const clientSecret: string = getSetting("toornament.clientSecret");
+    const apiKey: string = getSetting("toornament.apiKey");
     if (!clientId || !clientSecret || !apiKey ||
         clientId === "toornament_client_id_go_here") return null;
     const tokenResponse = await fetch("https://api.toornament.com/oauth/v2/token", {
@@ -78,11 +78,11 @@ async function getToornamentToken(): Promise<string | null> {
 
 export async function initDiscord(): Promise<void> {
   try {
-    const token: string = config.get("discord.token");
+    const token: string = getSetting("discord.token");
     if (!token) return;
-    announceChannelId = config.get("discord.announceChannelId");
-    scoreboardChannelId = config.get("discord.scoreboardChannelId");
-    scheduleChannelId = config.get("discord.scheduleChannelId");
+    announceChannelId = getSetting("discord.announceChannelId");
+    scoreboardChannelId = getSetting("discord.scoreboardChannelId");
+    scheduleChannelId = getSetting("discord.scheduleChannelId");
     loadMessageId();
     loadScheduleMessageId();
 
@@ -97,7 +97,7 @@ export async function initDiscord(): Promise<void> {
           .toJSON()
       ];
       const rest = new REST().setToken(token);
-      const guildId: string = config.get("discord.guildId");
+      const guildId: string = getSetting("discord.guildId");
       if (guildId) {
         await rest.put(Routes.applicationGuildCommands(c.user.id, guildId), { body: commands });
       } else {
@@ -212,7 +212,7 @@ export async function updateSchedule(): Promise<void> {
   if (!client?.isReady() || !scheduleChannelId) return;
   try {
     const token = await getToornamentToken();
-    const apiKey: string = config.get("toornament.apiKey") || "";
+    const apiKey: string = getSetting("toornament.apiKey");
 
     const seasons: RowDataPacket[] = await db.query(
       "SELECT id, name, challonge_url FROM season WHERE challonge_url LIKE 't:%'",
