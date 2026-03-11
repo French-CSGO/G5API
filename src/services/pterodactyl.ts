@@ -138,7 +138,8 @@ export async function stopAfterDelay(
 }
 
 export function getShutdownDelay(): number {
-  return getSettingInt("pterodactyl.shutdownDelay") || 300000;
+  const seconds = getSettingInt("pterodactyl.shutdownDelay") || 300;
+  return seconds * 1000;
 }
 
 export { isEnabled };
