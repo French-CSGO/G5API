@@ -102,6 +102,7 @@ app.use(bearerToken());
 app.use(
   cors({
     origin: config.get("server.clientHome"), // allow to server to accept request
+    
     // from different origin
     methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
     credentials: true, // allow session cookie from browser to pass through
@@ -181,7 +182,8 @@ app.get(
     if (process.env.NODE_ENV == "test") {
       res.redirect("/");
     } else {
-      res.redirect(config.get("server.clientHome"));
+      //res.redirect(config.get("server.clientHome"));
+      res.redirect(req.get('host'));
     }
   }
 );
