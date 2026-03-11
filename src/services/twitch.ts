@@ -224,9 +224,10 @@ async function cmdStats(channel: string, playerName: string): Promise<void> {
 
     // Cherche les stats du joueur dans les maps en cours
     const sql = `
-      SELECT ps.player_name, ps.kills, ps.deaths, ps.assists,
-             ps.headshots, ps.damage, ps.rounds_played,
-             ps.flash_assists, ps.team_kills,
+      SELECT ps.name, ps.kills, ps.deaths, ps.assists,
+             ps.headshot_kills, ps.damage, ps.roundsplayed,
+             ps.flashbang_assists, ps.teamkills,
+             ps.k2, ps.k3, ps.k4, ps.k5,
              ms.map_name, ms.team1_score, ms.team2_score,
              t.name AS team_name
       FROM player_stats ps
@@ -236,7 +237,7 @@ async function cmdStats(channel: string, playerName: string): Promise<void> {
       WHERE m.end_time IS NULL
         AND (m.cancelled IS NULL OR m.cancelled = 0)
         AND ms.end_time IS NULL
-        AND ps.player_name LIKE ?
+        AND ps.name LIKE ?
       ORDER BY ms.map_number DESC
       LIMIT 1
     `;
@@ -249,13 +250,17 @@ async function cmdStats(channel: string, playerName: string): Promise<void> {
 
     const p = rows[0];
     const kd = p.deaths > 0 ? (p.kills / p.deaths).toFixed(2) : p.kills.toFixed(2);
-    const hs = p.kills > 0 ? Math.round((p.headshots / p.kills) * 100) : 0;
-    const adr = p.rounds_played > 0 ? Math.round(p.damage / p.rounds_played) : 0;
+    const hs = p.kills > 0 ? Math.round((p.headshot_kills / p.kills) * 100) : 0;
+    const adr = p.roundsplayed > 0 ? Math.round(p.damage / p.roundsplayed) : 0;
+    const multikills = [p.k2, p.k3, p.k4, p.k5].filter(Boolean);
+    const mkStr = multikills.length
+      ? ` | 2K:${p.k2} 3K:${p.k3} 4K:${p.k4} 5K:${p.k5}`
+      : "";
 
     say(
       channel,
-      `${p.player_name} (${p.team_name}) sur ${p.map_name}: ` +
-      `K/D ${p.kills}/${p.deaths} (${kd}) | ASS ${p.assists} | ADR ${adr} | HS ${hs}% | ` +
+      `${p.name} (${p.team_name}) sur ${p.map_name}: ` +
+      `K/D ${p.kills}/${p.deaths} (${kd}) | ASS ${p.assists} | ADR ${adr} | HS ${hs}%${mkStr} | ` +
       `Score map: ${p.team1_score}-${p.team2_score}`
     );
   } catch (err) {
