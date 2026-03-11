@@ -162,7 +162,21 @@ async function onMessage(
   } else if (cmd === "!stats") {
     const playerArg = args.slice(1).join(" ");
     await cmdStats(channel, playerArg || tags["display-name"] || "");
+  } else if (cmd === "!help" || cmd === "!commandes") {
+    cmdHelp(channel);
   }
+}
+
+// ─── Commande !help ───────────────────────────────────────────────────────────
+
+function cmdHelp(channel: string): void {
+  say(
+    channel,
+    "Commandes disponibles : " +
+    "!score (!match / !live) → scores en direct | " +
+    "!maps → résultats des maps | " +
+    "!stats [pseudo] → stats d'un joueur (K/D, ADR, HS%, multikills)"
+  );
 }
 
 // ─── Commande !score ─────────────────────────────────────────────────────────
