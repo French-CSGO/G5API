@@ -178,6 +178,7 @@ app.get(
   "/auth/steam/return",
   (req, res, next) => {
     req.url = req.originalUrl;
+    console.log(req.url);
     next();
   },
   passport.authenticate("steam", { failureRedirect: "/" }),
@@ -186,6 +187,7 @@ app.get(
       res.redirect("/");
     } else {
       //res.redirect(config.get("server.clientHome"));
+    console.log(req.get('host'));
       res.redirect(req.get('host') || config.get("server.clientHome"));
     }
   }
