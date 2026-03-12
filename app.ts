@@ -169,7 +169,7 @@ app.use("/settings", settingsRouter);
 app.get("/auth/steam", (req, res, next) => {
   const referer = req.get("referer") || req.get("origin") || "";
   const origin = allowedOrigins.find((o) => referer.startsWith(o)) || allowedOrigins[0];
-  const apiURL = `${req.protocol}://${req.get("host")}`;
+  const apiURL = `${req.protocol}://${req.get("host")}/api`;
   const strategy = createSteamStrategy(apiURL, origin);
   passport.use("steam-dynamic", strategy);
   passport.authenticate("steam-dynamic", { failureRedirect: "/" })(req, res, next);
