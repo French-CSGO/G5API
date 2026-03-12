@@ -98,14 +98,17 @@ app.use(passport.initialize() as any);
 app.use(passport.session());
 app.use(bearerToken());
 
+const allowedOrigins = (config.get("server.clientHome") as string)
+  .split(",")
+  .map((o) => o.trim())
+  .filter(Boolean);
+
 // enabling CORS for all requests
 app.use(
   cors({
-    origin: config.get("server.clientHome"), // allow to server to accept request
-
-    // from different origin
+    origin: allowedOrigins.length === 1 ? allowedOrigins[0] : allowedOrigins,
     methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
-    credentials: true, // allow session cookie from browser to pass through
+    credentials: true,
   })
 );
 
@@ -182,8 +185,9 @@ app.get(
     if (process.env.NODE_ENV == "test") {
       res.redirect("/");
     } else {
-      //res.redirect(config.get("server.clientHome"));
-      res.redirect(req.get('host') || config.get("server.clientHome"));
+      const referer = req.get("referer") || "";
+      const target = allowedOrigins.find((o) => referer.startsWith(o)) || allowedOrigins[0];
+      res.redirect(target);
     }
   }
 );
