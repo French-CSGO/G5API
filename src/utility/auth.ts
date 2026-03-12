@@ -22,7 +22,9 @@ passport.deserializeUser((obj: User, done) => {
   done(null, obj as any);
 });
 
-function strategyForEnvironment() {
+function strategyForEnvironment(apiURL?: string, returnURL?: string) {
+  const baseURL = apiURL || config.get<string>("server.apiURL");
+  const resolvedReturnURL = returnURL || `${baseURL}/auth/steam/return`;
   let strategy: any;
   switch (process.env.NODE_ENV) {
     case "test":
@@ -32,17 +34,19 @@ function strategyForEnvironment() {
     default:
       strategy = new SteamStrategy(
         {
-          returnURL:
-            config.get("server.apiURL") +
-            "/auth/steam/return",
-          realm:
-            config.get("server.apiURL"),
+          returnURL: resolvedReturnURL,
+          realm: baseURL,
           apiKey: config.get("server.steamAPIKey"),
         },
         returnStrategy
       );
   }
   return strategy;
+}
+
+export function createSteamStrategy(apiURL: string, origin: string) {
+  const returnURL = `${apiURL}/auth/steam/return?from=${encodeURIComponent(origin)}`;
+  return strategyForEnvironment(apiURL, returnURL);
 }
 
 async function returnStrategy(identifier: any, profile: any, done: any) {

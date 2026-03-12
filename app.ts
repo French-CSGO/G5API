@@ -31,7 +31,7 @@ import teamsRouter from "./src/routes/teams.js";
 import usersRouter from "./src/routes/users.js";
 import vetoesRouter from "./src/routes/vetoes.js";
 import vetosidesRouter from "./src/routes/vetosides.js";
-import passport from "./src/utility/auth.js";
+import passport, { createSteamStrategy } from "./src/utility/auth.js";
 import {router as v2Router} from "./src/routes/v2/api.js";
 import {router as v2DemoRouter} from "./src/routes/v2/demoapi.js";
 import { router as v2BackupRouter } from "./src/routes/v2/backupapi.js";
@@ -166,29 +166,31 @@ app.use("/settings", settingsRouter);
 // END ROUTES
 
 // Steam API Calls.
-app.get(
-  "/auth/steam",
-  passport.authenticate("steam", { failureRedirect: "/" }),
-  (req, res) => {
-    res.redirect("/");
-  }
-);
+app.get("/auth/steam", (req, res, next) => {
+  const referer = req.get("referer") || req.get("origin") || "";
+  const origin = allowedOrigins.find((o) => referer.startsWith(o)) || allowedOrigins[0];
+  const apiURL = `${req.protocol}://${req.get("host")}`;
+  const strategy = createSteamStrategy(apiURL, origin);
+  passport.use("steam-dynamic", strategy);
+  passport.authenticate("steam-dynamic", { failureRedirect: "/" })(req, res, next);
+});
 
 app.get(
   "/auth/steam/return",
   (req, res, next) => {
     req.url = req.originalUrl;
-    console.log(req.url);
     next();
   },
-  passport.authenticate("steam", { failureRedirect: "/" }),
+  (req, res, next) => {
+    passport.authenticate("steam-dynamic", { failureRedirect: "/" })(req, res, next);
+  },
   (req, res) => {
     if (process.env.NODE_ENV == "test") {
       res.redirect("/");
     } else {
-      //res.redirect(config.get("server.clientHome"));
-    console.log(req.get('host'));
-      res.redirect(req.get('host') || config.get("server.clientHome"));
+      const from = (req.query.from as string) || "";
+      const target = allowedOrigins.find((o) => o === from) || allowedOrigins[0];
+      res.redirect(target);
     }
   }
 );
