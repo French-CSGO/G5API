@@ -168,12 +168,6 @@ app.use("/settings", settingsRouter);
 // Steam API Calls.
 app.get(
   "/auth/steam",
-  (req, _res, next) => {
-    const referer = req.get("referer") || "";
-    const origin = allowedOrigins.find((o) => referer.startsWith(o)) || allowedOrigins[0];
-    (req.session as any).returnTo = origin;
-    next();
-  },
   passport.authenticate("steam", { failureRedirect: "/" }),
   (req, res) => {
     res.redirect("/");
@@ -191,9 +185,8 @@ app.get(
     if (process.env.NODE_ENV == "test") {
       res.redirect("/");
     } else {
-      const target = (req.session as any).returnTo || allowedOrigins[0];
-      delete (req.session as any).returnTo;
-      res.redirect(target);
+      //res.redirect(config.get("server.clientHome"));
+      res.redirect(req.get('host') || config.get("server.clientHome"));
     }
   }
 );
