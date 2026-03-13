@@ -1700,18 +1700,29 @@ router.delete("/", Utils.ensureAuthenticated, async (req, res, next) => {
     }
   } else if (req.body[0].all_cancelled == true) {
     try {
-      let deleteCancelledStats: string =
-        "DELETE FROM player_stats WHERE match_id IN (SELECT id FROM `match` WHERE cancelled = 1 AND user_id = ?)";
-      let deleteCancelledMapStats: string =
-        "DELETE FROM map_stats WHERE match_id IN (SELECT id FROM `match` WHERE cancelled = 1 AND user_id = ?)";
-      let deleteCancelledSpecs: string =
-        "DELETE FROM match_spectator WHERE match_id IN (SELECT id FROM `match` WHERE cancelled = 1 AND user_id = ?)";
-      let deleteMatch: string =
-        "DELETE FROM `match` WHERE cancelled = 1 AND user_id = ?";
-      await db.query(deleteCancelledStats, [userId]);
-      await db.query(deleteCancelledMapStats, [userId]);
-      await db.query(deleteCancelledSpecs, [userId]);
-      const delRows: RowDataPacket[] = await db.query(deleteMatch, [userId]);
+      const isSuperAdmin = req.user?.super_admin == 1;
+      let deleteCancelledStats: string;
+      let deleteCancelledMapStats: string;
+      let deleteCancelledSpecs: string;
+      let deleteMatch: string;
+      let queryParams: any[];
+      if (isSuperAdmin) {
+        deleteCancelledStats = "DELETE FROM player_stats WHERE match_id IN (SELECT id FROM `match` WHERE cancelled = 1)";
+        deleteCancelledMapStats = "DELETE FROM map_stats WHERE match_id IN (SELECT id FROM `match` WHERE cancelled = 1)";
+        deleteCancelledSpecs = "DELETE FROM match_spectator WHERE match_id IN (SELECT id FROM `match` WHERE cancelled = 1)";
+        deleteMatch = "DELETE FROM `match` WHERE cancelled = 1";
+        queryParams = [];
+      } else {
+        deleteCancelledStats = "DELETE FROM player_stats WHERE match_id IN (SELECT id FROM `match` WHERE cancelled = 1 AND user_id = ?)";
+        deleteCancelledMapStats = "DELETE FROM map_stats WHERE match_id IN (SELECT id FROM `match` WHERE cancelled = 1 AND user_id = ?)";
+        deleteCancelledSpecs = "DELETE FROM match_spectator WHERE match_id IN (SELECT id FROM `match` WHERE cancelled = 1 AND user_id = ?)";
+        deleteMatch = "DELETE FROM `match` WHERE cancelled = 1 AND user_id = ?";
+        queryParams = [userId];
+      }
+      await db.query(deleteCancelledStats, queryParams);
+      await db.query(deleteCancelledMapStats, queryParams);
+      await db.query(deleteCancelledSpecs, queryParams);
+      const delRows: RowDataPacket[] = await db.query(deleteMatch, queryParams);
       //@ts-ignore
       if (delRows.affectedRows > 0) {
         updateScoreboard();
