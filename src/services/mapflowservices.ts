@@ -33,14 +33,8 @@ import config from "config";
  * @class
  * Map flow service class for live games.
  */
-/** Per-match round state: true = explicitly confirmed live via game_round_live event */
+/** Per-match round state: true = round in live play (post-freeze), false = freeze time or between rounds */
 const roundLiveState = new Map<string, boolean>();
-
-/** Timestamp (ms) when OnRoundStart last fired per match — fallback for isLive detection */
-const roundStartTime = new Map<string, number>();
-
-/** Freeze time duration in ms — after this delay post-round-start, the round is considered live */
-const FREEZE_DURATION_MS = 20_000;
 
 /** Pending TS talk power changes deferred until round end */
 interface PendingTsChange {
@@ -338,7 +332,6 @@ class MapFlowService {
       // Round ended: mark not live, apply any deferred TS talk power change
       const matchKey = String(event.matchid);
       roundLiveState.set(matchKey, false);
-      roundStartTime.delete(matchKey);
       const pending = pendingTalkPower.get(matchKey);
       if (pending) {
         pendingTalkPower.delete(matchKey);
@@ -382,7 +375,6 @@ class MapFlowService {
     // Freeze time started: round is no longer live
     const _mk = String(event.matchid);
     roundLiveState.set(_mk, false);
-    roundStartTime.set(_mk, Date.now());
 
     if (mapStatInfo[0]?.round_restored) {
       sqlString =
@@ -410,7 +402,6 @@ class MapFlowService {
   static async OnRoundLive(event: { matchid: string }, res: Response) {
     const mk = String(event.matchid);
     roundLiveState.set(mk, true);
-    roundStartTime.delete(mk); // no longer needed, state is explicit
     return res.status(200).send({ message: "Success" });
   }
 
@@ -471,9 +462,7 @@ class MapFlowService {
       const matchKey = String(event.matchid);
       try {
         if (isPaused) {
-          const startTs = roundStartTime.get(matchKey);
-          const isLive = roundLiveState.get(matchKey) === true ||
-            (startTs !== undefined && (Date.now() - startTs) > FREEZE_DURATION_MS);
+          const isLive = roundLiveState.get(matchKey) === true;
           if (event.team === "admin") {
             // Admin pause: both teams
             if (isLive) {
