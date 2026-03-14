@@ -27,6 +27,7 @@ import { Get5_OnRoundEnd } from "../types/map_flow/Get5_OnRoundEnd.js";
 import { Get5_OnRoundStart } from "../types/map_flow/Get5_OnRoundStart.js";
 import update_challonge_match from "./challonge.js";
 import { sendServerEvent } from "./discord.js";
+import config from "config";
 
 /**
  * @class
@@ -534,7 +535,9 @@ class MapFlowService {
       pause_type: typeLabel,
     });
 
-    sendServerEvent(`[Match ${event.matchid}] ${message}`).catch(() => {});
+    const clientHome: string = config.get("server.clientHome");
+    const matchUrl = `${clientHome.replace(/\/$/, "")}/match/${event.matchid}`;
+    sendServerEvent(`[Match ${event.matchid}] ${message}\n🔗 ${matchUrl}`).catch(() => {});
 
     GlobalEmitter.emit("matchUpdate");
     return res.status(200).send({ message: "Success" });
