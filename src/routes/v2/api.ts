@@ -185,6 +185,9 @@ router.post("/", basicRateLimit, async (req, res) => {
       case "bomb_defused":
         MapFlowService.OnBombEvent(req.body as Get5_OnBombEvent, res, true);
         break;
+      case "game_round_live":
+        MapFlowService.OnRoundLive(req.body, res);
+        break;
       case "game_paused":
         MapFlowService.OnMatchPausedUnPaused(
           req.body as Get5_OnMatchPausedUnpaused,
