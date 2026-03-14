@@ -113,7 +113,7 @@ import { AuthData } from "../types/teams/AuthData.js";
 router.get("/", async (req, res) => {
   try {
     let sql: string =
-      "SELECT usr.name as owner, t.id, t.user_id, t.name, t.flag, t.logo, t.tag, t.public_team, " +
+      "SELECT usr.name as owner, t.id, t.user_id, t.name, t.flag, t.logo, t.tag, t.public_team, t.ts_server, t.ts_channel_id, " +
       "CONCAT('{', GROUP_CONCAT( DISTINCT CONCAT('\"',ta.auth, '\"', ': " +
       "{ \"name\": ', CAST(JSON_QUOTE(ta.name) AS CHAR CHARACTER SET utf8mb4), ', \"captain\": ', ta.captain, ', \"coach\": ', ta.coach, '}') ORDER BY ta.captain desc, ta.id  SEPARATOR ', '), '}') as auth_name " +
       "FROM team t LEFT OUTER JOIN team_auth_names ta " +
@@ -170,7 +170,7 @@ router.get("/", async (req, res) => {
 router.get("/myteams", Utils.ensureAuthenticated, async (req, res) => {
   try {
     let sql: string =
-      "SELECT usr.name as owner, t.id, t.user_id, t.name, t.flag, t.logo, t.tag, t.public_team, " +
+      "SELECT usr.name as owner, t.id, t.user_id, t.name, t.flag, t.logo, t.tag, t.public_team, t.ts_server, t.ts_channel_id, " +
       "CONCAT('{', GROUP_CONCAT( DISTINCT CONCAT('\"',ta.auth, '\"', ': " +
       "{ \"name\": ', CAST(JSON_QUOTE(ta.name) AS CHAR CHARACTER SET utf8mb4), ', \"captain\": ', ta.captain, ', \"coach\": ', ta.coach, '}') ORDER BY ta.captain desc, ta.id  SEPARATOR ', '), '}') as auth_name " +
       "FROM team t LEFT OUTER JOIN team_auth_names ta " +
@@ -225,7 +225,7 @@ router.get("/myteams", Utils.ensureAuthenticated, async (req, res) => {
 router.get("/public", Utils.ensureAuthenticated, async (req, res) => {
   try {
     let sql =
-      "SELECT usr.name as owner, t.id, t.user_id, t.name, t.flag, t.logo, t.tag, t.public_team, " +
+      "SELECT usr.name as owner, t.id, t.user_id, t.name, t.flag, t.logo, t.tag, t.public_team, t.ts_server, t.ts_channel_id, " +
       "CONCAT('{', GROUP_CONCAT( DISTINCT CONCAT('\"',ta.auth, '\"', ': " +
       "{ \"name\": ', CAST(JSON_QUOTE(ta.name) AS CHAR CHARACTER SET utf8mb4), ', \"captain\": ', ta.captain, ', \"coach\": ', ta.coach, '}') ORDER BY ta.captain desc, ta.id  SEPARATOR ', '), '}') as auth_name " +
       "FROM team t LEFT OUTER JOIN team_auth_names ta " +
@@ -290,7 +290,7 @@ router.get("/:team_id", async (req, res) => {
   try {
     let teamID: number = parseInt(req.params.team_id);
     let sql: string =
-      "SELECT t.id, t.user_id, t.name, t.flag, t.logo, t.tag, t.public_team, " +
+      "SELECT t.id, t.user_id, t.name, t.flag, t.logo, t.tag, t.public_team, t.ts_server, t.ts_channel_id, " +
       "CONCAT('{', GROUP_CONCAT( DISTINCT CONCAT('\"',ta.auth, '\"', ': " +
       "{ \"name\": ', CAST(JSON_QUOTE(ta.name) AS CHAR CHARACTER SET utf8mb4), ', \"captain\": ', ta.captain, ', \"coach\": ', ta.coach, '}') ORDER BY ta.captain desc, ta.id  SEPARATOR ', '), '}') as auth_name " +
       "FROM team t LEFT OUTER JOIN team_auth_names ta " +
@@ -464,6 +464,13 @@ router.post("/", Utils.ensureAuthenticated, async (req, res) => {
     if (req.body[0].challonge_team_id) {
       await db.query("UPDATE team SET challonge_team_id = ? WHERE id = ?", [req.body[0].challonge_team_id, teamID]);
     }
+    if (req.body[0].ts_server !== undefined || req.body[0].ts_channel_id !== undefined) {
+      await db.query("UPDATE team SET ts_server = ?, ts_channel_id = ? WHERE id = ?", [
+        req.body[0].ts_server ?? null,
+        req.body[0].ts_channel_id ?? null,
+        teamID
+      ]);
+    }
     sql =
       "INSERT INTO team_auth_names (team_id, auth, name, captain, coach) VALUES (?, ?, ?, ?, ?)";
     for (let key in auths) {
@@ -555,6 +562,8 @@ router.put("/", Utils.ensureAuthenticated, async (req, res) => {
     public_team: publicTeam,
     id: teamID,
     ...(req.body[0].challonge_team_id !== undefined && { challonge_team_id: req.body[0].challonge_team_id }),
+    ...(req.body[0].ts_server !== undefined && { ts_server: req.body[0].ts_server }),
+    ...(req.body[0].ts_channel_id !== undefined && { ts_channel_id: req.body[0].ts_channel_id }),
   };
   if (teamLogo) {
     // Overwrite the current file.

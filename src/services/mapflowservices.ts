@@ -4,6 +4,7 @@
  * @requires db
  */
 import { db } from "./db.js";
+import { TeamSpeak } from "ts3-nodejs-library";
 
 /**
  * @const
@@ -364,6 +365,7 @@ class MapFlowService {
 
   /**
    * Updates the database and emits matchUpdate when a match has been paused or unpaused.
+   * Also manages TeamSpeak channel talk power and emits a formatted serverEvent SSE.
    * @param {Get5_OnMatchPausedUnpaused} event The Get5_OnMatchPausedUnpaused event provided from the game server.
    * @param {Response} res The express response object to send status responses to the game server.
    */
@@ -377,14 +379,14 @@ class MapFlowService {
     let insUpdStatement: object;
     let teamPaused: string;
 
-    sqlString = "SELECT team1_string, team2_string FROM `match` WHERE id = ?";
+    sqlString = "SELECT team1_id, team2_id, team1_string, team2_string FROM `match` WHERE id = ?";
     matchInfo = await db.query(sqlString, [event.matchid]);
 
     sqlString = "SELECT * FROM match_pause WHERE match_id = ?";
     pauseInfo = await db.query(sqlString, [event.matchid]);
 
     if (event.team == "team1") teamPaused = matchInfo[0].team1_string;
-    else if (event.team == "team2") teamPaused = matchInfo[0].team1_string;
+    else if (event.team == "team2") teamPaused = matchInfo[0].team2_string;
     else teamPaused = "Admin";
 
     if (pauseInfo.length) {
@@ -392,6 +394,7 @@ class MapFlowService {
       insUpdStatement = {
         pause_type: event.pause_type,
         team_paused: teamPaused,
+        side: event.side,
         paused: event.event == "game_paused" ? true : false
       };
       insUpdStatement = await db.buildUpdateStatement(insUpdStatement);
@@ -402,13 +405,99 @@ class MapFlowService {
         match_id: event.matchid,
         pause_type: event.pause_type,
         team_paused: teamPaused,
+        side: event.side,
         paused: event.event == "game_paused" ? true : false
       };
       insUpdStatement = await db.buildUpdateStatement(insUpdStatement);
       await db.query(sqlString, insUpdStatement);
     }
+
+    // ── TeamSpeak channel talk power management ────────────────────────────
+    const isPaused = event.event === "game_paused";
+    const isTactical = event.pause_type === "tactical";
+
+    if (!isTactical) {
+      try {
+        if (isPaused) {
+          // Tech or admin pause
+          if (event.team === "admin") {
+            // Admin pause: lock both teams' channels
+            const [t1, t2] = await Promise.all([
+              db.query("SELECT ts_server, ts_channel_id FROM team WHERE id = ?", [matchInfo[0].team1_id]),
+              db.query("SELECT ts_server, ts_channel_id FROM team WHERE id = ?", [matchInfo[0].team2_id]),
+            ]);
+            await Promise.all([
+              MapFlowService.setTsChannelTalkPower(t1[0], 60),
+              MapFlowService.setTsChannelTalkPower(t2[0], 60),
+            ]);
+          } else {
+            // Tech pause: lock only the pausing team's channel
+            const teamId = event.team === "team1" ? matchInfo[0].team1_id : matchInfo[0].team2_id;
+            const tsInfo: RowDataPacket[] = await db.query(
+              "SELECT ts_server, ts_channel_id FROM team WHERE id = ?", [teamId]
+            );
+            await MapFlowService.setTsChannelTalkPower(tsInfo[0], 60);
+          }
+        } else {
+          // Unpause: unlock both teams' channels
+          const [t1, t2] = await Promise.all([
+            db.query("SELECT ts_server, ts_channel_id FROM team WHERE id = ?", [matchInfo[0].team1_id]),
+            db.query("SELECT ts_server, ts_channel_id FROM team WHERE id = ?", [matchInfo[0].team2_id]),
+          ]);
+          await Promise.all([
+            MapFlowService.setTsChannelTalkPower(t1[0], 40),
+            MapFlowService.setTsChannelTalkPower(t2[0], 40),
+          ]);
+        }
+      } catch (tsErr) {
+        console.error("[TS3] Erreur gestion talk power:", (tsErr as Error).message);
+      }
+    }
+
+    // ── Server event SSE notification ─────────────────────────────────────
+    const pauseTypeLabel: Record<string, string> = {
+      tech:     "Pause Technique",
+      admin:    "Pause Admin",
+      tactical: "Pause Tactique",
+    };
+    const sideLabel =
+      event.side === "T" ? "Terrorist" :
+      event.side === "CT" ? "Counter-Terrorist" : "Admin";
+    const typeLabel = pauseTypeLabel[event.pause_type] ?? event.pause_type;
+    const statusIcon = isPaused ? "🔴" : "🟢";
+    const statusWord = isPaused ? "PAUSE" : "REPRISE";
+    const message = `${statusIcon} [${statusWord}] ${teamPaused} | ${sideLabel} | ${typeLabel}`;
+
+    GlobalEmitter.emit("serverEvent", {
+      matchid: event.matchid,
+      message,
+      event: event.event,
+      team: teamPaused,
+      side: sideLabel,
+      pause_type: typeLabel,
+    });
+
     GlobalEmitter.emit("matchUpdate");
     return res.status(200).send({ message: "Success" });
+  }
+
+  /**
+   * Connects to a TeamSpeak server and sets a channel's needed talk power.
+   * The ts_server format is "host:queryport" (e.g. "nuc1.infra.local:10011").
+   */
+  private static async setTsChannelTalkPower(
+    tsRow: RowDataPacket | undefined,
+    talkPower: number
+  ): Promise<void> {
+    if (!tsRow || !tsRow.ts_server || !tsRow.ts_channel_id) return;
+    const [host, portStr] = String(tsRow.ts_server).split(":");
+    const queryport = parseInt(portStr || "10011");
+    const ts3 = await TeamSpeak.connect({ host, queryport, username: "serveradmin", password: "80048821", nickname: "G5API" });
+    try {
+      await ts3.channelEdit(tsRow.ts_channel_id, { channel_needed_talk_power: talkPower });
+    } finally {
+      await ts3.quit();
+    }
   }
 }
 

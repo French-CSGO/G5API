@@ -696,6 +696,48 @@ router.get("/:match_id/paused/stream", async (req, res, next) => {
 /**
  * @swagger
  *
+ * /matches/:match_id/server-events/stream:
+ *   get:
+ *     description: Stream server events (pause/unpause) for a match as Server-Sent Events.
+ *     produces:
+ *       - text/event-stream
+ *     tags:
+ *       - matches
+ *     responses:
+ *       200:
+ *         description: Streams serverEvent messages with pause/unpause info.
+ */
+router.get("/:match_id/server-events/stream", async (req, res) => {
+  const matchId = req.params.match_id;
+  res.set({
+    "Cache-Control": "no-cache",
+    Connection: "keep-alive",
+    "Content-Type": "text/event-stream",
+    "X-Accel-Buffering": "no",
+  });
+  res.flushHeaders();
+
+  const serverEventHandler = (data: any) => {
+    if (String(data.matchid) === String(matchId)) {
+      res.write(`event: serverEvent\ndata: ${JSON.stringify(data)}\n\n`);
+    }
+  };
+
+  GlobalEmitter.on("serverEvent", serverEventHandler);
+
+  req.on("close", () => {
+    GlobalEmitter.removeListener("serverEvent", serverEventHandler);
+    res.end();
+  });
+  req.on("disconnect", () => {
+    GlobalEmitter.removeListener("serverEvent", serverEventHandler);
+    res.end();
+  });
+});
+
+/**
+ * @swagger
+ *
  * /matches/:match_id/paused:
  *   get:
  *     description: Get the pause information on a match.

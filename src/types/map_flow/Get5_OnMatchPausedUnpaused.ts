@@ -4,4 +4,5 @@ export interface Get5_OnMatchPausedUnpaused {
   map_number: number
   team: string
   pause_type: string
+  side: string
 }

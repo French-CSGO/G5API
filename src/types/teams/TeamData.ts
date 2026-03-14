@@ -7,5 +7,7 @@ export interface TeamData {
     matchtext?: string | null | undefined,
     public_team?: number,
     user_id?: number,
+    ts_server?: string | null,
+    ts_channel_id?: number | null,
     [key: string]: any
 }
