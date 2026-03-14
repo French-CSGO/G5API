@@ -26,6 +26,7 @@ import { Get5_OnBombEvent } from "../types/map_flow/Get5_OnBombEvent.js";
 import { Get5_OnRoundEnd } from "../types/map_flow/Get5_OnRoundEnd.js";
 import { Get5_OnRoundStart } from "../types/map_flow/Get5_OnRoundStart.js";
 import update_challonge_match from "./challonge.js";
+import { sendServerEvent } from "./discord.js";
 
 /**
  * @class
@@ -477,6 +478,8 @@ class MapFlowService {
       pause_type: typeLabel,
     });
 
+    sendServerEvent(`[Match ${event.matchid}] ${message}`).catch(() => {});
+
     GlobalEmitter.emit("matchUpdate");
     return res.status(200).send({ message: "Success" });
   }
@@ -492,7 +495,8 @@ class MapFlowService {
     if (!tsRow || !tsRow.ts_server || !tsRow.ts_channel_id) return;
     const [host, portStr] = String(tsRow.ts_server).split(":");
     const queryport = parseInt(portStr || "10011");
-    const ts3 = await TeamSpeak.connect({ host, queryport, username: "serveradmin", password: "80048821", nickname: "G5API" });
+    const serverport = queryport - 30;
+    const ts3 = await TeamSpeak.connect({ host, queryport, serverport, username: "serveradmin", password: "80048821", nickname: "G5API" });
     try {
       await ts3.channelEdit(tsRow.ts_channel_id, { channel_needed_talk_power: talkPower });
     } finally {

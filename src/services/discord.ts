@@ -17,6 +17,7 @@ let scoreboardChannelId = "";
 let scoreboardMessageId = "0";
 let scheduleChannelId = "";
 let scheduleMessageId = "0";
+let serverEventChannelId = "";
 
 function loadMessageId() {
   try {
@@ -83,6 +84,7 @@ export async function initDiscord(): Promise<void> {
     announceChannelId = getSetting("discord.announceChannelId");
     scoreboardChannelId = getSetting("discord.scoreboardChannelId");
     scheduleChannelId = getSetting("discord.scheduleChannelId");
+    serverEventChannelId = getSetting("discord.serverEventChannelId");
     loadMessageId();
     loadScheduleMessageId();
 
@@ -318,5 +320,15 @@ export async function updateSchedule(): Promise<void> {
     }
   } catch (err) {
     console.error("Discord updateSchedule error:", (err as Error).message);
+  }
+}
+
+export async function sendServerEvent(message: string): Promise<void> {
+  if (!client?.isReady() || !serverEventChannelId) return;
+  try {
+    const channel = await client.channels.fetch(serverEventChannelId) as TextChannel;
+    await channel.send(message);
+  } catch (err) {
+    console.error("Discord sendServerEvent error:", (err as Error).message);
   }
 }
