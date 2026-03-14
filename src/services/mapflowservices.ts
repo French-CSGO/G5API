@@ -539,7 +539,7 @@ class MapFlowService {
 
     const hostname: string = config.get("server.hostname");
     const matchUrl = `${hostname.replace(/\/$/, "")}/match/${event.matchid}`;
-    sendServerEvent(`[Match ${event.matchid}] ${message}\n🔗 ${matchUrl}`).catch(() => {});
+    sendServerEvent(`[[Match ${event.matchid}](${matchUrl})] ${message}\n`).catch(() => {});
 
     GlobalEmitter.emit("matchUpdate");
     return res.status(200).send({ message: "Success" });
