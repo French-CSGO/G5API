@@ -505,14 +505,15 @@ class Utils {
       await db.query(playerStatUpdateSql, [newPlayerArr]);
     }
     if (deleteTeams) {
-      // Only delete teams that are not referenced by another active match (reused teams)
+      // Only delete teams that were created specifically for this PUG (no other match history).
+      // A reused team has cnt > 0 (it appeared in other matches) → keep it.
       const [refT1, refT2]: [RowDataPacket[], RowDataPacket[]] = await Promise.all([
         db.query(
-          "SELECT COUNT(*) as cnt FROM `match` WHERE (team1_id = ? OR team2_id = ?) AND end_time IS NULL AND cancelled = 0 AND id != ?",
+          "SELECT COUNT(*) as cnt FROM `match` WHERE (team1_id = ? OR team2_id = ?) AND id != ?",
           [team1_id, team1_id, match_id]
         ),
         db.query(
-          "SELECT COUNT(*) as cnt FROM `match` WHERE (team1_id = ? OR team2_id = ?) AND end_time IS NULL AND cancelled = 0 AND id != ?",
+          "SELECT COUNT(*) as cnt FROM `match` WHERE (team1_id = ? OR team2_id = ?) AND id != ?",
           [team2_id, team2_id, match_id]
         ),
       ]);
