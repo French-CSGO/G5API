@@ -516,6 +516,12 @@ export class QueueService {
     let ownerUserId: number | null = await getUserIdFromMetaSlug(slug);
     const teamIds: number[] = [];
     for (const t of teams) {
+      const memberSteamIds = t.members.map(m => m.steamId);
+      const existingId = await findExistingTeam(memberSteamIds);
+      if (existingId) {
+        teamIds.push(existingId);
+        continue;
+      }
       const teamInsert = await db.query(
         "INSERT INTO team (user_id, name, flag, logo, tag, public_team) VALUES ?",
         [[[ownerUserId, t.name, null, null, null, 0]]]
@@ -766,6 +772,12 @@ export class QueueService {
 
     const teamIds: number[] = [];
     for (const t of teams) {
+      const memberSteamIds = t.members.map(m => m.steamId);
+      const existingId = await findExistingTeam(memberSteamIds);
+      if (existingId) {
+        teamIds.push(existingId);
+        continue;
+      }
       const teamInsert = await db.query(
         "INSERT INTO team (user_id, name, flag, logo, tag, public_team) VALUES ?",
         [[[ownerUserId, t.name, null, null, null, 0]]]
@@ -789,6 +801,23 @@ export class QueueService {
     }
     return teamIds;
   }
+}
+
+/**
+ * Returns the ID of an existing team whose roster matches exactly the given steamIds
+ * (same players, same count — no more, no less). Returns null if not found.
+ */
+async function findExistingTeam(steamIds: string[]): Promise<number | null> {
+  if (!steamIds.length) return null;
+  const placeholders = steamIds.map(() => "?").join(",");
+  const n = steamIds.length;
+  const rows: RowDataPacket[] = await db.query(
+    `SELECT team_id FROM team_auth_names
+     GROUP BY team_id
+     HAVING COUNT(*) = ? AND SUM(CASE WHEN auth IN (${placeholders}) THEN 1 ELSE 0 END) = ?`,
+    [n, ...steamIds, n]
+  );
+  return rows.length ? rows[0].team_id : null;
 }
 
 async function getUserIdFromMetaSlug(slug: string): Promise<number | null> {
