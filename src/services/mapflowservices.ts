@@ -26,7 +26,7 @@ import { Get5_OnBombEvent } from "../types/map_flow/Get5_OnBombEvent.js";
 import { Get5_OnRoundEnd } from "../types/map_flow/Get5_OnRoundEnd.js";
 import { Get5_OnRoundStart } from "../types/map_flow/Get5_OnRoundStart.js";
 import update_challonge_match from "./challonge.js";
-import { sendServerEvent } from "./discord.js";
+import { sendPauseEvent } from "./discord.js";
 import config from "config";
 
 /**
@@ -539,7 +539,14 @@ class MapFlowService {
 
     const hostname: string = config.get("server.hostname");
     const matchUrl = `${hostname.replace(/\/$/, "")}/match/${event.matchid}`;
-    sendServerEvent(`[[Match ${event.matchid}](${matchUrl})] ${message}\n`).catch(() => {});
+    sendPauseEvent({
+      matchid: String(event.matchid),
+      matchUrl,
+      isPaused,
+      teamName: teamPaused,
+      side: sideLabel,
+      pauseType: typeLabel,
+    }).catch(() => {});
 
     GlobalEmitter.emit("matchUpdate");
     return res.status(200).send({ message: "Success" });

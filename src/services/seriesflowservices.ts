@@ -11,6 +11,8 @@ import { Response } from "express";
 import Utils from "../utility/utils.js";
 import update_challonge_match from "../services/challonge.js";
 import { stopAfterDelay, isEnabled as pterodactylEnabled, getShutdownDelay } from "./pterodactyl.js";
+import { sendMapResultEvent, sendSeriesResultEvent } from "./discord.js";
+import config from "config";
 
 class SeriesFlowService {
   static async OnSeriesResult(event: Get5_OnSeriesResult, res: Response) {
@@ -119,6 +121,28 @@ class SeriesFlowService {
           event.winner.team
         );
       }
+      // Discord server event — fin du match
+      const hostname: string = config.get("server.hostname");
+      const matchUrl = `${hostname.replace(/\/$/, "")}/match/${event.matchid}`;
+      const teamNames: RowDataPacket[] = await db.query(
+        "SELECT id, name FROM team WHERE id IN (?, ?)",
+        [matchInfo[0].team1_id, matchInfo[0].team2_id]
+      );
+      const team1Name = teamNames.find((t: RowDataPacket) => t.id === matchInfo[0].team1_id)?.name ?? "Team 1";
+      const team2Name = teamNames.find((t: RowDataPacket) => t.id === matchInfo[0].team2_id)?.name ?? "Team 2";
+      const seriesWinnerName =
+        event.winner?.team === "team1" ? team1Name :
+        event.winner?.team === "team2" ? team2Name : null;
+      sendSeriesResultEvent({
+        matchid: String(event.matchid),
+        matchUrl,
+        team1Name,
+        team2Name,
+        team1SeriesScore: event.team1_series_score,
+        team2SeriesScore: event.team2_series_score,
+        winnerName: seriesWinnerName,
+      }).catch(() => {});
+
       GlobalEmitter.emit("matchUpdate");
       return res.status(200).send({ message: "Success" });
     } catch (error: unknown) {
@@ -146,7 +170,7 @@ class SeriesFlowService {
         "SELECT is_pug, max_maps, season_id, team1_id, team2_id FROM `match` WHERE id = ?";
       matchInfo = await db.query(sqlString, [event.matchid]);
       sqlString =
-        "SELECT id FROM `map_stats` WHERE match_id = ? AND map_number = ?";
+        "SELECT id, map_name FROM `map_stats` WHERE match_id = ? AND map_number = ?";
       mapInfo = await db.query(sqlString, [event.matchid, event.map_number]);
       if (mapInfo.length < 1) {
         return res
@@ -200,6 +224,27 @@ class SeriesFlowService {
       }
       
       GlobalEmitter.emit("mapStatUpdate");
+
+      // Discord server event — fin de map
+      const hostname: string = config.get("server.hostname");
+      const matchUrl = `${hostname.replace(/\/$/, "")}/match/${event.matchid}`;
+      const winnerName =
+        event.winner?.team === "team1" ? event.team1.name :
+        event.winner?.team === "team2" ? event.team2.name : null;
+      sendMapResultEvent({
+        matchid: String(event.matchid),
+        matchUrl,
+        mapName: mapInfo[0].map_name ?? `map_${event.map_number}`,
+        mapNumber: event.map_number,
+        team1Name: event.team1.name,
+        team2Name: event.team2.name,
+        team1Score: event.team1.score,
+        team2Score: event.team2.score,
+        team1SeriesScore: event.team1.series_score,
+        team2SeriesScore: event.team2.series_score,
+        winnerName,
+      }).catch(() => {});
+
       return res.status(200).send({ message: "Success" });
     } catch (error: unknown) {
       console.error(error);

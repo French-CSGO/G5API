@@ -1,4 +1,4 @@
-import { Client, GatewayIntentBits, TextChannel, REST, Routes, SlashCommandBuilder } from "discord.js";
+import { Client, GatewayIntentBits, TextChannel, REST, Routes, SlashCommandBuilder, EmbedBuilder } from "discord.js";
 import { db } from "./db.js";
 import { getSetting } from "./settings.js";
 import fs from "fs";
@@ -96,6 +96,10 @@ export async function initDiscord(): Promise<void> {
         new SlashCommandBuilder()
           .setName("refresh-schedule")
           .setDescription("Rafraîchit le message des matchs disponibles")
+          .toJSON(),
+        new SlashCommandBuilder()
+          .setName("purge")
+          .setDescription("Supprime tous les messages du channel actuel")
           .toJSON()
       ];
       const rest = new REST().setToken(token);
@@ -117,6 +121,30 @@ export async function initDiscord(): Promise<void> {
         await interaction.deferReply({ ephemeral: true });
         await updateSchedule();
         await interaction.editReply("✅ Schedule rafraîchi.");
+      }
+      if (interaction.commandName === "purge") {
+        await interaction.deferReply({ ephemeral: true });
+        try {
+          const channel = interaction.channel as TextChannel;
+          let total = 0;
+          let hasMore = true;
+          while (hasMore) {
+            const fetched = await channel.messages.fetch({ limit: 100 });
+            if (!fetched.size) break;
+            const bulk = await channel.bulkDelete(fetched, true);
+            total += bulk.size;
+            const remaining = fetched.filter(m => !bulk.has(m.id));
+            for (const msg of remaining.values()) {
+              await msg.delete().catch(() => {});
+              total++;
+            }
+            hasMore = fetched.size === 100;
+          }
+          await interaction.editReply(`✅ ${total} message(s) supprimé(s).`);
+        } catch (err) {
+          console.error("Discord purge error:", (err as Error).message);
+          await interaction.editReply("❌ Erreur lors de la suppression.");
+        }
       }
     });
 
@@ -323,12 +351,90 @@ export async function updateSchedule(): Promise<void> {
   }
 }
 
-export async function sendServerEvent(message: string): Promise<void> {
+async function sendToServerEventChannel(embed: EmbedBuilder): Promise<void> {
   if (!client?.isReady() || !serverEventChannelId) return;
   try {
     const channel = await client.channels.fetch(serverEventChannelId) as TextChannel;
-    await channel.send(message);
+    await channel.send({ embeds: [embed] });
   } catch (err) {
     console.error("Discord sendServerEvent error:", (err as Error).message);
   }
+}
+
+export async function sendPauseEvent(data: {
+  matchid: string;
+  matchUrl: string;
+  isPaused: boolean;
+  teamName: string;
+  side: string;
+  pauseType: string;
+}): Promise<void> {
+  const embed = new EmbedBuilder()
+    .setColor(data.isPaused ? 0xe74c3c : 0x2ecc71)
+    .setTitle(data.isPaused ? "🔴 PAUSE" : "🟢 REPRISE")
+    .setURL(data.matchUrl)
+    .addFields(
+      { name: "Match", value: `[#${data.matchid}](${data.matchUrl})`, inline: true },
+      { name: "Équipe", value: data.teamName, inline: true },
+      { name: "Côté", value: data.side, inline: true },
+      { name: "Type", value: data.pauseType, inline: true }
+    )
+    .setTimestamp();
+  await sendToServerEventChannel(embed);
+}
+
+export async function sendMapResultEvent(data: {
+  matchid: string;
+  matchUrl: string;
+  mapName: string;
+  mapNumber: number;
+  team1Name: string;
+  team2Name: string;
+  team1Score: number;
+  team2Score: number;
+  team1SeriesScore: number;
+  team2SeriesScore: number;
+  winnerName: string | null;
+}): Promise<void> {
+  const embed = new EmbedBuilder()
+    .setColor(0x3498db)
+    .setTitle(`🗺️ Fin de map — ${data.mapName} (Map ${data.mapNumber + 1})`)
+    .setURL(data.matchUrl)
+    .addFields(
+      {
+        name: "Score de la map",
+        value: `**${data.team1Name}** ${data.team1Score} — ${data.team2Score} **${data.team2Name}**`,
+        inline: false
+      },
+      { name: "Série", value: `${data.team1SeriesScore} — ${data.team2SeriesScore}`, inline: true },
+      { name: "Vainqueur", value: data.winnerName ?? "Match nul", inline: true }
+    )
+    .setTimestamp();
+  await sendToServerEventChannel(embed);
+}
+
+export async function sendSeriesResultEvent(data: {
+  matchid: string;
+  matchUrl: string;
+  team1Name: string;
+  team2Name: string;
+  team1SeriesScore: number;
+  team2SeriesScore: number;
+  winnerName: string | null;
+}): Promise<void> {
+  const embed = new EmbedBuilder()
+    .setColor(0xf1c40f)
+    .setTitle("🏆 Match terminé !")
+    .setURL(data.matchUrl)
+    .addFields(
+      {
+        name: "Équipes",
+        value: `**${data.team1Name}** vs **${data.team2Name}**`,
+        inline: false
+      },
+      { name: "Score final", value: `**${data.team1SeriesScore} — ${data.team2SeriesScore}**`, inline: true },
+      { name: "Vainqueur", value: data.winnerName ?? "Match nul", inline: true }
+    )
+    .setTimestamp();
+  await sendToServerEventChannel(embed);
 }
