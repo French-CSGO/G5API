@@ -106,6 +106,7 @@ export async function initDiscord(): Promise<void> {
       const guildId: string = getSetting("discord.guildId");
       if (guildId) {
         await rest.put(Routes.applicationGuildCommands(c.user.id, guildId), { body: commands });
+        await rest.put(Routes.applicationCommands(c.user.id), { body: [] });
       } else {
         await rest.put(Routes.applicationCommands(c.user.id), { body: commands });
       }
