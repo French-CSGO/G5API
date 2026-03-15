@@ -505,9 +505,11 @@ class Utils {
       await db.query(playerStatUpdateSql, [newPlayerArr]);
     }
     if (deleteTeams) {
-      // Only delete teams that were created specifically for this PUG (no other match history).
-      // A reused team has cnt > 0 (it appeared in other matches) → keep it.
-      const [refT1, refT2]: [RowDataPacket[], RowDataPacket[]] = await Promise.all([
+      // Only delete teams that were created specifically for this PUG:
+      // - no other match history (cnt = 0)
+      // - no challonge_team_id (registered in a tournament)
+      // - not linked to any season match
+      const [refT1, refT2, teamT1, teamT2]: [RowDataPacket[], RowDataPacket[], RowDataPacket[], RowDataPacket[]] = await Promise.all([
         db.query(
           "SELECT COUNT(*) as cnt FROM `match` WHERE (team1_id = ? OR team2_id = ?) AND id != ?",
           [team1_id, team1_id, match_id]
@@ -516,9 +518,17 @@ class Utils {
           "SELECT COUNT(*) as cnt FROM `match` WHERE (team1_id = ? OR team2_id = ?) AND id != ?",
           [team2_id, team2_id, match_id]
         ),
+        db.query(
+          "SELECT challonge_team_id FROM team WHERE id = ?",
+          [team1_id]
+        ),
+        db.query(
+          "SELECT challonge_team_id FROM team WHERE id = ?",
+          [team2_id]
+        ),
       ]);
-      const deleteT1 = !refT1[0].cnt;
-      const deleteT2 = !refT2[0].cnt;
+      const deleteT1 = !refT1[0].cnt && !teamT1[0]?.challonge_team_id;
+      const deleteT2 = !refT2[0].cnt && !teamT2[0]?.challonge_team_id;
       if (deleteT1) {
         await db.query("DELETE FROM team_auth_names WHERE team_id = ?", [team1_id]);
         await db.query("DELETE FROM team WHERE id = ?", [team1_id]);
