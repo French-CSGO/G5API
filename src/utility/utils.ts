@@ -454,28 +454,32 @@ class Utils {
       playerStatCheckExistsSql,
       [match_id, map_id]
     );
-    const teamAuthListOne: string[] = teamOneAuths[0].auth_name.split(",");
-    const teamAuthTwoList: string[] = teamTwoAuths[0].auth_name.split(",");
+    const teamAuthListOne: string[] = teamOneAuths[0]?.auth_name?.split(",") ?? [];
+    const teamAuthTwoList: string[] = teamTwoAuths[0]?.auth_name?.split(",") ?? [];
     // Check to see if player stats already exist.
     if (doPlayerStatsExist[0].cnt && doPlayerStatsExist[0].cnt > 0) {
-      await db.query(playerStatUpdateSql, [
-        teamNameOne[0].name,
-        winner == team1_id ? 1 : 0,
-        match_id,
-        map_id,
-        teamAuthListOne
-      ]);
-      await db.query(playerStatUpdateSql, [
-        teamNameTwo[0].name,
-        winner == team2_id ? 1 : 0,
-        match_id,
-        map_id,
-        teamAuthTwoList
-      ]);
+      if (teamAuthListOne.length) {
+        await db.query(playerStatUpdateSql, [
+          teamNameOne[0].name,
+          winner == team1_id ? 1 : 0,
+          match_id,
+          map_id,
+          teamAuthListOne
+        ]);
+      }
+      if (teamAuthTwoList.length) {
+        await db.query(playerStatUpdateSql, [
+          teamNameTwo[0].name,
+          winner == team2_id ? 1 : 0,
+          match_id,
+          map_id,
+          teamAuthTwoList
+        ]);
+      }
     } else {
       let newPlayerArr: Array<{}> = [];
-      let teamNameOneList: string[] = teamOneAuths[0].name.split(",");
-      let teamNameTwoList: string[] = teamTwoAuths[0].name.split(",");
+      let teamNameOneList: string[] = teamOneAuths[0]?.name?.split(",") ?? [];
+      let teamNameTwoList: string[] = teamTwoAuths[0]?.name?.split(",") ?? [];
       playerStatUpdateSql =
         "INSERT INTO player_stats (match_id, map_id, team_name, steam_id, name, winner) VALUES ?";
       for (let [idx, auth] of teamAuthListOne.entries()) {
@@ -501,9 +505,27 @@ class Utils {
       await db.query(playerStatUpdateSql, [newPlayerArr]);
     }
     if (deleteTeams) {
-      await db.query(pugSql, [team1_id, team2_id]);
-      pugSql = "DELETE FROM team WHERE id = ? OR id = ?";
-      await db.query(pugSql, [team1_id, team2_id]);
+      // Only delete teams that are not referenced by another active match (reused teams)
+      const [refT1, refT2]: [RowDataPacket[], RowDataPacket[]] = await Promise.all([
+        db.query(
+          "SELECT COUNT(*) as cnt FROM `match` WHERE (team1_id = ? OR team2_id = ?) AND end_time IS NULL AND cancelled = 0 AND id != ?",
+          [team1_id, team1_id, match_id]
+        ),
+        db.query(
+          "SELECT COUNT(*) as cnt FROM `match` WHERE (team1_id = ? OR team2_id = ?) AND end_time IS NULL AND cancelled = 0 AND id != ?",
+          [team2_id, team2_id, match_id]
+        ),
+      ]);
+      const deleteT1 = !refT1[0].cnt;
+      const deleteT2 = !refT2[0].cnt;
+      if (deleteT1) {
+        await db.query("DELETE FROM team_auth_names WHERE team_id = ?", [team1_id]);
+        await db.query("DELETE FROM team WHERE id = ?", [team1_id]);
+      }
+      if (deleteT2) {
+        await db.query("DELETE FROM team_auth_names WHERE team_id = ?", [team2_id]);
+        await db.query("DELETE FROM team WHERE id = ?", [team2_id]);
+      }
     }
 
     return;
