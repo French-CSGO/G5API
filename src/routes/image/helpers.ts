@@ -58,7 +58,8 @@ export const upload = multer({
   limits: { fileSize: 20 * 1024 * 1024 },
 });
 
-export function writeFileSafe(filePath: string, buffer: Uint8Array): void {
+export function writeFileSafe(filePath: string, buffer: Buffer): void {
   try { fs.unlinkSync(filePath); } catch { /* file didn't exist */ }
-  fs.writeFileSync(filePath, buffer);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (fs.writeFileSync as any)(filePath, buffer);
 }
