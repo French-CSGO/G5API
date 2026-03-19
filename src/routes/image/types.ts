@@ -21,6 +21,35 @@ export interface FX {
   x:       number;
 }
 
+export interface MatchColumnHeaders {
+  enabled:       boolean;
+  y:             number;
+  font:          string;
+  color:         string;
+  size:          number;
+  bold:          boolean;
+  kills_label:   string;
+  assists_label: string;
+  deaths_label:  string;
+  rating_label:  string;
+}
+
+export interface PlayerColumnHeaders {
+  enabled:         boolean;
+  y:               number;
+  y2:              number;
+  font:            string;
+  color:           string;
+  size:            number;
+  bold:            boolean;
+  kills_label:     string;
+  assists_label:   string;
+  deaths_label:    string;
+  rating_label:    string;
+  hs_label:        string;
+  clutches_label:  string;
+}
+
 export interface ImageSettings {
   canvas: { width: number; height: number };
 
@@ -43,6 +72,49 @@ export interface ImageSettings {
     assists_r: FX;
     deaths_r:  FX;
     rating_r:  FX;
+    column_headers: MatchColumnHeaders;
+    shapes: {
+      enabled:           boolean;
+      team_pill: {
+        enabled:         boolean;
+        fill:            string;
+        alpha:           number;
+        radius:          number;
+        width:           number;
+        height:          number;
+        border:          string;
+        border_alpha:    number;
+        border_width:    number;
+      };
+      player_pill: {
+        enabled:         boolean;
+        fill:            string;
+        alpha:           number;
+        radius:          number;
+        width:           number;
+        height:          number;
+        border:          string;
+        border_alpha:    number;
+        border_width:    number;
+        l_x:             number;
+        r_x:             number;
+      };
+      stats_table: {
+        enabled:         boolean;
+        fill:            string;
+        alpha:           number;
+        radius:          number;
+        l_x:             number;
+        r_x:             number;
+        width:           number;
+        pad_y:           number;
+        row_height:      number;
+        odd_fill:        string;
+        odd_alpha:       number;
+        even_fill:       string;
+        even_alpha:      number;
+      };
+    };
   };
 
   player: {
@@ -58,6 +130,45 @@ export interface ImageSettings {
     rating:   FC;
     hs:       FC;
     clutches: FC;
+    column_headers: PlayerColumnHeaders;
+    shapes: {
+      enabled:     boolean;
+      team_pill: {
+        enabled:      boolean;
+        fill:         string;
+        alpha:        number;
+        radius:       number;
+        width:        number;
+        height:       number;
+        border:       string;
+        border_alpha: number;
+        border_width: number;
+      };
+      player_pill: {
+        enabled:      boolean;
+        fill:         string;
+        alpha:        number;
+        radius:       number;
+        width:        number;
+        height:       number;
+        border:       string;
+        border_alpha: number;
+        border_width: number;
+      };
+      stats_bar: {
+        enabled:      boolean;
+        fill:         string;
+        alpha:        number;
+        radius:       number;
+        x:            number;
+        y:            number;
+        width:        number;
+        height:       number;
+        border:       string;
+        border_alpha: number;
+        border_width: number;
+      };
+    };
   };
 
   team_season: {
@@ -65,13 +176,14 @@ export interface ImageSettings {
     fontFile:   string;
     team_name:   FC;
     team_rating: FC;
+    best_map_label: FC & { text: string };
     players: {
       enabled:      boolean;
       font:         string;
       color:        string;
       size:         number;
       bold:         boolean;
-      x:            [number, number, number];
+      x:            [number, number, number, number, number];
       name_y:       number;
       show_rating:  boolean;
       rating_font:  string;
@@ -88,12 +200,64 @@ export interface ImageSettings {
     rounds_lost: FC;
     wins:        FC;
     losses:      FC;
+    stat_labels: {
+      enabled:           boolean;
+      font:              string;
+      color:             string;
+      size:              number;
+      bold:              boolean;
+      y_offset:          number;
+      team_rating_label: string;
+      kills_label:       string;
+      deaths_label:      string;
+      plants_label:      string;
+      defuses_label:     string;
+      rounds_won_label:  string;
+      rounds_lost_label: string;
+      wins_label:        string;
+      losses_label:      string;
+    };
     map_image: {
       enabled: boolean;
       x:       number;
       y:       number;
       width:   number;
       height:  number;
+    };
+    shapes: {
+      enabled:     boolean;
+      team_pill: {
+        enabled:      boolean;
+        fill:         string;
+        alpha:        number;
+        radius:       number;
+        width:        number;
+        height:       number;
+        border:       string;
+        border_alpha: number;
+        border_width: number;
+      };
+      player_pill: {
+        enabled:      boolean;
+        fill:         string;
+        alpha:        number;
+        radius:       number;
+        width:        number;
+        height:       number;
+        border:       string;
+        border_alpha: number;
+        border_width: number;
+      };
+      stats_background: {
+        enabled:      boolean;
+        fill:         string;
+        alpha:        number;
+        radius:       number;
+        x:            number;
+        y:            number;
+        width:        number;
+        height:       number;
+      };
     };
   };
 }

@@ -6,6 +6,10 @@ import multer from "multer";
 
 // ─── Canvas helpers ───────────────────────────────────────────────────────────
 
+export function stripAccents(str: string): string {
+  return str.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
+
 export function drawText(
   ctx: CanvasRenderingContext2D,
   str: string, x: number, y: number,
@@ -16,7 +20,41 @@ export function drawText(
   ctx.fillStyle    = color;
   ctx.textAlign    = align;
   ctx.textBaseline = "middle";
-  ctx.fillText(str, x, y);
+  ctx.fillText(stripAccents(str), x, y);
+}
+
+export function drawRoundRect(
+  ctx: CanvasRenderingContext2D,
+  x: number, y: number, w: number, h: number, radius: number,
+  fillColor: string, fillAlpha = 1,
+  strokeColor = "", strokeAlpha = 0, strokeWidth = 0
+): void {
+  const r = Math.min(radius, w / 2, h / 2);
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.arcTo(x + w, y, x + w, y + r, r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
+  ctx.lineTo(x + r, y + h);
+  ctx.arcTo(x, y + h, x, y + h - r, r);
+  ctx.lineTo(x, y + r);
+  ctx.arcTo(x, y, x + r, y, r);
+  ctx.closePath();
+  if (fillAlpha > 0) {
+    ctx.globalAlpha = fillAlpha;
+    ctx.fillStyle = fillColor;
+    ctx.fill();
+  }
+  if (strokeColor && strokeWidth > 0 && strokeAlpha > 0) {
+    ctx.globalAlpha = strokeAlpha;
+    ctx.strokeStyle = strokeColor;
+    ctx.lineWidth = strokeWidth;
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+  ctx.restore();
 }
 
 export function fieldFont(f: { bold: boolean; size: number; font: string }): string {

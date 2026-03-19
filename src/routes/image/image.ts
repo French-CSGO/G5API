@@ -295,7 +295,7 @@ router.get("/season/:season_id/team/:team_id", async (req: Request, res: Respons
        WHERE m.season_id = ? AND ps.team_id = ?
        GROUP BY ps.steam_id
        ORDER BY SUM(ps.kills) DESC
-       LIMIT 3`,
+       LIMIT 5`,
       [seasonId, teamId]
     ) as PlayerStatExtended[];
 
