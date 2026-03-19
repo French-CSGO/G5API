@@ -4,6 +4,8 @@
  * description: Express API for generating real-time match stat images.
  */
 import { Router, Request, Response } from "express";
+
+type MReq = Request & { file?: Express.Multer.File };
 import path from "path";
 import fs from "fs";
 
@@ -56,7 +58,7 @@ router.put("/settings", (req: Request, res: Response) => {
 router.post(
   "/settings/background",
   upload.single("background") as any,
-  (req: Request, res: Response) => {
+  (req: MReq, res: Response) => {
     if (!req.file) { res.status(400).json({ error: "No file received." }); return; }
     const dest = path.join(process.cwd(), "public", "img", req.file.originalname);
     writeFileSafe(dest, req.file.buffer);
@@ -71,7 +73,7 @@ router.post(
 router.post(
   "/upload/img",
   upload.single("file") as any,
-  (req: Request, res: Response) => {
+  (req: MReq, res: Response) => {
     if (!req.file) { res.status(400).json({ error: "No file received." }); return; }
     const dest = path.join(process.cwd(), "public", "img", req.file.originalname);
     writeFileSafe(dest, req.file.buffer);
@@ -96,7 +98,7 @@ router.get("/maps", (_req: Request, res: Response) => {
 router.post(
   "/upload/map",
   upload.single("file") as any,
-  (req: Request, res: Response) => {
+  (req: MReq, res: Response) => {
     if (!req.file) { res.status(400).json({ error: "No file received." }); return; }
     const mapsDir = path.join(process.cwd(), "public", "img", "maps");
     if (!fs.existsSync(mapsDir)) fs.mkdirSync(mapsDir, { recursive: true });
@@ -110,7 +112,7 @@ router.post(
 router.post(
   "/upload/font",
   upload.single("file") as any,
-  (req: Request, res: Response) => {
+  (req: MReq, res: Response) => {
     if (!req.file) { res.status(400).json({ error: "No file received." }); return; }
     const fontsDir = path.join(process.cwd(), "public", "fonts");
     if (!fs.existsSync(fontsDir)) fs.mkdirSync(fontsDir, { recursive: true });
@@ -124,7 +126,7 @@ router.post(
 router.post(
   "/settings/font",
   upload.single("font") as any,
-  (req: Request, res: Response) => {
+  (req: MReq, res: Response) => {
     if (!req.file) { res.status(400).json({ error: "No file received." }); return; }
     const fontsDir = path.join(process.cwd(), "public", "fonts");
     if (!fs.existsSync(fontsDir)) fs.mkdirSync(fontsDir, { recursive: true });
