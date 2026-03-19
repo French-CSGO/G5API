@@ -1,0 +1,354 @@
+{
+  "canvas": {
+    "width": 1920,
+    "height": 1080
+  },
+  "match": {
+    "background": "Fracture_Postmatch.png",
+    "fontFile": "ETTIKAGOZA Regular.ttf",
+    "rows_y": [
+      485,
+      625,
+      770
+    ],
+    "team1_name": {
+      "enabled": true,
+      "font": "ETTIKAGOZA Regular",
+      "color": "#1a1a2e",
+      "size": 45,
+      "bold": true,
+      "x": 415,
+      "y": 302
+    },
+    "team1_score": {
+      "enabled": true,
+      "font": "ETTIKAGOZA Regular",
+      "color": "#ffffff",
+      "size": 40,
+      "bold": true,
+      "x": 806,
+      "y": 302
+    },
+    "team2_score": {
+      "enabled": true,
+      "font": "ETTIKAGOZA Regular",
+      "color": "#ffffff",
+      "size": 40,
+      "bold": true,
+      "x": 1114,
+      "y": 302
+    },
+    "team2_name": {
+      "enabled": true,
+      "font": "ETTIKAGOZA Regular",
+      "color": "#1a1a2e",
+      "size": 45,
+      "bold": true,
+      "x": 1595,
+      "y": 302
+    },
+    "map_name": {
+      "enabled": false,
+      "font": "ETTIKAGOZA Regular",
+      "color": "#1a1a2e",
+      "size": 28,
+      "bold": true,
+      "x": 960,
+      "y": 980
+    },
+    "player_name_l": {
+      "enabled": true,
+      "font": "ETTIKAGOZA Regular",
+      "color": "#1a1a2e",
+      "size": 40,
+      "bold": true,
+      "x": 180
+    },
+    "player_name_r": {
+      "enabled": true,
+      "font": "ETTIKAGOZA Regular",
+      "color": "#1a1a2e",
+      "size": 40,
+      "bold": true,
+      "x": 1450
+    },
+    "kills_l": {
+      "enabled": true,
+      "font": "ETTIKAGOZA Regular",
+      "color": "#1a1a2e",
+      "size": 30,
+      "bold": false,
+      "x": 630
+    },
+    "assists_l": {
+      "enabled": true,
+      "font": "ETTIKAGOZA Regular",
+      "color": "#1a1a2e",
+      "size": 30,
+      "bold": false,
+      "x": 710
+    },
+    "deaths_l": {
+      "enabled": true,
+      "font": "ETTIKAGOZA Regular",
+      "color": "#1a1a2e",
+      "size": 30,
+      "bold": false,
+      "x": 800
+    },
+    "rating_l": {
+      "enabled": true,
+      "font": "ETTIKAGOZA Regular",
+      "color": "#1a1a2e",
+      "size": 30,
+      "bold": false,
+      "x": 890
+    },
+    "kills_r": {
+      "enabled": true,
+      "font": "ETTIKAGOZA Regular",
+      "color": "#1a1a2e",
+      "size": 30,
+      "bold": false,
+      "x": 1025
+    },
+    "assists_r": {
+      "enabled": true,
+      "font": "ETTIKAGOZA Regular",
+      "color": "#1a1a2e",
+      "size": 30,
+      "bold": false,
+      "x": 1105
+    },
+    "deaths_r": {
+      "enabled": true,
+      "font": "ETTIKAGOZA Regular",
+      "color": "#1a1a2e",
+      "size": 30,
+      "bold": false,
+      "x": 1195
+    },
+    "rating_r": {
+      "enabled": true,
+      "font": "ETTIKAGOZA Regular",
+      "color": "#1a1a2e",
+      "size": 30,
+      "bold": false,
+      "x": 1280
+    }
+  },
+  "player": {
+    "background": "Fracture_MVPPlayer.png",
+    "fontFile": "ETTIKAGOZA Regular",
+    "team1_name": {
+      "enabled": true,
+      "font": "ETTIKAGOZA Regular",
+      "color": "#1a1a2e",
+      "size": 45,
+      "bold": true,
+      "x": 330,
+      "y": 245
+    },
+    "vs": {
+      "enabled": true,
+      "font": "ETTIKAGOZA Regular",
+      "color": "#1a1a2e",
+      "size": 30,
+      "bold": true,
+      "x": 1490,
+      "y": 245
+    },
+    "team2_name": {
+      "enabled": true,
+      "font": "ETTIKAGOZA Regular",
+      "color": "#1a1a2e",
+      "size": 35,
+      "bold": true,
+      "x": 1650,
+      "y": 245
+    },
+    "player_name": {
+      "enabled": true,
+      "font": "ETTIKAGOZA Regular",
+      "color": "#1a1a2e",
+      "size": 100,
+      "bold": true,
+      "x": 960,
+      "y": 200
+    },
+    "kills": {
+      "enabled": true,
+      "font": "ETTIKAGOZA Regular",
+      "color": "#1a1a2e",
+      "size": 60,
+      "bold": false,
+      "x": 730,
+      "y": 615
+    },
+    "assists": {
+      "enabled": true,
+      "font": "ETTIKAGOZA Regular",
+      "color": "#1a1a2e",
+      "size": 60,
+      "bold": false,
+      "x": 960,
+      "y": 615
+    },
+    "deaths": {
+      "enabled": true,
+      "font": "ETTIKAGOZA Regular",
+      "color": "#1a1a2e",
+      "size": 60,
+      "bold": false,
+      "x": 1200,
+      "y": 615
+    },
+    "rating": {
+      "enabled": true,
+      "font": "ETTIKAGOZA Regular",
+      "color": "#1a1a2e",
+      "size": 60,
+      "bold": false,
+      "x": 730,
+      "y": 880
+    },
+    "hs": {
+      "enabled": true,
+      "font": "ETTIKAGOZA Regular",
+      "color": "#1a1a2e",
+      "size": 60,
+      "bold": false,
+      "x": 960,
+      "y": 880
+    },
+    "clutches": {
+      "enabled": true,
+      "font": "ETTIKAGOZA Regular",
+      "color": "#1a1a2e",
+      "size": 60,
+      "bold": false,
+      "x": 1200,
+      "y": 880
+    }
+  },
+  "team_season": {
+    "background": "Fracture_PresTeam.png",
+    "fontFile": "Exquite",
+    "team_name": {
+      "enabled": true,
+      "font": "Exquite",
+      "color": "#1a1a2e",
+      "size": 55,
+      "bold": true,
+      "x": 580,
+      "y": 180
+    },
+    "team_rating": {
+      "enabled": true,
+      "font": "Exquite",
+      "color": "#1a1a2e",
+      "size": 55,
+      "bold": true,
+      "x": 1500,
+      "y": 820
+    },
+    "players": {
+      "enabled": true,
+      "font": "Exquite",
+      "color": "#FFFFFF",
+      "size": 35,
+      "bold": true,
+      "x": [
+        400,
+        580,
+        780
+      ],
+      "name_y": 310,
+      "show_rating": false,
+      "rating_font": "Exquite",
+      "rating_color": "#1a1a2e",
+      "rating_size": 20,
+      "rating_bold": false,
+      "rating_y": 380
+    },
+    "kills": {
+      "enabled": true,
+      "font": "Exquite",
+      "color": "#1a1a2e",
+      "size": 45,
+      "bold": false,
+      "x": 1470,
+      "y": 535
+    },
+    "deaths": {
+      "enabled": true,
+      "font": "Exquite",
+      "color": "#1a1a2e",
+      "size": 45,
+      "bold": false,
+      "x": 1555,
+      "y": 580
+    },
+    "plants": {
+      "enabled": true,
+      "font": "Exquite",
+      "color": "#1a1a2e",
+      "size": 45,
+      "bold": false,
+      "x": 1470,
+      "y": 380
+    },
+    "defuses": {
+      "enabled": true,
+      "font": "Exquite",
+      "color": "#1a1a2e",
+      "size": 45,
+      "bold": false,
+      "x": 1555,
+      "y": 440
+    },
+    "rounds_won": {
+      "enabled": true,
+      "font": "Exquite",
+      "color": "#2e7d32",
+      "size": 45,
+      "bold": false,
+      "x": 1470,
+      "y": 670
+    },
+    "rounds_lost": {
+      "enabled": true,
+      "font": "Exquite",
+      "color": "#c62828",
+      "size": 45,
+      "bold": false,
+      "x": 1555,
+      "y": 710
+    },
+    "wins": {
+      "enabled": true,
+      "font": "Exquite",
+      "color": "#2e7d32",
+      "size": 40,
+      "bold": false,
+      "x": 1300,
+      "y": 215
+    },
+    "losses": {
+      "enabled": true,
+      "font": "Exquite",
+      "color": "#c62828",
+      "size": 40,
+      "bold": false,
+      "x": 1565,
+      "y": 215
+    },
+    "map_image": {
+      "enabled": true,
+      "x": 285,
+      "y": 445,
+      "width": 610,
+      "height": 420
+    }
+  }
+}
