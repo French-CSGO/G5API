@@ -5,7 +5,7 @@
  */
 import { Router, Request, Response } from "express";
 
-type MReq = Request & { file?: Express.Multer.File };
+type MReq = Request & { file?: { originalname: string; buffer: Buffer; mimetype: string; size: number } };
 import path from "path";
 import fs from "fs";
 
