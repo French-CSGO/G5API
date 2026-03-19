@@ -457,6 +457,7 @@ router.get("/teams/:team_id/:season_id", async (req, res) => {
          // Instantiate the object, needed only once.
          if (!teamStandings.some((el) => el.name === winName)) {
            teamStandings.push({
+             id: winningTeam[0].id,
              name: winName,
              wins: 0,
              losses: 0,
@@ -465,6 +466,7 @@ router.get("/teams/:team_id/:season_id", async (req, res) => {
          }
          if (!teamStandings.some((el) => el.name === loseName)) {
            teamStandings.push({
+             id: losingTeam[0].id,
              name: loseName,
              wins: 0,
              losses: 0,
