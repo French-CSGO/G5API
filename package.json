@@ -77,6 +77,8 @@
     "@types/tmi.js": "^1.8.6",
     "aes-js": "^3.1.2",
     "bcrypt": "^6.0.0",
+    "canvas": "^3.2.1",
+    "multer": "^2.1.1",
     "compare-versions": "^6.1.0",
     "config": "^3.3.11",
     "connect-redis": "^7.1.1",
@@ -113,6 +115,7 @@
   "devDependencies": {
     "@types/aes-js": "^3.1.1",
     "@types/bcrypt": "^5.0.2",
+    "@types/multer": "^2.1.0",
     "@types/config": "^3.3.0",
     "@types/cookie-parser": "^1.4.8",
     "@types/cors": "^2.8.17",

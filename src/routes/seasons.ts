@@ -334,16 +334,62 @@ router.get(
 router.get("/:season_id", async (req, res, next) => {
   try {
     let seasonID: number = parseInt(req.params.season_id);
-    let sql: string =
-      "SELECT id, user_id, server_id, team1_id, team2_id, winner, team1_score, team2_score, team1_series_score, team2_series_score, team1_string, team2_string, cancelled, forfeit, start_time, end_time, max_maps, title, skip_veto, private_match, enforce_teams, min_player_ready, season_id, is_pug FROM `match` where season_id = ?";
     let seasonSql: string = "SELECT * FROM season WHERE id = ?";
     let seasons: RowDataPacket[] = await db.query(seasonSql, [seasonID]);
-    let matches: RowDataPacket[] = await db.query(sql, [seasonID]);
     if (!seasons.length) {
       res.status(404).json({ message: "Season not found." });
       return;
     }
     const season: string = JSON.parse(JSON.stringify(seasons[0]));
+
+    // Fetch matches with owner name and bo1 map scores in one query
+    let sql: string =
+      "SELECT m.id, m.user_id, u.name AS owner, " +
+      "m.team1_id, m.team2_id, m.winner, m.team1_score, m.team2_score, " +
+      "m.team1_series_score, m.team2_series_score, m.team1_string, m.team2_string, " +
+      "m.cancelled, m.forfeit, m.start_time, m.end_time, m.max_maps, " +
+      "m.title, m.skip_veto, m.private_match, m.enforce_teams, " +
+      "m.min_player_ready, m.season_id, m.is_pug, " +
+      "ms.team1_score AS map1_t1_score, ms.team2_score AS map1_t2_score " +
+      "FROM `match` m " +
+      "LEFT JOIN user u ON u.id = m.user_id " +
+      "LEFT JOIN map_stats ms ON ms.match_id = m.id AND m.max_maps = 1 " +
+      "WHERE m.season_id = ? " +
+      "GROUP BY m.id";
+    let rawMatches: RowDataPacket[] = await db.query(sql, [seasonID]);
+
+    // Compute match_status from team1's perspective (or team2 if team1 is null)
+    const matches = rawMatches.map(m => {
+      const isTeam1 = m.team1_id !== null;
+      let myScore: number    = isTeam1 ? m.team1_score : m.team2_score;
+      let otherScore: number = isTeam1 ? m.team2_score : m.team1_score;
+      const otherName: string = isTeam1
+        ? (m.team2_string ?? "Team Removed From Match")
+        : (m.team1_string ?? "Team Removed From Match");
+
+      // For bo1, use map_stats score if available
+      if (m.max_maps === 1 && m.map1_t1_score != null) {
+        myScore    = isTeam1 ? m.map1_t1_score : m.map1_t2_score;
+        otherScore = isTeam1 ? m.map1_t2_score : m.map1_t1_score;
+      }
+
+      let match_status: string;
+      if (m.end_time == null && !m.cancelled && m.start_time != null)
+        match_status = `Live, ${myScore}:${otherScore} vs ${otherName}`;
+      else if (m.cancelled)
+        match_status = "Cancelled";
+      else if (myScore > otherScore)
+        match_status = `Won, ${myScore}:${otherScore} vs ${otherName}`;
+      else if (myScore < otherScore)
+        match_status = `Lost, ${myScore}:${otherScore} vs ${otherName}`;
+      else if (m.winner != null)
+        match_status = `Forfeit win vs ${otherName}`;
+      else
+        match_status = `Tied, ${myScore}:${otherScore} vs ${otherName}`;
+
+      return { ...m, match_status };
+    });
+
     res.json({ matches, season });
   } catch (err) {
     console.error(err);
