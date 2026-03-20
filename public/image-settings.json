@@ -4,61 +4,63 @@
     "height": 1080
   },
   "match": {
-    "background": "Fracture_Postmatch.png",
-    "fontFile": "ETTIKAGOZA Regular.ttf",
+    "background": "Preview_BG_Loop-02.png",
+    "fontFile": "BaiJamjuree-Bold.ttf",
     "rows_y": [
-      485,
-      625,
-      770
+      360,
+      500,
+      640,
+      780,
+      920
     ],
     "team1_name": {
       "enabled": true,
-      "font": "ETTIKAGOZA Regular",
+      "font": "BaiJamjuree-Bold",
       "color": "#1a1a2e",
       "size": 45,
       "bold": true,
-      "x": 415,
-      "y": 302
+      "x": 320,
+      "y": 150
     },
     "team1_score": {
       "enabled": true,
-      "font": "ETTIKAGOZA Regular",
-      "color": "#ffffff",
-      "size": 40,
+      "font": "BaiJamjuree-Bold",
+      "color": "#000000",
+      "size": 50,
       "bold": true,
-      "x": 806,
-      "y": 302
+      "x": 710,
+      "y": 150
     },
     "team2_score": {
       "enabled": true,
-      "font": "ETTIKAGOZA Regular",
-      "color": "#ffffff",
-      "size": 40,
+      "font": "BaiJamjuree-Bold",
+      "color": "#000000",
+      "size": 50,
       "bold": true,
-      "x": 1114,
-      "y": 302
+      "x": 1210,
+      "y": 150
     },
     "team2_name": {
       "enabled": true,
-      "font": "ETTIKAGOZA Regular",
+      "font": "BaiJamjuree-Bold",
       "color": "#1a1a2e",
       "size": 45,
       "bold": true,
-      "x": 1595,
-      "y": 302
+      "x": 1600,
+      "y": 150
     },
     "map_name": {
-      "enabled": false,
-      "font": "ETTIKAGOZA Regular",
+      "enabled": true,
+      "font": "BaiJamjuree-Bold",
       "color": "#1a1a2e",
-      "size": 28,
+      "size": 45,
       "bold": true,
       "x": 960,
-      "y": 980
+      "y": 150
     },
     "player_name_l": {
       "enabled": true,
-      "font": "ETTIKAGOZA Regular",
+      "font": "BaiJamjuree-Bold",
       "color": "#1a1a2e",
       "size": 40,
       "bold": true,
@@ -66,83 +68,137 @@
     },
     "player_name_r": {
       "enabled": true,
-      "font": "ETTIKAGOZA Regular",
+      "font": "BaiJamjuree-Bold",
       "color": "#1a1a2e",
       "size": 40,
       "bold": true,
-      "x": 1450
+      "x": 1550
     },
     "kills_l": {
       "enabled": true,
-      "font": "ETTIKAGOZA Regular",
+      "font": "BaiJamjuree-Bold",
       "color": "#1a1a2e",
-      "size": 30,
+      "size": 35,
       "bold": false,
       "x": 630
     },
     "assists_l": {
       "enabled": true,
-      "font": "ETTIKAGOZA Regular",
+      "font": "BaiJamjuree-Bold",
       "color": "#1a1a2e",
-      "size": 30,
+      "size": 35,
       "bold": false,
       "x": 710
     },
     "deaths_l": {
       "enabled": true,
-      "font": "ETTIKAGOZA Regular",
+      "font": "BaiJamjuree-Bold",
       "color": "#1a1a2e",
-      "size": 30,
+      "size": 35,
       "bold": false,
       "x": 800
     },
     "rating_l": {
       "enabled": true,
-      "font": "ETTIKAGOZA Regular",
+      "font": "BaiJamjuree-Bold",
       "color": "#1a1a2e",
-      "size": 30,
+      "size": 35,
       "bold": false,
       "x": 890
     },
     "kills_r": {
       "enabled": true,
-      "font": "ETTIKAGOZA Regular",
+      "font": "BaiJamjuree-Bold",
       "color": "#1a1a2e",
-      "size": 30,
+      "size": 35,
       "bold": false,
       "x": 1025
     },
     "assists_r": {
       "enabled": true,
-      "font": "ETTIKAGOZA Regular",
+      "font": "BaiJamjuree-Bold",
       "color": "#1a1a2e",
-      "size": 30,
+      "size": 35,
       "bold": false,
       "x": 1105
     },
     "deaths_r": {
       "enabled": true,
-      "font": "ETTIKAGOZA Regular",
+      "font": "BaiJamjuree-Bold",
       "color": "#1a1a2e",
-      "size": 30,
+      "size": 35,
       "bold": false,
       "x": 1195
     },
     "rating_r": {
       "enabled": true,
-      "font": "ETTIKAGOZA Regular",
+      "font": "BaiJamjuree-Bold",
       "color": "#1a1a2e",
-      "size": 30,
+      "size": 35,
       "bold": false,
       "x": 1280
+    },
+    "column_headers": {
+      "enabled": true,
+      "y": 280,
+      "font": "BaiJamjuree-Bold",
+      "color": "#1a1a2e",
+      "size": 30,
+      "bold": true,
+      "kills_label": "K",
+      "assists_label": "A",
+      "deaths_label": "D",
+      "rating_label": "RTG"
+    },
+    "shapes": {
+      "enabled": true,
+      "team_pill": {
+        "enabled": true,
+        "fill": "#000000",
+        "alpha": 0.35,
+        "radius": 50,
+        "width": 480,
+        "height": 70,
+        "border": "#ffffff",
+        "border_alpha": 0.2,
+        "border_width": 2
+      },
+      "player_pill": {
+        "enabled": true,
+        "fill": "#ffffff",
+        "alpha": 0.18,
+        "radius": 50,
+        "width": 420,
+        "height": 58,
+        "border": "#ffffff",
+        "border_alpha": 0.3,
+        "border_width": 1.5,
+        "l_x": 60,
+        "r_x": 1440
+      },
+      "stats_table": {
+        "enabled": true,
+        "fill": "#000000",
+        "alpha": 0.2,
+        "radius": 22,
+        "l_x": 570,
+        "r_x": 980,
+        "width": 380,
+        "pad_y": 30,
+        "row_height": 58,
+        "odd_fill": "#000000",
+        "odd_alpha": 0.08,
+        "even_fill": "#ffffff",
+        "even_alpha": 0.05
+      }
     }
   },
   "player": {
-    "background": "Fracture_MVPPlayer.png",
-    "fontFile": "ETTIKAGOZA Regular",
+    "background": "Preview_BG_Loop-02.png",
+    "fontFile": "BaiJamjuree-Bold.ttf",
     "team1_name": {
       "enabled": true,
-      "font": "ETTIKAGOZA Regular",
+      "font": "BaiJamjuree-Bold",
       "color": "#1a1a2e",
       "size": 45,
       "bold": true,
@@ -151,16 +207,16 @@
     },
     "vs": {
       "enabled": true,
-      "font": "ETTIKAGOZA Regular",
+      "font": "BaiJamjuree-Bold",
       "color": "#1a1a2e",
       "size": 30,
       "bold": true,
-      "x": 1490,
+      "x": 1400,
       "y": 245
     },
     "team2_name": {
       "enabled": true,
-      "font": "ETTIKAGOZA Regular",
+      "font": "BaiJamjuree-Bold",
       "color": "#1a1a2e",
       "size": 35,
       "bold": true,
@@ -169,7 +225,7 @@
     },
     "player_name": {
       "enabled": true,
-      "font": "ETTIKAGOZA Regular",
+      "font": "BaiJamjuree-Bold",
       "color": "#1a1a2e",
       "size": 100,
       "bold": true,
@@ -178,65 +234,118 @@
     },
     "kills": {
       "enabled": true,
-      "font": "ETTIKAGOZA Regular",
+      "font": "BaiJamjuree-Bold",
       "color": "#1a1a2e",
       "size": 60,
       "bold": false,
       "x": 730,
-      "y": 615
+      "y": 515
     },
     "assists": {
       "enabled": true,
-      "font": "ETTIKAGOZA Regular",
+      "font": "BaiJamjuree-Bold",
       "color": "#1a1a2e",
       "size": 60,
       "bold": false,
       "x": 960,
-      "y": 615
+      "y": 515
     },
     "deaths": {
       "enabled": true,
-      "font": "ETTIKAGOZA Regular",
+      "font": "BaiJamjuree-Bold",
       "color": "#1a1a2e",
       "size": 60,
       "bold": false,
       "x": 1200,
-      "y": 615
+      "y": 515
     },
     "rating": {
       "enabled": true,
-      "font": "ETTIKAGOZA Regular",
+      "font": "BaiJamjuree-Bold",
       "color": "#1a1a2e",
       "size": 60,
       "bold": false,
       "x": 730,
-      "y": 880
+      "y": 780
     },
     "hs": {
       "enabled": true,
-      "font": "ETTIKAGOZA Regular",
+      "font": "BaiJamjuree-Bold",
       "color": "#1a1a2e",
       "size": 60,
       "bold": false,
       "x": 960,
-      "y": 880
+      "y": 780
     },
     "clutches": {
       "enabled": true,
-      "font": "ETTIKAGOZA Regular",
+      "font": "BaiJamjuree-Bold",
       "color": "#1a1a2e",
       "size": 60,
       "bold": false,
       "x": 1200,
-      "y": 880
+      "y": 780
+    },
+    "column_headers": {
+      "enabled": true,
+      "y": 430,
+      "y2": 695,
+      "font": "BaiJamjuree-Bold",
+      "color": "#1a1a2e",
+      "size": 40,
+      "bold": true,
+      "kills_label": "Kills",
+      "assists_label": "Assists",
+      "deaths_label": "Deaths",
+      "rating_label": "Rating",
+      "hs_label": "HS%",
+      "clutches_label": "Clutches"
+    },
+    "shapes": {
+      "enabled": true,
+      "team_pill": {
+        "enabled": true,
+        "fill": "#000000",
+        "alpha": 0.35,
+        "radius": 50,
+        "width": 400,
+        "height": 90,
+        "border": "#ffffff",
+        "border_alpha": 0.2,
+        "border_width": 2
+      },
+      "player_pill": {
+        "enabled": true,
+        "fill": "#000000",
+        "alpha": 0.3,
+        "radius": 50,
+        "width": 600,
+        "height": 110,
+        "border": "#ffffff",
+        "border_alpha": 0.2,
+        "border_width": 2
+      },
+      "stats_bar": {
+        "enabled": true,
+        "fill": "#000000",
+        "alpha": 0.2,
+        "radius": 22,
+        "x": 520,
+        "y": 600,
+        "width": 900,
+        "height": 500,
+        "border": "#ffffff",
+        "border_alpha": 0.1,
+        "border_width": 1
+      }
     }
   },
   "team_season": {
-    "background": "Fracture_PresTeam.png",
-    "fontFile": "Exquite",
+    "background": "Preview_BG_Loop-02.png",
+    "fontFile": "BaiJamjuree-Bold.ttf",
     "team_name": {
       "enabled": true,
-      "font": "Exquite",
+      "font": "BaiJamjuree-Bold",
       "color": "#1a1a2e",
       "size": 55,
       "bold": true,
@@ -245,27 +354,39 @@
     },
     "team_rating": {
       "enabled": true,
-      "font": "Exquite",
+      "font": "BaiJamjuree-Bold",
       "color": "#1a1a2e",
       "size": 55,
       "bold": true,
-      "x": 1500,
-      "y": 820
+      "x": 1435,
+      "y": 850
+    },
+    "best_map_label": {
+      "enabled": true,
+      "font": "Arial",
+      "color": "#1a1a2e",
+      "size": 50,
+      "bold": true,
+      "x": 590,
+      "y": 920,
+      "text": "Meilleure Map"
     },
     "players": {
       "enabled": true,
-      "font": "Exquite",
+      "font": "BaiJamjuree-Bold",
       "color": "#FFFFFF",
       "size": 35,
       "bold": true,
       "x": [
-        400,
-        580,
-        780
+        180,
+        420,
+        660,
+        900,
+        1140
       ],
       "name_y": 310,
       "show_rating": false,
-      "rating_font": "Exquite",
+      "rating_font": "BaiJamjuree-Bold",
       "rating_color": "#1a1a2e",
       "rating_size": 20,
       "rating_bold": false,
@@ -273,75 +394,92 @@
     },
     "kills": {
       "enabled": true,
-      "font": "Exquite",
+      "font": "BaiJamjuree-Bold",
       "color": "#1a1a2e",
-      "size": 45,
-      "bold": false,
-      "x": 1470,
-      "y": 535
+      "size": 30,
+      "bold": true,
+      "x": 1300,
+      "y": 650
     },
     "deaths": {
       "enabled": true,
-      "font": "Exquite",
+      "font": "BaiJamjuree-Bold",
       "color": "#1a1a2e",
-      "size": 45,
-      "bold": false,
-      "x": 1555,
-      "y": 580
+      "size": 30,
+      "bold": true,
+      "x": 1570,
+      "y": 650
     },
     "plants": {
       "enabled": true,
-      "font": "Exquite",
+      "font": "BaiJamjuree-Bold",
       "color": "#1a1a2e",
-      "size": 45,
-      "bold": false,
-      "x": 1470,
-      "y": 380
+      "size": 30,
+      "bold": true,
+      "x": 1300,
+      "y": 550
     },
     "defuses": {
       "enabled": true,
-      "font": "Exquite",
+      "font": "BaiJamjuree-Bold",
       "color": "#1a1a2e",
-      "size": 45,
-      "bold": false,
-      "x": 1555,
-      "y": 440
+      "size": 30,
+      "bold": true,
+      "x": 1570,
+      "y": 550
     },
     "rounds_won": {
       "enabled": true,
-      "font": "Exquite",
+      "font": "BaiJamjuree-Bold",
       "color": "#2e7d32",
-      "size": 45,
-      "bold": false,
-      "x": 1470,
-      "y": 670
+      "size": 30,
+      "bold": true,
+      "x": 1300,
+      "y": 750
     },
     "rounds_lost": {
       "enabled": true,
-      "font": "Exquite",
+      "font": "BaiJamjuree-Bold",
       "color": "#c62828",
-      "size": 45,
-      "bold": false,
-      "x": 1555,
-      "y": 710
+      "size": 30,
+      "bold": true,
+      "x": 1570,
+      "y": 750
     },
     "wins": {
       "enabled": true,
-      "font": "Exquite",
+      "font": "BaiJamjuree-Bold",
       "color": "#2e7d32",
-      "size": 40,
-      "bold": false,
+      "size": 30,
+      "bold": true,
       "x": 1300,
-      "y": 215
+      "y": 450
     },
     "losses": {
       "enabled": true,
-      "font": "Exquite",
+      "font": "BaiJamjuree-Bold",
       "color": "#c62828",
-      "size": 40,
-      "bold": false,
-      "x": 1565,
-      "y": 215
+      "size": 30,
+      "bold": true,
+      "x": 1570,
+      "y": 450
+    },
+    "stat_labels": {
+      "enabled": true,
+      "font": "BaiJamjuree-Bold",
+      "color": "#888888",
+      "size": 30,
+      "bold": true,
+      "y_offset": 50,
+      "team_rating_label": "Rating",
+      "kills_label": "Kills",
+      "deaths_label": "Deces",
+      "plants_label": "Plants",
+      "defuses_label": "Defuses",
+      "rounds_won_label": "Rounds gagnes",
+      "rounds_lost_label": "Rounds perdus",
+      "wins_label": "",
+      "losses_label": ""
     },
     "map_image": {
       "enabled": true,
@@ -349,6 +487,41 @@
       "y": 445,
       "width": 610,
       "height": 420
+    },
+    "shapes": {
+      "enabled": true,
+      "team_pill": {
+        "enabled": true,
+        "fill": "#000000",
+        "alpha": 0.35,
+        "radius": 50,
+        "width": 600,
+        "height": 75,
+        "border": "#ffffff",
+        "border_alpha": 0.2,
+        "border_width": 2
+      },
+      "player_pill": {
+        "enabled": true,
+        "fill": "#000000",
+        "alpha": 0.25,
+        "radius": 50,
+        "width": 240,
+        "height": 55,
+        "border": "#ffffff",
+        "border_alpha": 0.2,
+        "border_width": 1.5
+      },
+      "stats_background": {
+        "enabled": true,
+        "fill": "#000000",
+        "alpha": 0.15,
+        "radius": 22,
+        "x": 1120,
+        "y": 400,
+        "width": 600,
+        "height": 500
+      }
     }
   }
 }
