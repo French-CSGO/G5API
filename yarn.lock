@@ -852,10 +852,12 @@
     "@types/connect" "*"
     "@types/node" "*"
 
-"@types/config@^3.3.0":
-  version "3.3.0"
-  resolved "https://registry.npmjs.org/@types/config/-/config-3.3.0.tgz"
-  integrity sha512-9kZSbl3/X3TVNowLCu5HFQdQmD+4287Om55avknEYkuo6R2dDrsp/EXEHUFvfYeG7m1eJ0WYGj+cbcUIhARJAQ==
+"@types/config@^4.4.0":
+  version "4.4.0"
+  resolved "https://registry.yarnpkg.com/@types/config/-/config-4.4.0.tgz#eca99ca07594cc23551d1a7a1bf4d04f63bd238a"
+  integrity sha512-+82/thz8il6uR6mWFuMTWyC+jSXE4PIZUPmAfKUDOuvNULq3BPLM+tSKsAe3eOIOMKx5azvg3Q3JljWV9yX7aw==
+  dependencies:
+    config "*"
 
 "@types/connect@*":
   version "3.4.35"
@@ -1777,10 +1779,10 @@ concat-stream@^2.0.0:
     readable-stream "^3.0.2"
     typedarray "^0.0.6"
 
-config@^3.3.11:
-  version "3.3.11"
-  resolved "https://registry.npmjs.org/config/-/config-3.3.11.tgz"
-  integrity sha512-Dhn63ZoWCW5EMg4P0Sl/XNsj/7RLiUIA1x1npCy+m2cRwRHzLnt3UtYtxRDMZW/6oOMdWhCzaGYkOcajGgrAOA==
+config@*, config@^4.4.1:
+  version "4.4.1"
+  resolved "https://registry.yarnpkg.com/config/-/config-4.4.1.tgz#01e3f6bdd261ccf211a4fdb2f1b319aa5a2928ad"
+  integrity sha512-XfN4Q4+wBKkGtgMyQ+5ayjepdb0MrdiGKfBr0G1PTLx9rnqsX+Xiw03LEUtSALZU0UVfcFp6+xYV0NL8HLF94g==
   dependencies:
     json5 "^2.2.3"
 
