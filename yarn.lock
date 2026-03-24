@@ -5366,7 +5366,7 @@ underscore@~1.13.2:
 undici@6.24.0:
   version "6.24.0"
   resolved "https://registry.npmjs.org/undici/-/undici-6.24.0.tgz"
-  integrity sha512-gBLkYIlEnSp8pFbT64yFgGE6UIB9tAkhukC23PmMDCe5Nd+cRqKxSjw5y54MK2AZMgZfJWMaNE4nYUHgi1XEOw==
+  integrity sha512-lVLNosgqo5EkGqh5XUDhGfsMSoO8K0BAN0TyJLvwNRSl4xWGZlCVYsAIpa/OpA3TvmnM01GWcoKmc3ZWo5wKKA==
 
 universalify@^2.0.0:
   version "2.0.1"
