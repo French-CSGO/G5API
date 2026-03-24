@@ -26,6 +26,7 @@ import { RowDataPacket } from "mysql2";
  * Global Server Sent Emitter class for real time data.
  */
 import { existsSync, mkdirSync, writeFile } from "fs";
+import path from "path";
 
 /** Express module
  * @const
@@ -110,11 +111,24 @@ router.post("/", async (req: Request, res: Response) => {
       });
       return;
     }
-    if (!existsSync(`public/backups/${matchId}/`))
-      mkdirSync(`public/backups/${matchId}/`, { recursive: true });
+    const backupRoot = path.resolve("public", "backups");
+    const matchDir = path.resolve(backupRoot, matchId);
+    if (!(matchDir === backupRoot || matchDir.startsWith(backupRoot + path.sep))) {
+      res.status(403).send({ message: "Invalid match ID path." });
+      return;
+    }
+
+    if (!existsSync(matchDir)) {
+      mkdirSync(matchDir, { recursive: true });
+    }
+
+    const backupFilePath = path.join(
+      matchDir,
+      `get5_backup_match${matchId}_map${mapNumber}_round${roundNumber}.cfg`
+    );
 
     writeFile(
-      `public/backups/${matchId}/get5_backup_match${matchId}_map${mapNumber}_round${roundNumber}.cfg`,
+      backupFilePath,
       req.body,
       function (err) {
         if (err) {
