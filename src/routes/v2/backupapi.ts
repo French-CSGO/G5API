@@ -102,6 +102,18 @@ router.post("/", async (req: Request, res: Response) => {
       });
       return;
     }
+    // Validate that path components are numeric to prevent path traversal.
+    const idPattern = /^[0-9]+$/;
+    if (
+      !idPattern.test(matchId) ||
+      !idPattern.test(mapNumber) ||
+      !idPattern.test(roundNumber)
+    ) {
+      res.status(400).send({
+        message: "Match ID, Map Number, and Round Number must be numeric."
+      });
+      return;
+    }
     // Check if our API key is correct.
     const matchApiCheck: number = await Utils.checkApiKey(apiKey, matchId);
     if (matchApiCheck == 1 || matchApiCheck == 2) {
