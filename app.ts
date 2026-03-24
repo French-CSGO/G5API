@@ -271,7 +271,7 @@ app.post(
   },
   (err: any, req: any, res: any, next: any) => {
     err.message = getSessionMessage(err, req, "Registration failed");
-    return res.json(err);
+    return res.status(err.status || 400).json({ error: err.message });
   }
 );
 
