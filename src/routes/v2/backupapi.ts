@@ -13,7 +13,6 @@
 /** Config to check demo uploads.
  * @const
  */
-import config from "config";
 
 import { db } from "../../services/db.js";
 
