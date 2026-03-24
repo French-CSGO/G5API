@@ -121,6 +121,15 @@ router.post("/", backupRateLimiter, async (req: Request, res: Response) => {
       });
       return;
     }
+    // Validate mapNumber and roundNumber to ensure they are simple, safe values.
+    // Allow only up to three digits for each; adjust the pattern if a wider range is required.
+    const numberPattern = /^[0-9]{1,3}$/;
+    if (!numberPattern.test(mapNumber) || !numberPattern.test(roundNumber)) {
+      res.status(400).send({
+        message: "Invalid map or round number format."
+      });
+      return;
+    }
     // Check if our API key is correct.
     const matchApiCheck: number = await Utils.checkApiKey(apiKey, matchId);
     if (matchApiCheck == 1 || matchApiCheck == 2) {
@@ -144,9 +153,15 @@ router.post("/", backupRateLimiter, async (req: Request, res: Response) => {
       matchDir,
       `get5_backup_match${matchId}_map${mapNumber}_round${roundNumber}.cfg`
     );
+    // Normalize and verify the final backup file path to ensure it remains within matchDir.
+    const resolvedBackupFilePath = path.resolve(matchDir, path.basename(backupFilePath));
+    if (!(resolvedBackupFilePath === matchDir || resolvedBackupFilePath.startsWith(matchDir + path.sep))) {
+      res.status(403).send({ message: "Invalid backup file path." });
+      return;
+    }
 
     writeFile(
-      backupFilePath,
+      resolvedBackupFilePath,
       req.body,
       function (err) {
         if (err) {
