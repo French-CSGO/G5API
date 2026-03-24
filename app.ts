@@ -187,7 +187,7 @@ app.get(
     passport.authenticate("steam-dynamic", { failureRedirect: "/" })(req, res, next);
   },
   (req, res) => {
-    if (process.env.NODE_ENV == "test") {
+    if (process.env.NODE_ENV === "test") {
       res.redirect("/");
     } else {
       const from = (req.query.from as string) || "";
