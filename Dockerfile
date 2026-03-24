@@ -13,5 +13,5 @@ CMD envsubst < /Get5API/config/production.json.template > /Get5API/config/produc
     sed -i "s/db:create get5$/db:create $DATABASE/" /Get5API/package.json && \
     yarn migrate-create-prod && \
     yarn migrate-prod-upgrade && \
-    yarn startprod && \
-    yarn pm2 logs
+    yarn startprod
+
