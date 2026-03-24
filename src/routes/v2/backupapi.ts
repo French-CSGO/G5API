@@ -140,6 +140,7 @@ router.post("/", backupRateLimiter, async (req: Request, res: Response) => {
     }
     const backupRoot = path.resolve("public", "backups");
     const matchDir = path.resolve(backupRoot, matchId);
+    // Ensure the per-match directory is inside the backup root.
     if (!(matchDir === backupRoot || matchDir.startsWith(backupRoot + path.sep))) {
       res.status(403).send({ message: "Invalid match ID path." });
       return;
@@ -153,9 +154,9 @@ router.post("/", backupRateLimiter, async (req: Request, res: Response) => {
       matchDir,
       `get5_backup_match${matchId}_map${mapNumber}_round${roundNumber}.cfg`
     );
-    // Normalize and verify the final backup file path to ensure it remains within matchDir.
-    const resolvedBackupFilePath = path.resolve(matchDir, path.basename(backupFilePath));
-    if (!(resolvedBackupFilePath === matchDir || resolvedBackupFilePath.startsWith(matchDir + path.sep))) {
+    // Normalize and verify the final backup file path to ensure it remains within the backup root.
+    const resolvedBackupFilePath = path.resolve(backupFilePath);
+    if (!(resolvedBackupFilePath === backupRoot || resolvedBackupFilePath.startsWith(backupRoot + path.sep))) {
       res.status(403).send({ message: "Invalid backup file path." });
       return;
     }
