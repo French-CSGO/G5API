@@ -90,7 +90,12 @@ if (config.get("server.useRedis")) {
     resave: false,
     saveUninitialized: true,
     store: new RedisStore(redisCfg),
-    cookie: { maxAge: 2628000000 },
+    cookie: {
+      maxAge: 2628000000,
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+    },
   });
 
   let isShuttingDown = false;
