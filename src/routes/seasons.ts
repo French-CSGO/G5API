@@ -674,6 +674,40 @@ router.post("/challonge", Utils.ensureAuthenticated, async (req, res, next) => {
       return res.json(result);
     }
 
+    // Validate and normalize Challonge tournament identifier or URL
+    const sanitizeChallongeTournamentId = (input: string): string => {
+      const trimmed = (input || "").trim();
+      if (!trimmed) {
+        throw "No Challonge tournament ID provided.";
+      }
+
+      // If a full URL is provided, ensure it points to challonge.com and extract the last path segment.
+      if (/^https?:\/\//i.test(trimmed)) {
+        let url;
+        try {
+          url = new URL(trimmed);
+        } catch {
+          throw "Invalid Challonge tournament URL.";
+        }
+        const hostname = url.hostname.toLowerCase();
+        const allowedChallongeHosts = ["challonge.com", "www.challonge.com"];
+        if (!allowedChallongeHosts.includes(hostname)) {
+          throw "Tournament URL must be a challonge.com URL.";
+        }
+        const pathSegments = url.pathname.split("/").filter(Boolean);
+        const lastSegment = pathSegments[pathSegments.length - 1];
+        if (!lastSegment || !/^[A-Za-z0-9_-]+$/.test(lastSegment)) {
+          throw "Invalid Challonge tournament identifier in URL.";
+        }
+        return lastSegment;
+      }
+
+      // Otherwise, treat as a plain tournament ID/slug and restrict to safe characters.
+      if (!/^[A-Za-z0-9_-]+$/.test(trimmed)) {
+        throw "Invalid Challonge tournament ID.";
+      }
+      return trimmed;
+    };
 
     const userInfo: RowDataPacket[] = await db.query("SELECT challonge_api_key FROM user WHERE id = ?", [req.user!.id]);
     let challongeAPIKey: string | undefined | null = Utils.decrypt(userInfo[0].challonge_api_key);
@@ -681,7 +715,7 @@ router.post("/challonge", Utils.ensureAuthenticated, async (req, res, next) => {
       throw "No challonge API key provided for user.";
     }
 
-    let tournamentId: string = req.body[0].tournament_id;
+    let tournamentId: string = sanitizeChallongeTournamentId(req.body[0].tournament_id);
     let challongeResponse: any = await fetch(
       "https://api.challonge.com/v1/tournaments/" +
       tournamentId +
