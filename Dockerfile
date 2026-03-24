@@ -11,7 +11,7 @@ RUN yarn build
 
 FROM node:25-alpine
 
-RUN apk add --no-cache gettext python3
+RUN apk add --no-cache gettext python3 cairo pango jpeg giflib librsvg pixman
 
 EXPOSE 3301
 # copy built application from builder stage
