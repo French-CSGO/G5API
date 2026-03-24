@@ -3,8 +3,6 @@
 var dbm;
 var type;
 var seed;
-var async = require('async');
-
 /**
   * We receive the dbmigrate dependency from dbmigrate initially.
   * This enables us to not have to rely on NODE_PATH.
