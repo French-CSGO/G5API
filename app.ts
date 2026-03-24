@@ -90,7 +90,12 @@ if (config.get("server.useRedis")) {
     resave: false,
     saveUninitialized: true,
     store: new RedisStore(redisCfg),
-    cookie: { maxAge: 2628000000 },
+    cookie: {
+      maxAge: 2628000000,
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+    },
   });
 
   let isShuttingDown = false;
@@ -151,7 +156,7 @@ const options = {
     openapi: "3.0.0", // Specification (optional, defaults to swagger: '2.0')
     info: {
       title: "MatchZy API", // Title (required)
-      version: "2.0.2+4" // Version (required, SemVer: MAJOR.MINOR.PATCH with optional +BUILD metadata)
+      version: "2.0.2" // Version (required, SemVer: MAJOR.MINOR.PATCH; build metadata +4 tracked separately)
     }
   },
   // Path to the API docs
@@ -271,7 +276,7 @@ app.post(
   },
   (err: any, req: any, res: any, next: any) => {
     err.message = getSessionMessage(err, req, "Registration failed");
-    return res.json(err);
+    return res.status(err.status || 400).json({ error: err.message });
   }
 );
 
