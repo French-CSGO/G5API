@@ -19,7 +19,7 @@ jobs:
         with:
           buildkitd-flags: --debug
       - id: string
-        uses: ASzc/change-string-case-action@v5
+        uses: ASzc/change-string-case-action@v8
         with:
           string: ${{ github.repository_owner }}
       - uses: actions/checkout@v3.3.0
