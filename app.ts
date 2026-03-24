@@ -151,7 +151,7 @@ const options = {
     openapi: "3.0.0", // Specification (optional, defaults to swagger: '2.0')
     info: {
       title: "MatchZy API", // Title (required)
-      version: "2.0.2.4" // Version (required)
+      version: "2.0.2+4" // Version (required, SemVer: MAJOR.MINOR.PATCH+BUILD)
     }
   },
   // Path to the API docs
@@ -225,10 +225,10 @@ app.get(
   }
 );
 
-app.get('/logout', function(req, res, next) {
+app.get("/logout", function(req, res, next) {
   req.logout(function(err) {
     if (err) { return next(err); }
-    res.redirect('/');
+    res.redirect("/");
   });
 });
 // END Steam API Calls.
@@ -259,7 +259,7 @@ app.post(
   (req: any, res: any) => {
     return res.json({ message: "Success!" });
   },
-  (err: any, req: any, res: any, next: any) => {
+  (err: any, req: any, res: any) => {
     err.message = getSessionMessage(err, req, "Registration failed");
     return res.json(err);
   }
