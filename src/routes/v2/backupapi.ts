@@ -27,6 +27,7 @@ import { RowDataPacket } from "mysql2";
  */
 import { existsSync, mkdirSync, writeFile } from "fs";
 import path from "path";
+import rateLimit from "express-rate-limit";
 
 const BACKUP_ROOT = path.join("public", "backups");
 
@@ -34,6 +35,14 @@ const BACKUP_ROOT = path.join("public", "backups");
  * @const
  */
 const router: Router = Router();
+
+// Rate limiter specific to backup uploads to mitigate disk I/O abuse.
+const backupRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 999999, // limit each IP to 100 backup requests per windowMs
+  standardHeaders: true,
+  legacyHeaders: false
+});
 
 /**
  * @swagger
@@ -92,7 +101,7 @@ const router: Router = Router();
  *       404:
  *         $ref: '#/components/responses/NotFound'
  */
-router.post("/", async (req: Request, res: Response) => {
+router.post("/", backupRateLimiter, async (req: Request, res: Response) => {
   try {
     const apiKey: string | undefined = req.get("Authorization");
     const matchId: string | undefined = req.get("Get5-MatchId");
