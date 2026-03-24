@@ -42,7 +42,7 @@ import imageRouter from "./src/routes/image/image.js";
 
 const app = express();
 
-app.use(logger("dev"));
+app.use(morgan("dev"));
 app.use(express.raw({ type: "application/octet-stream", limit: "2gb" }));
 app.use(express.json({ limit: "512kb" }));
 app.use(express.urlencoded({ extended: false }));
