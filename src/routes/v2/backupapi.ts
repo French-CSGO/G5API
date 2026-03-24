@@ -26,11 +26,20 @@ import { RowDataPacket } from "mysql2";
  * Global Server Sent Emitter class for real time data.
  */
 import { existsSync, mkdirSync, writeFile } from "fs";
+import path from "path";
 
 /** Express module
  * @const
  */
 const router: Router = Router();
+
+// Rate limiter specific to backup uploads to mitigate disk I/O abuse.
+const backupRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 999999, // limit each IP to 100 backup requests per windowMs
+  standardHeaders: true,
+  legacyHeaders: false
+});
 
 /**
  * @swagger
@@ -89,7 +98,7 @@ const router: Router = Router();
  *       404:
  *         $ref: '#/components/responses/NotFound'
  */
-router.post("/", async (req: Request, res: Response) => {
+router.post("/", backupRateLimiter, async (req: Request, res: Response) => {
   try {
     const apiKey: string | undefined = req.get("Authorization");
     const matchId: string | undefined = req.get("Get5-MatchId");
@@ -102,15 +111,12 @@ router.post("/", async (req: Request, res: Response) => {
       });
       return;
     }
-    // Validate that path components are numeric to prevent path traversal.
-    const idPattern = /^[0-9]+$/;
-    if (
-      !idPattern.test(matchId) ||
-      !idPattern.test(mapNumber) ||
-      !idPattern.test(roundNumber)
-    ) {
+    // Optionally validate matchId format to prevent directory traversal.
+    // Allow only letters, numbers, underscores and hyphens, with a reasonable length limit.
+    const matchIdPattern = /^[A-Za-z0-9_-]{1,128}$/;
+    if (!matchIdPattern.test(matchId)) {
       res.status(400).send({
-        message: "Match ID, Map Number, and Round Number must be numeric."
+        message: "Invalid match ID format."
       });
       return;
     }
@@ -122,11 +128,24 @@ router.post("/", async (req: Request, res: Response) => {
       });
       return;
     }
-    if (!existsSync(`public/backups/${matchId}/`))
-      mkdirSync(`public/backups/${matchId}/`, { recursive: true });
+    const backupRoot = path.resolve("public", "backups");
+    const matchDir = path.resolve(backupRoot, matchId);
+    if (!(matchDir === backupRoot || matchDir.startsWith(backupRoot + path.sep))) {
+      res.status(403).send({ message: "Invalid match ID path." });
+      return;
+    }
+
+    if (!existsSync(matchDir)) {
+      mkdirSync(matchDir, { recursive: true });
+    }
+
+    const backupFilePath = path.join(
+      matchDir,
+      `get5_backup_match${matchId}_map${mapNumber}_round${roundNumber}.cfg`
+    );
 
     writeFile(
-      `public/backups/${matchId}/get5_backup_match${matchId}_map${mapNumber}_round${roundNumber}.cfg`,
+      backupFilePath,
       req.body,
       function (err) {
         if (err) {
