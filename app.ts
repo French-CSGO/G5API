@@ -151,7 +151,7 @@ const options = {
     openapi: "3.0.0", // Specification (optional, defaults to swagger: '2.0')
     info: {
       title: "MatchZy API", // Title (required)
-      version: "2.0.2+4" // Version (required, SemVer: MAJOR.MINOR.PATCH with optional +BUILD metadata)
+      version: "2.0.2" // Version (required, SemVer: MAJOR.MINOR.PATCH; build metadata +4 tracked separately)
     }
   },
   // Path to the API docs
