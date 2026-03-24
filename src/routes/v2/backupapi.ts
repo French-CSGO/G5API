@@ -150,11 +150,17 @@ router.post("/", backupRateLimiter, async (req: Request, res: Response) => {
       function (err) {
         if (err) {
           console.error(err);
-          throw err;
+          // Failed to write the backup file; respond with an error instead of throwing.
+          if (!res.headersSent) {
+            res.status(500).send({ message: "Failed to write backup file." });
+          }
+          return;
+        }
+        if (!res.headersSent) {
+          res.status(200).send({ message: "Success" });
         }
       }
     );
-    res.status(200).send({ message: "Success" });
   } catch (error) {
     console.error(error);
     res.status(500).send({ message: error });
