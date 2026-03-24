@@ -146,7 +146,7 @@
     "ts-node": "^10.9.2",
     "ts-node-dev": "^2.0.0",
     "tsc": "^2.0.4",
-    "tsc-watch": "^6.2.1",
+    "tsc-watch": "^7.2.0",
     "typescript": "^5.9.3"
   }
 }
