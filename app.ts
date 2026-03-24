@@ -43,15 +43,15 @@ function logError(err: unknown): void {
   }
 }
 
-interface RequestWithSessionMessages extends Request {
-  session?: {
+declare module "express-session" {
+  interface SessionData {
     messages?: string[];
-  };
+  }
 }
 
 function getSessionMessage(
   err: unknown,
-  req: RequestWithSessionMessages | undefined,
+  req: Request | undefined,
   fallback: string
 ): string {
   const messages = req?.session?.messages;
