@@ -33,6 +33,14 @@ import path from "path";
  */
 const router: Router = Router();
 
+// Rate limiter specific to backup uploads to mitigate disk I/O abuse.
+const backupRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 999999, // limit each IP to 100 backup requests per windowMs
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
 /**
  * @swagger
  *
@@ -90,7 +98,7 @@ const router: Router = Router();
  *       404:
  *         $ref: '#/components/responses/NotFound'
  */
-router.post("/", async (req: Request, res: Response) => {
+router.post("/", backupRateLimiter, async (req: Request, res: Response) => {
   try {
     const apiKey: string | undefined = req.get("Authorization");
     const matchId: string | undefined = req.get("Get5-MatchId");
@@ -100,6 +108,15 @@ router.post("/", async (req: Request, res: Response) => {
     if (!apiKey || !matchId || !mapNumber || !roundNumber) {
       res.status(401).send({
         message: "API key, Match ID, Map Number, or Round Number not provided."
+      });
+      return;
+    }
+    // Optionally validate matchId format to prevent directory traversal.
+    // Allow only letters, numbers, underscores and hyphens, with a reasonable length limit.
+    const matchIdPattern = /^[A-Za-z0-9_-]{1,128}$/;
+    if (!matchIdPattern.test(matchId)) {
+      res.status(400).send({
+        message: "Invalid match ID format."
       });
       return;
     }
