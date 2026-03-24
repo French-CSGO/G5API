@@ -949,7 +949,43 @@ router.post("/challonge", Utils.ensureAuthenticated, async (req, res) => {
     let userID: number = req.user!.id;
     const userInfo: RowDataPacket[] = await db.query("SELECT challonge_api_key FROM user WHERE id = ?", [userID]);
     let challongeAPIKey: string | undefined | null = Utils.decrypt(userInfo[0].challonge_api_key);
-    let tournamentId: string = req.body[0].tournament_id;
+    let rawTournamentId: string = req.body[0].tournament_id;
+
+    // Normalize and validate the tournament identifier to avoid SSRF and unexpected URLs.
+    let tournamentId: string;
+    if (typeof rawTournamentId !== "string" || rawTournamentId.trim().length === 0) {
+      return res.status(400).json({ message: "Invalid Challonge tournament identifier." });
+    }
+
+    const trimmedTournamentId = rawTournamentId.trim();
+    if (trimmedTournamentId.startsWith("http://") || trimmedTournamentId.startsWith("https://")) {
+      let parsed: URL;
+      try {
+        parsed = new URL(trimmedTournamentId);
+      } catch {
+        return res.status(400).json({ message: "Invalid Challonge tournament URL." });
+      }
+
+      const hostname = parsed.hostname.toLowerCase();
+      if (hostname !== "challonge.com" && hostname !== "www.challonge.com") {
+        return res.status(400).json({ message: "Tournament URL must point to challonge.com." });
+      }
+
+      const segments = parsed.pathname.split("/").filter(Boolean);
+      const lastSegment = segments[segments.length - 1];
+      if (!lastSegment) {
+        return res.status(400).json({ message: "Could not determine Challonge tournament identifier from URL." });
+      }
+      tournamentId = lastSegment;
+    } else {
+      tournamentId = trimmedTournamentId;
+    }
+
+    // Only allow safe characters in the final tournament identifier.
+    if (!/^[A-Za-z0-9_-]+$/.test(tournamentId)) {
+      return res.status(400).json({ message: "Invalid characters in Challonge tournament identifier." });
+    }
+
     let challongeResponse: any = await fetch("https://api.challonge.com/v1/tournaments/" + tournamentId + "/participants.json?api_key=" + challongeAPIKey);
     let challongeData: any = await challongeResponse.json();
     if (!challongeData) {
