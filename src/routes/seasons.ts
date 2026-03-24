@@ -1200,6 +1200,10 @@ router.patch("/:season_id/toornament/rounds/:round_id/schedule", Utils.ensureAut
 router.patch("/:season_id/toornament/matches/:match_id/schedule", Utils.ensureAuthenticated, async (req, res) => {
   try {
     const matchId = req.params.match_id;
+    // Validate matchId to avoid using arbitrary user-controlled data in the request URL path
+    if (!/^[A-Za-z0-9_-]+$/.test(matchId)) {
+      return res.status(400).json({ message: "Invalid match_id" });
+    }
     const { scheduled_datetime } = req.body;
     if (!scheduled_datetime) return res.status(400).json({ message: "scheduled_datetime is required" });
 
