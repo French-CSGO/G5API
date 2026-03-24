@@ -181,8 +181,8 @@ app.use(
     );
     next();
   },
-  serve as any,
-  setup(swaggerSpec) as any
+  serve,
+  setup(swaggerSpec)
 );
 
 // END API SETUP
