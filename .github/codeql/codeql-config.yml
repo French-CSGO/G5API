@@ -1,0 +1,9 @@
+name: CodeQL Config
+
+paths-ignore:
+  - migrations
+  - node_modules
+  - dist
+  - build
+  - public
+  - "**/*.min.js"
