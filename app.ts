@@ -80,9 +80,26 @@ if (config.get("server.useRedis")) {
     store: new RedisStore(redisCfg),
     cookie: { maxAge: 2628000000 },
   });
-  process.on("exit", function () {
-    redisClient.quit();
-  });
+
+  let isShuttingDown = false;
+  const handleShutdown = (signal: NodeJS.Signals) => {
+    if (isShuttingDown) {
+      return;
+    }
+    isShuttingDown = true;
+    (async () => {
+      try {
+        await redisClient.quit();
+      } catch (err) {
+        console.error(`Error quitting Redis client on ${signal}:`, err);
+      } finally {
+        process.exit(0);
+      }
+    })();
+  };
+
+  process.on("SIGINT", handleShutdown);
+  process.on("SIGTERM", handleShutdown);
 } else {
   sessionType = session({
     secret: config.get("server.sharedSecret"),
