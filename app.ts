@@ -7,7 +7,6 @@ import bearerToken from "express-bearer-token";
 import session from "express-session";
 import helmet from "helmet";
 import createError from "http-errors";
-import logger from "morgan";
 import morgan from "morgan";
 import { createClient } from "redis";
 import swaggerJSDoc from "swagger-jsdoc";
