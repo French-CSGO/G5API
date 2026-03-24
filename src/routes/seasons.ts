@@ -690,7 +690,8 @@ router.post("/challonge", Utils.ensureAuthenticated, async (req, res, next) => {
           throw "Invalid Challonge tournament URL.";
         }
         const hostname = url.hostname.toLowerCase();
-        if (!hostname.endsWith("challonge.com")) {
+        const allowedChallongeHosts = ["challonge.com", "www.challonge.com"];
+        if (!allowedChallongeHosts.includes(hostname)) {
           throw "Tournament URL must be a challonge.com URL.";
         }
         const pathSegments = url.pathname.split("/").filter(Boolean);
