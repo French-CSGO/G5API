@@ -64,8 +64,10 @@ if (config.get("server.useRedis")) {
   const redisClient = createClient({
     url: config.get("server.redisUrl"),
   });
-  
-  await redisClient.connect();
+
+  redisClient.connect().catch((err) => {
+    console.log("Redis connection error: ", err);
+  });
   redisClient.on("error", (err) => {
     console.log("Redis error: ", err);
   });
