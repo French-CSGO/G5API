@@ -11,6 +11,7 @@ import logger from "morgan";
 import morgan from "morgan";
 import { createClient } from "redis";
 import swaggerJSDoc from "swagger-jsdoc";
+import { csrf } from "lusca";
 
 import { serve, setup } from "swagger-ui-express";
 
@@ -48,6 +49,7 @@ app.use(express.raw({ type: "application/octet-stream", limit: "2gb" }));
 app.use(express.json({ limit: "512kb" }));
 app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
+app.use(csrf());
 app.use("/demo", express.static("public/demos"));
 app.use("/backups", express.static("public/backups"));
 app.use("/static/img/logos", express.static("public/img/logos"));
