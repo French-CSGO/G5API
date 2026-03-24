@@ -151,7 +151,7 @@ const options = {
     openapi: "3.0.0", // Specification (optional, defaults to swagger: '2.0')
     info: {
       title: "MatchZy API", // Title (required)
-      version: "2.0.2+4" // Version (required, SemVer: MAJOR.MINOR.PATCH+BUILD)
+      version: "2.0.2+4" // Version (required, SemVer: MAJOR.MINOR.PATCH with optional +BUILD metadata)
     }
   },
   // Path to the API docs
@@ -165,7 +165,17 @@ const swaggerSpec = swaggerJSDoc(options);
 
 app.use(
   "/api-docs",
-  (_req: any, res: any, next: any) => { res.setHeader("Content-Security-Policy", ""); next(); },
+  (_req: any, res: any, next: any) => {
+    res.setHeader(
+      "Content-Security-Policy",
+      "default-src 'self'; " +
+        "script-src 'self' 'unsafe-inline'; " +
+        "style-src 'self' 'unsafe-inline'; " +
+        "img-src 'self' data:; " +
+        "connect-src 'self';"
+    );
+    next();
+  },
   serve as any,
   setup(swaggerSpec) as any
 );
@@ -225,7 +235,7 @@ app.get(
   }
 );
 
-app.get("/logout", function(req, res, next) {
+app.post("/logout", function(req, res, next) {
   req.logout(function(err) {
     if (err) { return next(err); }
     res.redirect("/");
@@ -259,7 +269,7 @@ app.post(
   (req: any, res: any) => {
     return res.json({ message: "Success!" });
   },
-  (err: any, req: any, res: any) => {
+  (err: any, req: any, res: any, next: any) => {
     err.message = getSessionMessage(err, req, "Registration failed");
     return res.json(err);
   }
