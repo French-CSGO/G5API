@@ -983,6 +983,14 @@ router.get("/:season_id/toornament/matches/:toornament_match_id/prefill", Utils.
   try {
     const seasonId = parseInt(req.params.season_id);
     const toornamentMatchId = req.params.toornament_match_id;
+
+    // Validate Toornament match ID to prevent misuse in outbound requests
+    // Adjust the regex as needed to match the exact format used by Toornament IDs.
+    const toornamentMatchIdPattern = /^[A-Za-z0-9_-]+$/;
+    if (!toornamentMatchId || !toornamentMatchIdPattern.test(toornamentMatchId)) {
+      return res.status(400).json({ message: "Invalid Toornament match ID." });
+    }
+
     const tournamentId = await getSeasonToornamentId(seasonId);
     const token = await getToornamentToken();
     const apiKey: string = getSetting("toornament.apiKey");
