@@ -13,11 +13,11 @@ exports.setup = function(options, seedLink) {
   seed = seedLink;
 };
 
-exports.up = function(db, callback) {
-  return db.addColumn('player_stats', 'winner',  { type: 'boolean', defaultValue: 0, notNull: true });
+exports.up = function(db) {
+  return db.addColumn('player_stats', 'winner',  { type: 'boolean', defaultValue: false, notNull: true });
 };
 
-exports.down = function(db, callback) {
+exports.down = function(db) {
   return db.removeColumn('player_stats', 'winner');
 };
 
