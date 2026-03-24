@@ -1641,7 +1641,12 @@ router.put(
   basicRateLimit,
   async (req, res, next) => {
     try {
-      let matchID: string = req.params.match_id;
+      const matchIdParam: string = req.params.match_id;
+      const matchIDNum: number = parseInt(matchIdParam, 10);
+      if (!Number.isInteger(matchIDNum) || matchIDNum <= 0) {
+        res.status(400).json({ message: "Invalid match_id" });
+        return;
+      }
       let mapNumber: number = parseInt(req.params.map_number);
       // This is required since we're sending an octet stream.
       let apiKey: string = keyCheck(req);
@@ -1649,7 +1654,7 @@ router.put(
       // Database calls.
       let sql: string = "SELECT * FROM `match` WHERE id = ?";
       let matchFinalized: boolean = true;
-      const matchValues: RowDataPacket[] = await db.query(sql, [matchID]);
+      const matchValues: RowDataPacket[] = await db.query(sql, [matchIDNum]);
 
       if (
         matchValues[0].end_time == null &&
@@ -1659,6 +1664,7 @@ router.put(
       // Throw error if wrong key. Match finish doesn't matter.
       await check_api_key(matchValues[0].api_key, apiKey, matchFinalized);
 
+      const matchID: string = matchIDNum.toString();
       if (!existsSync(`public/backups/${matchID}/`)) mkdirSync(`public/backups/${matchID}/`, {recursive: true});
 
       writeFile(

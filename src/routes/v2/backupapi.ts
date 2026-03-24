@@ -27,9 +27,6 @@ import { RowDataPacket } from "mysql2";
  */
 import { existsSync, mkdirSync, writeFile } from "fs";
 import path from "path";
-import rateLimit from "express-rate-limit";
-
-const BACKUP_ROOT = path.join("public", "backups");
 
 /** Express module
  * @const
@@ -131,8 +128,12 @@ router.post("/", backupRateLimiter, async (req: Request, res: Response) => {
       });
       return;
     }
-
-    const matchDir = path.join(BACKUP_ROOT, matchId);
+    const backupRoot = path.resolve("public", "backups");
+    const matchDir = path.resolve(backupRoot, matchId);
+    if (!(matchDir === backupRoot || matchDir.startsWith(backupRoot + path.sep))) {
+      res.status(403).send({ message: "Invalid match ID path." });
+      return;
+    }
 
     if (!existsSync(matchDir)) {
       mkdirSync(matchDir, { recursive: true });
