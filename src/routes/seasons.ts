@@ -736,6 +736,18 @@ router.post("/challonge", Utils.ensureAuthenticated, async (req, res, next) => {
 });
 
 
+function validateToornamentId(rawId: string): string {
+  // Strip optional "t:" prefix used internally.
+  const id = rawId.replace(/^t:/, '');
+  // Allow only a safe subset of characters and enforce a reasonable length.
+  // Adjust the pattern if Toornament IDs have a stricter known format.
+  const idPattern = /^[A-Za-z0-9_-]{1,128}$/;
+  if (!idPattern.test(id)) {
+    throw new Error("Invalid Toornament tournament id format");
+  }
+  return id;
+}
+
 async function handleToornamentImport(tournamentId: string, userId: number, reqBody: any) {
 
   const clientId: string = getSetting("toornament.clientId");
@@ -761,7 +773,7 @@ async function handleToornamentImport(tournamentId: string, userId: number, reqB
   const tokenData = await tokenResponse.json() as ToornamentTokenResponse;
   if (!tokenData.access_token) throw new Error("Toornament Auth Failed");
 
-  const cleanId = tournamentId.replace(/^t:/, '');
+  const cleanId = validateToornamentId(tournamentId);
   
   const toornamentResponse = await fetch(
     `https://api.toornament.com/organizer/v2/tournaments/${cleanId}`,
