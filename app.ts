@@ -2,7 +2,7 @@ import config from "config";
 import RedisStore from "connect-redis";
 import cookieParser from "cookie-parser";
 import cors from "cors";
-import express, { RequestHandler } from "express";
+import express, { Request, RequestHandler } from "express";
 import bearerToken from "express-bearer-token";
 import session from "express-session";
 import helmet from "helmet";
@@ -43,11 +43,30 @@ function logError(err: unknown): void {
   }
 }
 
-function getSessionMessage(err: any, req: any, fallback: string): string {
-  if (req && req.session && Array.isArray(req.session.messages) && req.session.messages.length > 0) {
-    return req.session.messages[req.session.messages.length - 1];
+interface RequestWithSessionMessages extends Request {
+  session?: {
+    messages?: string[];
+  };
+}
+
+function getSessionMessage(
+  err: unknown,
+  req: RequestWithSessionMessages | undefined,
+  fallback: string
+): string {
+  const messages = req?.session?.messages;
+  if (Array.isArray(messages) && messages.length > 0) {
+    return messages[messages.length - 1];
   }
-  return err && err.message ? err.message : fallback;
+
+  if (err && typeof err === "object" && "message" in err) {
+    const message = (err as { message?: unknown }).message;
+    if (typeof message === "string" && message.length > 0) {
+      return message;
+    }
+  }
+
+  return fallback;
 }
 
 const app = express();
@@ -129,7 +148,7 @@ if (config.get("server.useRedis")) {
 
 app.use(sessionMiddleware);
 
-app.use(passport.initialize() as any);
+app.use(passport.initialize() as RequestHandler);
 app.use(passport.session());
 app.use(bearerToken());
 
@@ -181,8 +200,8 @@ app.use(
     );
     next();
   },
-  serve as any,
-  setup(swaggerSpec) as any
+  serve,
+  setup(swaggerSpec)
 );
 
 // END API SETUP
