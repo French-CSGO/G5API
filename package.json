@@ -40,7 +40,7 @@
     "clean": "rm -rf ./dist",
     "start": "tsc-watch --project . --outDir ./dist --onSuccess \"nodemon ./dist/bin/www.js\"",
     "tsstart": "yarn build; nodemon ./dist/bin/www.js",
-    "startprod": "pm2 start ./prodrun.json --name \"G5API\"",
+    "startprod": "pm2-runtime start ./prodrun.json --name \"G5API\"",
     "restartprod": "pm2 restart G5API",
     "stopprod": "pm2 stop G5API; pm2 delete G5API",
     "doc": "tsc && jsdoc -c jsdoc.conf.json",
