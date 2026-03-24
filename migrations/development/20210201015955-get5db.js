@@ -3,7 +3,6 @@
 var dbm;
 var type;
 var seed;
-var async = require('async');
 
 /**
   * We receive the dbmigrate dependency from dbmigrate initially.
