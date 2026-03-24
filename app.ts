@@ -2,7 +2,7 @@ import config from "config";
 import RedisStore from "connect-redis";
 import cookieParser from "cookie-parser";
 import cors from "cors";
-import express from "express";
+import express, { RequestHandler } from "express";
 import bearerToken from "express-bearer-token";
 import session from "express-session";
 import helmet from "helmet";
@@ -38,7 +38,18 @@ import settingsRouter from "./src/routes/settings.js";
 import imageRouter from "./src/routes/image/image.js";
 // End Route Files
 
+function logError(err: unknown): void {
+  if (process.env.NODE_ENV !== "test") {
+    console.error(err);
+  }
+}
 
+function getSessionMessage(err: any, req: any, fallback: string): string {
+  if (req && req.session && Array.isArray(req.session.messages) && req.session.messages.length > 0) {
+    return req.session.messages[req.session.messages.length - 1];
+  }
+  return err && err.message ? err.message : fallback;
+}
 
 const app = express();
 
@@ -59,7 +70,7 @@ app.use("/materials/panorama/images/tournaments/teams", express.static("public/i
 // Security defaults with helmet
 app.use(helmet());
 
-let sessionMiddleware: any;
+let sessionMiddleware: RequestHandler;
 if (config.get("server.useRedis")) {
   const redisClient = createClient({
     url: config.get("server.redisUrl"),
@@ -235,8 +246,8 @@ app.post(
     return res.json({ message: "Success!" });
   },
   (err: any, req: any, res: any, next: any) => {
-    console.log(err);
-    err.message = req.session.messages[req.session.messages.length - 1];
+    logError(err);
+    err.message = getSessionMessage(err, req, "Authentication failed");
     return res.json(err);
   }
 );
@@ -251,7 +262,7 @@ app.post(
     return res.json({ message: "Success!" });
   },
   (err: any, req: any, res: any, next: any) => {
-    err.message = req.session.messages[req.session.messages.length - 1];
+    err.message = getSessionMessage(err, req, "Registration failed");
     return res.json(err);
   }
 );
