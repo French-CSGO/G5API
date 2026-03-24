@@ -129,7 +129,7 @@ if (config.get("server.useRedis")) {
 
 app.use(sessionMiddleware);
 
-app.use(passport.initialize() as any);
+app.use(passport.initialize() as RequestHandler);
 app.use(passport.session());
 app.use(bearerToken());
 
