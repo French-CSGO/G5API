@@ -19,6 +19,7 @@ import JSZip from "jszip";
  * @const
  */
 import { existsSync, mkdirSync, writeFile } from "fs";
+import path from "path";
 
 /** Config to check demo uploads.
  * @const
@@ -115,6 +116,14 @@ router.post("/", async (req: Request, res: Response) => {
         .status(401)
         .send({ message: "API key, Match ID, or Map Number not provided." });
     }
+
+    // Sanitize the demo filename to prevent path traversal and enforce expected extension.
+    const safeDemoBase: string = path.basename(demoFilename);
+    if (!safeDemoBase.toLowerCase().endsWith(".dem")) {
+      return res.status(400).send({ message: "Invalid demo filename." });
+    }
+    const safeZipName: string = safeDemoBase.replace(/\.dem$/i, ".zip");
+
     // Check if our API key is correct.
     const matchApiCheck: number = await Utils.checkApiKey(apiKey, matchId);
     if (matchApiCheck == 1) {
@@ -144,12 +153,17 @@ router.post("/", async (req: Request, res: Response) => {
       return res.status(401).json({ message: "Demo can no longer be uploaded." });
     }
 
-    zip.file(demoFilename, req.body, { binary: true });
+    zip.file(safeDemoBase, req.body, { binary: true });
     zip
       .generateAsync({ type: "nodebuffer", compression: "DEFLATE" })
       .then((buf) => {
+        const demosRoot = path.resolve("public", "demos");
+        const targetPath = path.resolve(demosRoot, safeZipName);
+        if (!targetPath.startsWith(demosRoot + path.sep)) {
+          throw new Error("Resolved demo path is outside of public/demos");
+        }
         // @ts-ignore
-        writeFile("public/demos/" + demoFilename.replace(".dem", ".zip"), buf, "binary", function (err) {
+        writeFile(targetPath, buf, "binary", function (err) {
           if (err) {
             console.error(err);
             throw err;
@@ -158,7 +172,7 @@ router.post("/", async (req: Request, res: Response) => {
       });
     // Update map stats object to include the link to the demo.
     updateStmt = {
-      demoFile: demoFilename.replace(".dem", ".zip")
+      demoFile: safeZipName
     };
     updateStmt = await db.buildUpdateStatement(updateStmt);
 
