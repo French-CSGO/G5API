@@ -31,7 +31,7 @@ jobs:
           password: ${{ secrets.TOKEN }}
       - id: getversion
         uses: Saionaro/extract-package-version@v1.3.0
-      - uses: docker/build-push-action@v3.2.0
+      - uses: docker/build-push-action@v7.0.0
         if: github.event_name != 'pull_request' && github.ref != 'refs/heads/master'
         with:
           context: .
@@ -42,7 +42,7 @@ jobs:
             ghcr.io/${{ steps.string.outputs.lowercase }}/g5api:next
           cache-from: type=gha
           cache-to: type=gha,mode=max
-      - uses: docker/build-push-action@v3.2.0
+      - uses: docker/build-push-action@v7.0.0
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/master'
         with:
           context: .
@@ -53,7 +53,7 @@ jobs:
             ghcr.io/${{ steps.string.outputs.lowercase }}/g5api:latest,ghcr.io/${{ steps.string.outputs.lowercase }}/g5api:${{ steps.getversion.outputs.version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-      - uses: docker/build-push-action@v3.2.0
+      - uses: docker/build-push-action@v7.0.0
         if: github.event_name == 'pull_request'
         with:
           context: .
