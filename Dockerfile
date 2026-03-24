@@ -26,9 +26,16 @@ RUN printf '%s\n' \
   '# set config with env variables' \
   'envsubst < /Get5API/config/production.json.template > /Get5API/config/production.json' \
   '' \
+  '# create database if not exists' \
+  'yarn migrate-create-prod || true' \
+  '' \
   '# run migrations' \
-  'yarn migrate-create-prod' \
-  'yarn migrate-prod-upgrade' \
+  '# if migration fails (tables already exist without tracking), sync state then retry' \
+  'if ! yarn migrate-prod-upgrade; then' \
+  '  echo "[WARN] Migration failed - syncing migration state with --fake then retrying..."' \
+  '  yarn migrate-prod-fake' \
+  '  yarn migrate-prod-upgrade' \
+  'fi' \
   '' \
   '# start application as PID 1' \
   'exec yarn startprod' \
