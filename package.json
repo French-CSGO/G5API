@@ -113,6 +113,9 @@
     "tmi.js": "^1.8.5",
     "ts3-nodejs-library": "^3.5.0"
   },
+  "resolutions": {
+    "undici": "^6.24.0"
+  },
   "devDependencies": {
     "@types/aes-js": "^3.1.4",
     "@types/bcrypt": "^5.0.2",
