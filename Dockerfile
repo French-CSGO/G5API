@@ -29,13 +29,11 @@ RUN printf '%s\n' \
   '# create database if not exists' \
   'yarn migrate-create-prod || true' \
   '' \
-  '# run migrations' \
-  '# if migration fails (tables already exist without tracking), sync state then retry' \
-  'if ! yarn migrate-prod-upgrade; then' \
-  '  echo "[WARN] Migration failed - syncing migration state with --fake then retrying..."' \
-  '  yarn migrate-prod-fake' \
-  '  yarn migrate-prod-upgrade' \
-  'fi' \
+  '# sync migration tracking state in case tables exist without migration history' \
+  'yarn migrate-prod-fake || true' \
+  '' \
+  '# run migrations - applies only new/missing ones' \
+  'yarn migrate-prod-upgrade' \
   '' \
   '# start application as PID 1' \
   'exec yarn startprod' \
