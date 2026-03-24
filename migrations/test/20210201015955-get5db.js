@@ -13,7 +13,7 @@ exports.setup = function(options, seedLink) {
   seed = seedLink;
 };
 
-exports.up = function(db, callback) {
+exports.up = function(db) {
   return db.createTable('map_list', {
     id: { type: 'int', primaryKey: true, autoIncrement: true, length: 11 },
     user_id: {
@@ -33,11 +33,11 @@ exports.up = function(db, callback) {
     map_name: { type: 'string', length: 32, notNull: true, defaultValue: ''},
     map_display_name: { type: 'string', length: 32, notNull: true, defaultValue: ''},
     enabled: { type: 'boolean', defaultValue: true, notNull: true},
-    inserted_at: { type: 'datetime', defaultValue: new String('now()'), notNull: true },
+    inserted_at: { type: 'datetime', defaultValue: 'now()', notNull: true },
   });
 };
 
-exports.down = function(db, callback) {
+exports.down = function(db) {
   return db.dropTable('map_list');
 };
 

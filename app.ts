@@ -42,7 +42,8 @@ import imageRouter from "./src/routes/image/image.js";
 
 const app = express();
 
-app.use(morgan("dev"));
+const morganFormat = process.env.NODE_ENV === "production" ? "combined" : "dev";
+app.use(morgan(morganFormat));
 app.use(express.raw({ type: "application/octet-stream", limit: "2gb" }));
 app.use(express.json({ limit: "512kb" }));
 app.use(express.urlencoded({ extended: false }));
@@ -58,7 +59,7 @@ app.use("/materials/panorama/images/tournaments/teams", express.static("public/i
 // Security defaults with helmet
 app.use(helmet());
 
-let sessionType: any;
+let sessionMiddleware: any;
 if (config.get("server.useRedis")) {
   const redisClient = createClient({
     url: config.get("server.redisUrl"),
@@ -72,7 +73,7 @@ if (config.get("server.useRedis")) {
   const redisCfg = {
     client: redisClient,
   };
-  sessionType = session({
+  sessionMiddleware = session({
     secret: config.get("server.sharedSecret"),
     name: "MatchZy",
     resave: false,
@@ -101,7 +102,7 @@ if (config.get("server.useRedis")) {
   process.on("SIGINT", handleShutdown);
   process.on("SIGTERM", handleShutdown);
 } else {
-  sessionType = session({
+  sessionMiddleware = session({
     secret: config.get("server.sharedSecret"),
     name: "MatchZy",
     resave: false,
@@ -110,7 +111,7 @@ if (config.get("server.useRedis")) {
   });
 }
 
-app.use(sessionType);
+app.use(sessionMiddleware);
 
 app.use(passport.initialize() as any);
 app.use(passport.session());
@@ -131,7 +132,6 @@ app.use(
 );
 
 // adding morgan to log HTTP requests
-app.use(morgan("combined"));
 
 // swagger UI
 
