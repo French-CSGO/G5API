@@ -1,4 +1,4 @@
-FROM node:25-alpine AS builder
+FROM node:20-alpine AS builder
 
 RUN apk add --no-cache gettext python3 build-base \
     pkgconfig cairo-dev pango-dev jpeg-dev giflib-dev librsvg-dev pixman-dev
@@ -9,7 +9,7 @@ COPY . .
 RUN yarn
 RUN yarn build
 
-FROM node:25-alpine
+FROM node:20-alpine
 
 RUN apk add --no-cache gettext python3 cairo pango jpeg giflib librsvg pixman
 EXPOSE 3301
