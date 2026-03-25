@@ -115,6 +115,9 @@ router.post("/", async (req: Request, res: Response) => {
         .status(401)
         .send({ message: "API key, Match ID, or Map Number not provided." });
     }
+    if (!/^\d+$/.test(matchId) || !/^\d+$/.test(mapNumber) || !/^[\w\-. ]+$/.test(demoFilename)) {
+      return res.status(400).send({ message: "Invalid Match ID, Map Number, or filename." });
+    }
     // Check if our API key is correct.
     const matchApiCheck: number = await Utils.checkApiKey(apiKey, matchId);
     if (matchApiCheck == 1) {

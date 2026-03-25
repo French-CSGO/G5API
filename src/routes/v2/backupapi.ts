@@ -102,6 +102,10 @@ router.post("/", async (req: Request, res: Response) => {
       });
       return;
     }
+    if (!/^\d+$/.test(matchId) || !/^\d+$/.test(mapNumber) || !/^\d+$/.test(roundNumber)) {
+      res.status(400).send({ message: "Invalid Match ID, Map Number, or Round Number." });
+      return;
+    }
     // Check if our API key is correct.
     const matchApiCheck: number = await Utils.checkApiKey(apiKey, matchId);
     if (matchApiCheck == 1 || matchApiCheck == 2) {
@@ -119,7 +123,6 @@ router.post("/", async (req: Request, res: Response) => {
       function (err) {
         if (err) {
           console.error(err);
-          throw err;
         }
       }
     );

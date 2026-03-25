@@ -83,9 +83,11 @@ router.put("/", Utils.ensureAuthenticated, requireSuperAdmin, async (req: Reques
       return res.status(400).json({ message: "Body invalide : objet attendu." });
     }
 
-    // Filtre les valeurs non-string
+    // Filtre les valeurs non-string et protège contre la pollution de prototype
+    const FORBIDDEN_KEYS = new Set(["__proto__", "constructor", "prototype"]);
     const entries: Record<string, string> = {};
     for (const [k, v] of Object.entries(body)) {
+      if (FORBIDDEN_KEYS.has(k)) continue;
       if (typeof v === "string" || typeof v === "boolean" || typeof v === "number") {
         entries[k] = String(v);
       }

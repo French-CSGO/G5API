@@ -444,8 +444,8 @@ router.post("/", Utils.ensureAuthenticated, async (req, res, next) => {
         insertSet = {
           //@ts-ignore
           season_id: insertSeason.insertId,
-          cvar_name: key.replace(/"/g, '\\"'),
-          cvar_value: typeof defaultCvar[key] === 'string' ? defaultCvar[key].replace(/"/g, '\\"').replace(/\\/g, '\\\\') : defaultCvar[key]
+          cvar_name: key.replace(/\\/g, '\\\\').replace(/"/g, '\\"'),
+          cvar_value: typeof defaultCvar[key] === 'string' ? defaultCvar[key].replace(/\\/g, '\\\\').replace(/"/g, '\\"') : defaultCvar[key]
         };
         await db.query(sql, [insertSet]);
       }
@@ -546,8 +546,8 @@ router.put("/", Utils.ensureAuthenticated, async (req, res, next) => {
         for (let key in defaultCvar) {
           let insertSet: SeasonCvarObject = {
             season_id: req.body[0].season_id,
-            cvar_name: key.replace(/"/g, '\\"'),
-            cvar_value: typeof defaultCvar[key] === 'string' ? defaultCvar[key].replace(/"/g, '\\"').replace(/\\/g, '\\\\') : defaultCvar[key],
+            cvar_name: key.replace(/\\/g, '\\\\').replace(/"/g, '\\"'),
+            cvar_value: typeof defaultCvar[key] === 'string' ? defaultCvar[key].replace(/\\/g, '\\\\').replace(/"/g, '\\"') : defaultCvar[key],
           };
           await db.query(sql, [insertSet]);
         }
@@ -682,6 +682,9 @@ router.post("/challonge", Utils.ensureAuthenticated, async (req, res, next) => {
     }
 
     let tournamentId: string = req.body[0].tournament_id;
+    if (!/^[\w\-]+$/.test(tournamentId)) {
+      throw new Error("Invalid tournament ID.");
+    }
     let challongeResponse: any = await fetch(
       "https://api.challonge.com/v1/tournaments/" +
       tournamentId +
@@ -762,7 +765,8 @@ async function handleToornamentImport(tournamentId: string, userId: number, reqB
   if (!tokenData.access_token) throw new Error("Toornament Auth Failed");
 
   const cleanId = tournamentId.replace(/^t:/, '');
-  
+  if (!/^\d+$/.test(cleanId)) throw new Error("Invalid Toornament tournament ID.");
+
   const toornamentResponse = await fetch(
     `https://api.toornament.com/organizer/v2/tournaments/${cleanId}`,
     {
@@ -984,6 +988,8 @@ router.get("/:season_id/toornament/matches/:toornament_match_id/prefill", Utils.
     const seasonId = parseInt(req.params.season_id);
     const toornamentMatchId = req.params.toornament_match_id;
     const tournamentId = await getSeasonToornamentId(seasonId);
+    if (!/^\d+$/.test(String(tournamentId))) throw new Error("Invalid Toornament tournament ID.");
+    if (!/^\d+$/.test(String(toornamentMatchId))) throw new Error("Invalid Toornament match ID.");
     const token = await getToornamentToken();
     const apiKey: string = getSetting("toornament.apiKey");
 

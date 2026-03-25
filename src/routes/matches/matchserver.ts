@@ -139,7 +139,7 @@ router.get(
             );
         }
         let serverUpdate: GameServer = await getGameServer(req.params.match_id);
-        if (!serverUpdate.endGet5Match()) {
+        if (!await serverUpdate.endGet5Match()) {
           console.log(
             "Error attempting to stop match on game server side. Will continue."
           );
@@ -261,7 +261,7 @@ router.get(
         // Let the server cancel the match first, or attempt to?
         if (matchRow[0].server_id != null) {
           let serverUpdate: GameServer = await getGameServer(req.params.match_id);
-          if (!serverUpdate.endGet5Match()) {
+          if (!await serverUpdate.endGet5Match()) {
             console.log(
               "Error attempting to stop match on game server side. Will continue."
             );

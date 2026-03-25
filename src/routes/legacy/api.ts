@@ -1666,8 +1666,7 @@ router.put(
         req.body,
         function (err) {
           if (err) {
-            console.log(err);
-            throw err;
+            console.error(err);
           }
         }
       );

@@ -950,10 +950,13 @@ router.post("/challonge", Utils.ensureAuthenticated, async (req, res) => {
     const userInfo: RowDataPacket[] = await db.query("SELECT challonge_api_key FROM user WHERE id = ?", [userID]);
     let challongeAPIKey: string | undefined | null = Utils.decrypt(userInfo[0].challonge_api_key);
     let tournamentId: string = req.body[0].tournament_id;
+    if (!/^[\w\-]+$/.test(tournamentId)) {
+      throw new Error("Invalid tournament ID.");
+    }
     let challongeResponse: any = await fetch("https://api.challonge.com/v1/tournaments/" + tournamentId + "/participants.json?api_key=" + challongeAPIKey);
     let challongeData: any = await challongeResponse.json();
     if (!challongeData) {
-      throw "No teams found for Tournament " + tournamentId + "."
+      throw new Error("No teams found for the provided tournament.");
     }
     let sqlString = "INSERT INTO team (user_id, name, tag, challonge_team_id) VALUES ?";
     if (!challongeAPIKey) {
