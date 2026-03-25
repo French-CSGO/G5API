@@ -492,6 +492,57 @@ router.get("/mymatches", Utils.ensureAuthenticated, async (req, res, next) => {
  *       500:
  *         $ref: '#/components/responses/Error'
  */
+router.get("/limit/:limiter", async (req, res, next) => {
+  try {
+    let lim: number = parseInt(req.params.limiter);
+    let sql: string;
+    if (req.user !== undefined && Utils.superAdminCheck(req.user)) {
+      sql =
+        "SELECT * FROM `match` WHERE cancelled = 0 OR cancelled IS NULL ORDER BY end_time DESC LIMIT ?";
+    } else {
+      sql =
+        "SELECT id, user_id, server_id, team1_id, team2_id, winner, " +
+        "team1_score, team2_score, team1_series_score, team2_series_score, " +
+        "team1_string, team2_string, cancelled, forfeit, start_time, end_time, " +
+        "max_maps, title, skip_veto, private_match, enforce_teams, min_player_ready, " +
+        "season_id, is_pug, map_sides FROM `match` WHERE cancelled = 0 " +
+        "OR cancelled IS NULL ORDER BY end_time DESC LIMIT ?";
+    }
+    const matches: RowDataPacket[] = await db.query(sql, [lim]);
+    res.json({ matches });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: (err as Error).toString() });
+  }
+});
+
+router.get("/page/:firstvalue&:lastvalue", async (req, res, next) => {
+  try {
+    //@ts-ignore
+    let firstVal: number = parseInt(req.params.firstvalue);
+    //@ts-ignore
+    let secondVal: number = parseInt(req.params.lastvalue);
+    let sql: string;
+    if (req.user !== undefined && Utils.superAdminCheck(req.user)) {
+      sql =
+        "SELECT * FROM `match` WHERE cancelled = 0 OR cancelled IS NULL ORDER BY id DESC LIMIT ?,?";
+    } else {
+      sql =
+        "SELECT id, user_id, server_id, team1_id, team2_id, winner, " +
+        "team1_score, team2_score, team1_series_score, team2_series_score, " +
+        "team1_string, team2_string, cancelled, forfeit, start_time, end_time, " +
+        "max_maps, title, skip_veto, private_match, enforce_teams, min_player_ready, " +
+        "season_id, is_pug, map_sides FROM `match` WHERE cancelled = 0 " +
+        "OR cancelled IS NULL ORDER BY id DESC LIMIT ?,?";
+    }
+    const matches: RowDataPacket[] = await db.query(sql, [firstVal, secondVal]);
+    res.json({ matches });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: (err as Error).toString() });
+  }
+});
+
 router.get("/:match_id", async (req, res, next) => {
   try {
     let matchUserId: string = "SELECT user_id FROM `match` WHERE id = ?";
@@ -511,7 +562,7 @@ router.get("/:match_id", async (req, res, next) => {
         "team1_score, team2_score, team1_series_score, team2_series_score, " +
         "team1_string, team2_string, cancelled, forfeit, start_time, end_time, " +
         "max_maps, title, skip_veto, private_match, enforce_teams, min_player_ready, " +
-        "season_id, is_pug, map_sides FROM `match` where id = ?";
+        "season_id, is_pug, map_sides, veto_mappool FROM `match` where id = ?";
     }
     let matchID: string = req.params.match_id;
     const matches: RowDataPacket[] = await db.query(sql, [matchID]);
@@ -576,7 +627,7 @@ router.get("/:match_id/stream", async (req, res, next) => {
         "team1_score, team2_score, team1_series_score, team2_series_score, " +
         "team1_string, team2_string, cancelled, forfeit, start_time, end_time, " +
         "max_maps, title, skip_veto, private_match, enforce_teams, min_player_ready, " +
-        "season_id, is_pug, map_sides FROM `match` where id = ?";
+        "season_id, is_pug, map_sides, veto_mappool FROM `match` where id = ?";
     }
 
     let matchID: string = req.params.match_id;
@@ -914,121 +965,6 @@ router.get("/:match_id/bombs", async (req, res, next) => {
     console.error((err as Error).toString());
     res.status(500).write(`event: error\ndata: ${(err as Error).toString()}\n\n`);
     res.end();
-  }
-});
-
-/**
- * @swagger
- *
- * /matches/limit/:limiter:
- *   get:
- *     description: Returns most recent matches specified by a limit.
- *     produces:
- *       - application/json
- *     parameters:
- *       - name: limiter
- *         required: true
- *         schema:
- *          type: integer
- *     tags:
- *       - matches
- *     responses:
- *       200:
- *         description: Match info
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 matches:
- *                   type: array
- *                   items:
- *                     $ref: '#/components/schemas/MatchData'
- *       500:
- *         $ref: '#/components/responses/Error'
- */
-router.get("/limit/:limiter", async (req, res, next) => {
-  try {
-    let lim: number = parseInt(req.params.limiter);
-    let sql: string;
-    if (req.user !== undefined && Utils.superAdminCheck(req.user)) {
-      sql =
-        "SELECT * FROM `match` WHERE cancelled = 0 OR cancelled IS NULL ORDER BY end_time DESC LIMIT ?";
-    } else {
-      sql =
-        "SELECT id, user_id, server_id, team1_id, team2_id, winner, " +
-        "team1_score, team2_score, team1_series_score, team2_series_score, " +
-        "team1_string, team2_string, cancelled, forfeit, start_time, end_time, " +
-        "max_maps, title, skip_veto, private_match, enforce_teams, min_player_ready, " +
-        "season_id, is_pug, map_sides FROM `match` WHERE cancelled = 0 " +
-        "OR cancelled IS NULL ORDER BY end_time DESC LIMIT ?";
-    }
-    const matches: RowDataPacket[] = await db.query(sql, [lim]);
-    res.json({ matches });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: (err as Error).toString() });
-  }
-});
-
-/**
- * @swagger
- *
- * /matches/limit/:firstvalue&:lastvalue:
- *   get:
- *     description: Returns a subset of matches between a range.
- *     produces:
- *       - application/json
- *     parameters:
- *       - name: firstvalue
- *         required: true
- *         schema:
- *          type: integer
- *       - name: lastvalue
- *         required: true
- *         schema:
- *          type: integer
- *     tags:
- *       - matches
- *     responses:
- *       200:
- *         description: Match info
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 matches:
- *                   type: array
- *                   items:
- *                     $ref: '#/components/schemas/MatchData'
- *       500:
- *         $ref: '#/components/responses/Error'
- */
-router.get("/page/:firstvalue&:lastvalue", async (req, res, next) => {
-  try {
-    //@ts-ignore
-    let firstVal: number = parseInt(req.params.firstvalue);
-    //@ts-ignore
-    let secondVal: number = parseInt(req.params.lastvalue);
-    let sql: string;
-    if (req.user !== undefined && Utils.superAdminCheck(req.user)) {
-      sql =
-        "SELECT * FROM `match` WHERE cancelled = 0 OR cancelled IS NULL ORDER BY id DESC LIMIT ?,?";
-    } else {
-      sql =
-        "SELECT id, user_id, server_id, team1_id, team2_id, winner, " +
-        "team1_score, team2_score, team1_series_score, team2_series_score, " +
-        "team1_string, team2_string, cancelled, forfeit, start_time, end_time, " +
-        "max_maps, title, skip_veto, private_match, enforce_teams, min_player_ready, " +
-        "season_id, is_pug, map_sides FROM `match` WHERE cancelled = 0 " +
-        "OR cancelled IS NULL ORDER BY id DESC LIMIT ?,?";
-    }
-    const matches: RowDataPacket[] = await db.query(sql, [firstVal, secondVal]);
-    res.json({ matches });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: (err as Error).toString() });
   }
 });
 
