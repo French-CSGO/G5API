@@ -136,7 +136,7 @@ export async function generateMatchImage(
 
     const p1 = team1Players[i];
     if (p1) {
-      if (m.player_name_l.enabled) drawText(ctx, p1.name,           m.player_name_l.x, rowY, fieldFont(m.player_name_l), m.player_name_l.color, "left");
+      if (m.player_name_l.enabled) drawText(ctx, p1.name,           m.player_name_l.x, rowY, fieldFont(m.player_name_l), m.player_name_l.color);
       if (m.kills_l.enabled)       drawText(ctx, String(p1.kills),  m.kills_l.x,       rowY, fieldFont(m.kills_l),       m.kills_l.color);
       if (m.assists_l.enabled)     drawText(ctx, String(p1.assists), m.assists_l.x,     rowY, fieldFont(m.assists_l),     m.assists_l.color);
       if (m.deaths_l.enabled)      drawText(ctx, String(p1.deaths), m.deaths_l.x,      rowY, fieldFont(m.deaths_l),      m.deaths_l.color);
@@ -145,7 +145,7 @@ export async function generateMatchImage(
 
     const p2 = team2Players[i];
     if (p2) {
-      if (m.player_name_r.enabled) drawText(ctx, p2.name,           m.player_name_r.x, rowY, fieldFont(m.player_name_r), m.player_name_r.color, "left");
+      if (m.player_name_r.enabled) drawText(ctx, p2.name,           m.player_name_r.x, rowY, fieldFont(m.player_name_r), m.player_name_r.color);
       if (m.kills_r.enabled)       drawText(ctx, String(p2.kills),  m.kills_r.x,       rowY, fieldFont(m.kills_r),       m.kills_r.color);
       if (m.assists_r.enabled)     drawText(ctx, String(p2.assists), m.assists_r.x,     rowY, fieldFont(m.assists_r),     m.assists_r.color);
       if (m.deaths_r.enabled)      drawText(ctx, String(p2.deaths), m.deaths_r.x,      rowY, fieldFont(m.deaths_r),      m.deaths_r.color);
