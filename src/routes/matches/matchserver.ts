@@ -16,6 +16,7 @@ import GameServer from "../../utility/serverrcon.js";
 import config from "config";
 
 import { existsSync, readdir } from "fs";
+import path from "path";
 import { AccessMessage } from "../../types/mapstats/AccessMessage.js";
 import { RowDataPacket } from "mysql2";
 import { MapStats } from "../../types/mapstats/MapStats.js";
@@ -1222,7 +1223,8 @@ router.post(
         }
 
         // Check to see if file exists in our public directory.
-        if (!existsSync(`public/backups/${req.params.match_id}/${configString}`)) {
+        const safeConfigName = path.basename(configString);
+        if (!existsSync(`public/backups/${req.params.match_id}/${safeConfigName}`)) {
           res.status(412).json({ message: "Backup name invalid." });
           return;
         }
@@ -1256,14 +1258,14 @@ router.post(
 
           // 3. Send get5_loadbackup_url to server B.
           await serverUpdate.restoreBackupFromURL(
-            config.get("server.apiURL") + `/backups/${req.params.match_id}/${configString}`
+            config.get("server.apiURL") + `/backups/${req.params.match_id}/${safeConfigName}`
           );
 
           // 4. Update match server_id.
           await db.query("UPDATE `match` SET server_id = ? WHERE id = ?", [newServerId, req.params.match_id]);
 
           res.json({
-            message: `Backup ${configString} successfully restored on server ${newServerId}.`
+            message: `Backup ${safeConfigName} successfully restored on server ${newServerId}.`
           });
         } catch (err) {
           res.status(500).json({ message: "Error on game server.", response: err });

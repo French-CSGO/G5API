@@ -1003,7 +1003,7 @@ router.get("/:season_id/toornament/matches/:toornament_match_id/prefill", Utils.
     if (season?.cvars) season.cvars = JSON.parse(season.cvars);
 
     // Get the Toornament match
-    const matchUrl = new URL(`https://api.toornament.com/organizer/v2/matches/${toornamentMatchId}`);
+    const matchUrl = new URL(`https://api.toornament.com/organizer/v2/matches/${encodeURIComponent(toornamentMatchId)}`);
     matchUrl.searchParams.set("tournament_ids", String(tournamentId));
     const matchResponse = await fetch(
       matchUrl.toString(),
