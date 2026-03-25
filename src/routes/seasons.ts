@@ -669,7 +669,7 @@ router.post("/challonge", Utils.ensureAuthenticated, async (req, res, next) => {
     const rawTournamentId: string = req.body[0].tournament_id;
 
     if (rawTournamentId.startsWith("t:")) {
-      console.log("Toornament id : ", String(rawTournamentId).replace(/[\r\n]/g, " "))
+      console.log("Toornament import requested.")
       const result = await handleToornamentImport(rawTournamentId, req.user!.id, req.body[0]);
       return res.json(result);
     }
@@ -1003,8 +1003,10 @@ router.get("/:season_id/toornament/matches/:toornament_match_id/prefill", Utils.
     if (season?.cvars) season.cvars = JSON.parse(season.cvars);
 
     // Get the Toornament match
+    const matchUrl = new URL(`https://api.toornament.com/organizer/v2/matches/${toornamentMatchId}`);
+    matchUrl.searchParams.set("tournament_ids", String(tournamentId));
     const matchResponse = await fetch(
-      `https://api.toornament.com/organizer/v2/matches/${toornamentMatchId}?tournament_ids=${tournamentId}`,
+      matchUrl.toString(),
       {
         headers: {
           "Authorization": `Bearer ${token}`,

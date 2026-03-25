@@ -428,7 +428,7 @@ export class QueueService {
         const matchId = await QueueService.createMatchFromQueue(slug, teamIds);
         return { matchId };
       } catch (err) {
-        console.error("Failed to auto-create match from full queue:", err);
+        console.error("Failed to auto-create match from full queue.");
       }
     }
     return {};

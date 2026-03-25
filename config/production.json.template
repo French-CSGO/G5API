@@ -12,7 +12,9 @@
     "localLoginEnabled": $LOCALLOGINS,
     "redisUrl": "$REDISURL",
     "redisTTL": $REDISTTL,
-    "queueTTL": $QUEUETTL
+    "queueTTL": $QUEUETTL,
+    "rateLimitWindowMs": $RATELIMITWINDOWMS,
+    "rateLimitMax": $RATELIMITMAX
   },
   "production": {
     "driver": "mysql",

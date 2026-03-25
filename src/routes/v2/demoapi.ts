@@ -14,6 +14,7 @@
  * @const
  */
 import JSZip from "jszip";
+import path from "path";
 
 /** Required to save files.
  * @const
@@ -151,11 +152,11 @@ router.post("/", async (req: Request, res: Response) => {
     zip
       .generateAsync({ type: "nodebuffer", compression: "DEFLATE" })
       .then((buf) => {
+        const safeDemoName = path.basename(demoFilename).replace(/[^a-zA-Z0-9._\-]/g, "_").replace(".dem", ".zip");
         // @ts-ignore
-        writeFile("public/demos/" + demoFilename.replace(".dem", ".zip"), buf, "binary", function (err) {
+        writeFile("public/demos/" + safeDemoName, buf, "binary", function (err) {
           if (err) {
             console.error(err);
-            throw err;
           }
         });
       });

@@ -62,10 +62,11 @@ router.post(
     if (!req.file) { res.status(400).json({ error: "No file received." }); return; }
     const imgDir = path.join(process.cwd(), "public", "img");
     if (!fs.existsSync(imgDir)) fs.mkdirSync(imgDir, { recursive: true });
-    const dest = path.join(imgDir, req.file.originalname);
+    const safeFilename = path.basename(req.file.originalname).replace(/[^a-zA-Z0-9._\-]/g, "_");
+    const dest = path.join(imgDir, safeFilename);
     writeFileSafe(dest, req.file.buffer);
     const s = loadSettings();
-    s.match.background = req.file.originalname;
+    s.match.background = safeFilename;
     saveSettings(s);
     res.json({ message: "Background saved.", filename: req.file.originalname });
   }
@@ -79,9 +80,10 @@ router.post(
     if (!req.file) { res.status(400).json({ error: "No file received." }); return; }
     const imgDir = path.join(process.cwd(), "public", "img");
     if (!fs.existsSync(imgDir)) fs.mkdirSync(imgDir, { recursive: true });
-    const dest = path.join(imgDir, req.file.originalname);
+    const safeFilename = path.basename(req.file.originalname).replace(/[^a-zA-Z0-9._\-]/g, "_");
+    const dest = path.join(imgDir, safeFilename);
     writeFileSafe(dest, req.file.buffer);
-    res.json({ filename: req.file.originalname });
+    res.json({ filename: safeFilename });
   }
 );
 
@@ -106,9 +108,10 @@ router.post(
     if (!req.file) { res.status(400).json({ error: "No file received." }); return; }
     const mapsDir = path.join(process.cwd(), "public", "img", "maps");
     if (!fs.existsSync(mapsDir)) fs.mkdirSync(mapsDir, { recursive: true });
-    const dest = path.join(mapsDir, req.file.originalname);
+    const safeMapFilename = path.basename(req.file.originalname).replace(/[^a-zA-Z0-9._\-]/g, "_");
+    const dest = path.join(mapsDir, safeMapFilename);
     writeFileSafe(dest, req.file.buffer);
-    res.json({ filename: req.file.originalname });
+    res.json({ filename: safeMapFilename });
   }
 );
 
@@ -120,9 +123,10 @@ router.post(
     if (!req.file) { res.status(400).json({ error: "No file received." }); return; }
     const fontsDir = path.join(process.cwd(), "public", "fonts");
     if (!fs.existsSync(fontsDir)) fs.mkdirSync(fontsDir, { recursive: true });
-    const dest = path.join(fontsDir, req.file.originalname);
+    const safeFontFilename = path.basename(req.file.originalname).replace(/[^a-zA-Z0-9._\-]/g, "_");
+    const dest = path.join(fontsDir, safeFontFilename);
     writeFileSafe(dest, req.file.buffer);
-    res.json({ filename: req.file.originalname });
+    res.json({ filename: safeFontFilename });
   }
 );
 
@@ -134,12 +138,13 @@ router.post(
     if (!req.file) { res.status(400).json({ error: "No file received." }); return; }
     const fontsDir = path.join(process.cwd(), "public", "fonts");
     if (!fs.existsSync(fontsDir)) fs.mkdirSync(fontsDir, { recursive: true });
-    const dest = path.join(fontsDir, req.file.originalname);
+    const safeFontFilename = path.basename(req.file.originalname).replace(/[^a-zA-Z0-9._\-]/g, "_");
+    const dest = path.join(fontsDir, safeFontFilename);
     writeFileSafe(dest, req.file.buffer);
     const s = loadSettings();
-    s.match.fontFile = req.file.originalname;
+    s.match.fontFile = safeFontFilename;
     saveSettings(s);
-    res.json({ message: "Font saved.", filename: req.file.originalname });
+    res.json({ message: "Font saved.", filename: safeFontFilename });
   }
 );
 

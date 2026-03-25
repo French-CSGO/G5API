@@ -114,10 +114,10 @@ app.use(
   })
 );
 
-// Global rate limiting
+// Global rate limiting (configurable via server.rateLimitWindowMs / server.rateLimitMax)
 const globalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 500,
+  windowMs: config.get<number>("server.rateLimitWindowMs"),
+  max: config.get<number>("server.rateLimitMax"),
   standardHeaders: true,
   legacyHeaders: false,
   message: { message: "Too many requests, please try again later." },
