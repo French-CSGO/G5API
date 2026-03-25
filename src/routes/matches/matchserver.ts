@@ -1198,6 +1198,10 @@ router.post(
         let newServerInfo: string =
           "SELECT id, user_id, ip_string, port, rcon_password, public_server FROM game_server WHERE id = ?";
         let configString: string = req.body[0].backup_file;
+        if (!/^[\w\-. ]+$/.test(configString) || !/^\d+$/.test(req.params.match_id)) {
+          res.status(400).json({ message: "Invalid backup file name or match ID." });
+          return;
+        }
 
         // Retrieve OLD server_id before any updates.
         const matchServerId: RowDataPacket[] = await db.query(
@@ -1318,6 +1322,10 @@ router.get(
         res.status(errMessage.status).json({ message: errMessage.message });
         return;
       } else {
+        if (!/^\d+$/.test(req.params.match_id)) {
+          res.status(400).json({ message: "Invalid match ID." });
+          return;
+        }
         let fileArray: Array<string> = [];
         readdir(`public/backups/${req.params.match_id}`, function (err, files) {
           //handling error

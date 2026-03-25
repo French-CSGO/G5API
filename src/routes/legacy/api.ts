@@ -1643,9 +1643,12 @@ router.put(
     try {
       let matchID: string = req.params.match_id;
       let mapNumber: number = parseInt(req.params.map_number);
-      // This is required since we're sending an octet stream.
       let apiKey: string = keyCheck(req);
       let roundNumber: number = parseInt(req.params.round_number);
+      if (!/^\d+$/.test(matchID) || isNaN(mapNumber) || isNaN(roundNumber)) {
+        res.status(400).json({ message: "Invalid match ID, map number, or round number." });
+        return;
+      }
       // Database calls.
       let sql: string = "SELECT * FROM `match` WHERE id = ?";
       let matchFinalized: boolean = true;

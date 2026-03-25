@@ -83,11 +83,19 @@ router.put("/", Utils.ensureAuthenticated, requireSuperAdmin, async (req: Reques
       return res.status(400).json({ message: "Body invalide : objet attendu." });
     }
 
-    // Filtre les valeurs non-string et protège contre la pollution de prototype
-    const FORBIDDEN_KEYS = new Set(["__proto__", "constructor", "prototype"]);
-    const entries: Record<string, string> = {};
+    // Whitelist des clés de configuration autorisées
+    const ALLOWED_KEYS = new Set([
+      "discord.enabled", "discord.token", "discord.announceChannelId",
+      "discord.scoreboardChannelId", "discord.scheduleChannelId", "discord.guildId",
+      "twitch.enabled", "twitch.username", "twitch.token", "twitch.channels",
+      "pterodactyl.enabled", "pterodactyl.url", "pterodactyl.apiKey", "pterodactyl.shutdownDelay",
+      "toornament.clientId", "toornament.clientSecret", "toornament.apiKey",
+      "teamspeak.enabled", "teamspeak.host", "teamspeak.queryPort", "teamspeak.username",
+      "teamspeak.password", "teamspeak.serverId",
+    ]);
+    const entries: Record<string, string> = Object.create(null);
     for (const [k, v] of Object.entries(body)) {
-      if (FORBIDDEN_KEYS.has(k)) continue;
+      if (!ALLOWED_KEYS.has(k)) continue;
       if (typeof v === "string" || typeof v === "boolean" || typeof v === "number") {
         entries[k] = String(v);
       }

@@ -669,7 +669,7 @@ router.post("/challonge", Utils.ensureAuthenticated, async (req, res, next) => {
     const rawTournamentId: string = req.body[0].tournament_id;
 
     if (rawTournamentId.startsWith("t:")) {
-      console.log("Toornament id : ",rawTournamentId)
+      console.log("Toornament id : ", String(rawTournamentId).replace(/[\r\n]/g, " "))
       const result = await handleToornamentImport(rawTournamentId, req.user!.id, req.body[0]);
       return res.json(result);
     }
@@ -1208,6 +1208,7 @@ router.patch("/:season_id/toornament/matches/:match_id/schedule", Utils.ensureAu
     const matchId = req.params.match_id;
     const { scheduled_datetime } = req.body;
     if (!scheduled_datetime) return res.status(400).json({ message: "scheduled_datetime is required" });
+    if (!/^\d+$/.test(matchId)) return res.status(400).json({ message: "Invalid match ID." });
 
     const token = await getToornamentToken();
     const apiKey: string = getSetting("toornament.apiKey");

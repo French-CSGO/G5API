@@ -472,7 +472,7 @@ class MapFlowService {
                 team2Id: matchInfo[0].team2_id,
                 power: 60,
               });
-              console.log(`[TS3] Pause admin différée (round en cours) — match ${matchKey}`);
+              console.log(`[TS3] Pause admin différée (round en cours) — match ${String(matchKey).replace(/[\r\n]/g, " ")}`);
             } else {
               // Freeze time or between rounds: apply immediately
               const [t1, t2] = await Promise.all([
@@ -489,7 +489,7 @@ class MapFlowService {
             const teamId = event.team === "team1" ? matchInfo[0].team1_id : matchInfo[0].team2_id;
             if (isLive) {
               pendingTalkPower.set(matchKey, { team1Id: teamId, power: 60 });
-              console.log(`[TS3] Pause tech différée (round en cours) — match ${matchKey}`);
+              console.log(`[TS3] Pause tech différée (round en cours) — match ${String(matchKey).replace(/[\r\n]/g, " ")}`);
             } else {
               const tsInfo: RowDataPacket[] = await db.query(
                 "SELECT ts_server, ts_channel_id FROM team WHERE id = ?", [teamId]

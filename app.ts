@@ -4,6 +4,7 @@ import cookieParser from "cookie-parser";
 import cors from "cors";
 import express from "express";
 import bearerToken from "express-bearer-token";
+import rateLimit from "express-rate-limit";
 import session from "express-session";
 import helmet from "helmet";
 import createError from "http-errors";
@@ -112,6 +113,16 @@ app.use(
     credentials: true,
   })
 );
+
+// Global rate limiting
+const globalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 500,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: "Too many requests, please try again later." },
+});
+app.use(globalLimiter);
 
 // adding morgan to log HTTP requests
 app.use(morgan("combined"));

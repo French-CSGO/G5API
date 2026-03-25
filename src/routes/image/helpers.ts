@@ -97,7 +97,11 @@ export const upload = multer({
 });
 
 export function writeFileSafe(filePath: string, buffer: Buffer): void {
-  try { fs.unlinkSync(filePath); } catch { /* file didn't exist */ }
+  // Normalize to prevent path traversal — ensure the resolved path stays within its parent dir
+  const dir = path.dirname(filePath);
+  const base = path.basename(filePath);
+  const safePath = path.join(dir, base);
+  try { fs.unlinkSync(safePath); } catch { /* file didn't exist */ }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (fs.writeFileSync as any)(filePath, buffer);
+  (fs.writeFileSync as any)(safePath, buffer);
 }
