@@ -117,6 +117,8 @@ app.use(
 // CSRF protection: validate Origin header on state-changing requests
 app.use((req, res, next) => {
   if (["GET", "HEAD", "OPTIONS"].includes(req.method)) return next();
+  // Skip CSRF for auth routes (Steam OpenID callback, local login/register)
+  if (req.path.startsWith("/auth/") || req.path === "/login" || req.path === "/register") return next();
   // Skip CSRF for bearer-token authenticated API calls (server-to-server)
   if (req.token) return next();
   const origin = req.get("origin");
