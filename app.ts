@@ -44,6 +44,9 @@ import imageRouter from "./src/routes/image/image.js";
 
 const app = express();
 
+// Trust reverse proxy (Caddy) so secure cookies and rate limiting work correctly
+app.set("trust proxy", 1);
+
 app.use(logger("dev"));
 app.use(express.raw({ type: "application/octet-stream", limit: "2gb" }));
 app.use(express.json({ limit: "512kb" }));
