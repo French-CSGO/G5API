@@ -1045,7 +1045,7 @@ const getPlayerStats: any = async (steamId: string, seasonId: number | null = nu
     name:
       playerstats[0].name == null
         ? await Utils.getSteamName(playerstats[0].steam_id)
-        : playerstats[0].name.replace(/"/g, '\\"'),
+        : playerstats[0].name.replace(/\\/g, '\\\\').replace(/"/g, '\\"'),
     kills: parseFloat(playerstats[0].kills),
     deaths: parseFloat(playerstats[0].deaths),
     assists: parseFloat(playerstats[0].assists),

@@ -109,8 +109,9 @@ router.post("/", async (req: Request, res: Response) => {
       });
       return;
     }
-    // Validate backup size (max 1MB)
-    if (req.body && req.body.length > 1_048_576) {
+    // Validate backup is a Buffer and check size (max 1MB)
+    const body = Buffer.isBuffer(req.body) ? new Uint8Array(req.body) : new Uint8Array(Buffer.from(req.body));
+    if (body.length > 1_048_576) {
       res.status(413).json({ message: "Backup file too large (max 1MB)." });
       return;
     }
@@ -119,7 +120,7 @@ router.post("/", async (req: Request, res: Response) => {
 
     writeFile(
       `public/backups/${matchId}/get5_backup_match${matchId}_map${mapNumber}_round${roundNumber}.cfg`,
-      req.body,
+      body,
       function (err) {
         if (err) {
           console.error(err);
