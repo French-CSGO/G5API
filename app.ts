@@ -82,7 +82,7 @@ if (config.get("server.useRedis")) {
     resave: false,
     saveUninitialized: true,
     store: new RedisStore(redisCfg),
-    cookie: { maxAge: 2628000000, secure: process.env.NODE_ENV === "production", httpOnly: true, sameSite: "lax" },
+    cookie: { maxAge: 2628000000, httpOnly: true, sameSite: "lax" },
   });
   process.on("exit", function () {
     redisClient.quit();
@@ -93,7 +93,7 @@ if (config.get("server.useRedis")) {
     name: "MatchZy",
     resave: false,
     saveUninitialized: true,
-    cookie: { maxAge: 2628000000, secure: process.env.NODE_ENV === "production", httpOnly: true, sameSite: "lax" },
+    cookie: { maxAge: 2628000000, httpOnly: true, sameSite: "lax" },
   });
 }
 
