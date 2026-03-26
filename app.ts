@@ -187,7 +187,9 @@ app.use("/image", imageRouter);
 app.get("/auth/steam", (req, res, next) => {
   const referer = req.get("referer") || req.get("origin") || "";
   const origin = allowedOrigins.find((o) => referer.startsWith(o)) || allowedOrigins[0];
-  const apiURL = `${req.protocol}://${req.get("host")}/api`;
+  // Build API URL from the origin's scheme + current host to match the proxy protocol
+  const originUrl = new URL(origin);
+  const apiURL = `${originUrl.protocol}//${req.get("host")}/api`;
   const strategy = createSteamStrategy(apiURL, origin);
   passport.use("steam-dynamic", strategy);
   passport.authenticate("steam-dynamic", { failureRedirect: "/" })(req, res, next);
