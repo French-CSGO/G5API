@@ -132,7 +132,7 @@ const keyCheck = (request: Request<ParamsDictionary, any, any, ParsedQs, Record<
     return request.get("key");
   }
   return request.body.key;
-}
+};
 
 /**
  * @swagger
@@ -1643,9 +1643,12 @@ router.put(
     try {
       let matchID: string = req.params.match_id;
       let mapNumber: number = parseInt(req.params.map_number);
-      // This is required since we're sending an octet stream.
       let apiKey: string = keyCheck(req);
       let roundNumber: number = parseInt(req.params.round_number);
+      if (!/^\d+$/.test(matchID) || isNaN(mapNumber) || isNaN(roundNumber)) {
+        res.status(400).json({ message: "Invalid match ID, map number, or round number." });
+        return;
+      }
       // Database calls.
       let sql: string = "SELECT * FROM `match` WHERE id = ?";
       let matchFinalized: boolean = true;
@@ -1659,15 +1662,20 @@ router.put(
       // Throw error if wrong key. Match finish doesn't matter.
       await check_api_key(matchValues[0].api_key, apiKey, matchFinalized);
 
+      // Validate backup is a Buffer and check size (max 1MB)
+      const body = Buffer.isBuffer(req.body) ? new Uint8Array(req.body) : new Uint8Array(Buffer.from(req.body));
+      if (body.length > 1_048_576) {
+        res.status(413).json({ message: "Backup file too large (max 1MB)." });
+        return;
+      }
       if (!existsSync(`public/backups/${matchID}/`)) mkdirSync(`public/backups/${matchID}/`, {recursive: true});
 
       writeFile(
         `public/backups/${matchID}/get5_backup_match${matchID}_map${mapNumber}_round${roundNumber}.cfg`,
-        req.body,
+        body,
         function (err) {
           if (err) {
-            console.log(err);
-            throw err;
+            console.error(err);
           }
         }
       );

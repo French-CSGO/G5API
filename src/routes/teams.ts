@@ -406,6 +406,11 @@ router.post("/", Utils.ensureAuthenticated, async (req, res) => {
   let public_team: number = req.body[0].public_team;
   let teamID: number | null = null;
   if (logo) {
+    // Validate image size (max 2MB base64 ≈ 2.7M chars)
+    if (logo.length > 2_700_000) {
+      res.status(413).json({ message: "Logo image too large (max 2MB)." });
+      return;
+    }
     // Generate a 5 character logo "name".
     logoName = generate({
       length: 5,
@@ -574,6 +579,11 @@ router.put("/", Utils.ensureAuthenticated, async (req, res) => {
       });
     } else {
       logoName = checkUser[0].logo;
+    }
+    // Validate image size (max 2MB base64 ≈ 2.7M chars)
+    if (teamLogo.length > 2_700_000) {
+      res.status(413).json({ message: "Logo image too large (max 2MB)." });
+      return;
     }
     if (teamLogo.includes("data:image/png;base64")) {
       let base64Data: string = teamLogo.replace(/^data:image\/png;base64,/, "");
@@ -950,10 +960,13 @@ router.post("/challonge", Utils.ensureAuthenticated, async (req, res) => {
     const userInfo: RowDataPacket[] = await db.query("SELECT challonge_api_key FROM user WHERE id = ?", [userID]);
     let challongeAPIKey: string | undefined | null = Utils.decrypt(userInfo[0].challonge_api_key);
     let tournamentId: string = req.body[0].tournament_id;
+    if (!/^[\w\-]+$/.test(tournamentId)) {
+      throw new Error("Invalid tournament ID.");
+    }
     let challongeResponse: any = await fetch("https://api.challonge.com/v1/tournaments/" + tournamentId + "/participants.json?api_key=" + challongeAPIKey);
     let challongeData: any = await challongeResponse.json();
     if (!challongeData) {
-      throw "No teams found for Tournament " + tournamentId + "."
+      throw new Error("No teams found for the provided tournament.");
     }
     let sqlString = "INSERT INTO team (user_id, name, tag, challonge_team_id) VALUES ?";
     if (!challongeAPIKey) {
@@ -1024,6 +1037,6 @@ const img: any = (data: any) => {
     extname: '.' + extname,
     base64: match[2]
   };
-}
+};
 
 export default router;

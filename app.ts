@@ -4,6 +4,7 @@ import cookieParser from "cookie-parser";
 import cors from "cors";
 import express from "express";
 import bearerToken from "express-bearer-token";
+import rateLimit from "express-rate-limit";
 import session from "express-session";
 import helmet from "helmet";
 import createError from "http-errors";
@@ -43,6 +44,9 @@ import imageRouter from "./src/routes/image/image.js";
 
 const app = express();
 
+// Trust reverse proxy (Caddy) so secure cookies and rate limiting work correctly
+app.set("trust proxy", 1);
+
 app.use(logger("dev"));
 app.use(express.raw({ type: "application/octet-stream", limit: "2gb" }));
 app.use(express.json({ limit: "512kb" }));
@@ -78,7 +82,7 @@ if (config.get("server.useRedis")) {
     resave: false,
     saveUninitialized: true,
     store: new RedisStore(redisCfg),
-    cookie: { maxAge: 2628000000 },
+    cookie: { maxAge: 2628000000, httpOnly: true, sameSite: "lax" },
   });
   process.on("exit", function () {
     redisClient.quit();
@@ -89,7 +93,7 @@ if (config.get("server.useRedis")) {
     name: "MatchZy",
     resave: false,
     saveUninitialized: true,
-    cookie: { maxAge: 2628000000 },
+    cookie: { maxAge: 2628000000, httpOnly: true, sameSite: "lax" },
   });
 }
 
@@ -112,6 +116,18 @@ app.use(
     credentials: true,
   })
 );
+
+// CSRF is mitigated by sameSite:"lax" cookies + CORS origin restriction
+
+// Global rate limiting (configurable via server.rateLimitWindowMs / server.rateLimitMax)
+const globalLimiter = rateLimit({
+  windowMs: config.has("server.rateLimitWindowMs") ? config.get<number>("server.rateLimitWindowMs") : 900000,
+  max: config.has("server.rateLimitMax") ? config.get<number>("server.rateLimitMax") : 500,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: "Too many requests, please try again later." },
+});
+app.use(globalLimiter);
 
 // adding morgan to log HTTP requests
 app.use(morgan("combined"));
@@ -171,7 +187,9 @@ app.use("/image", imageRouter);
 app.get("/auth/steam", (req, res, next) => {
   const referer = req.get("referer") || req.get("origin") || "";
   const origin = allowedOrigins.find((o) => referer.startsWith(o)) || allowedOrigins[0];
-  const apiURL = `${req.protocol}://${req.get("host")}/api`;
+  // Build API URL from the origin's scheme + current host to match the proxy protocol
+  const originUrl = new URL(origin);
+  const apiURL = `${originUrl.protocol}//${req.get("host")}/api`;
   const strategy = createSteamStrategy(apiURL, origin);
   passport.use("steam-dynamic", strategy);
   passport.authenticate("steam-dynamic", { failureRedirect: "/" })(req, res, next);

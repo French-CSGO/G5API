@@ -124,7 +124,7 @@ router.get("/:slug", async (req, res) => {
     if (error.message?.includes("does not exist")) {
       return res.status(404).json({ error: "Queue not found." });
     }
-    console.error("Error fetching queue:", error);
+    console.error("Error fetching queue.");
     res.status(500).json({ error: "Failed to fetch queue." });
   }
 });
@@ -159,7 +159,7 @@ router.get("/:slug/players", Utils.ensureAuthenticated, async (req, res) => {
     const users = await QueueService.listUsersInQueue(slug);
     res.status(200).json(users);
   } catch (error) {
-    console.error("Error listing players in queue:", error);
+    console.error("Error listing players in queue.");
     res.status(500).json({ error: "Failed to list players in queue." });
   }
 });
@@ -396,7 +396,7 @@ router.put("/:slug", Utils.ensureAuthenticated, async (req, res) => {
       return res.status(400).json({ error: 'Invalid action. Must be "join" or "leave".' });
     }
   } catch (error: any) {
-    console.error(`Error processing ${action} for queue ${slug}:`, error);
+    console.error("Error processing queue action.");
     res.status(500).json({ error: `Failed to ${action} queue.` });
   }
 });
@@ -449,7 +449,7 @@ router.put("/:slug/teams", Utils.ensureAuthenticated, async (req, res) => {
     if (error.message?.includes("permission") || error.message?.includes("owner")) {
       return res.status(403).json({ error: error.message });
     }
-    console.error("Error setting queue teams:", error);
+    console.error("Error setting queue teams.");
     res.status(500).json({ error: error.message || "Failed to set teams." });
   }
 });
@@ -485,7 +485,7 @@ router.post("/:slug/start", Utils.ensureAuthenticated, async (req, res) => {
     if (error.message?.includes("owner") || error.message?.includes("permission")) {
       return res.status(403).json({ error: error.message });
     }
-    console.error("Error starting manual queue:", error);
+    console.error("Error starting manual queue.");
     res.status(500).json({ error: error.message || "Failed to start match." });
   }
 });
@@ -536,7 +536,7 @@ router.delete("/", Utils.ensureAuthenticated, async (req, res) => {
     if (error.message?.includes("not found") || error.message?.includes("does not exist")) {
       return res.status(404).json({ error: "Queue not found." });
     }
-    console.error("Error deleting queue:", error);
+    console.error("Error deleting queue.");
     res.status(500).json({ error: "Failed to delete queue." });
   }
 });

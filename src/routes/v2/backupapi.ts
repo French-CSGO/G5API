@@ -13,13 +13,8 @@
 /** Config to check demo uploads.
  * @const
  */
-import config from "config";
-
-import { db } from "../../services/db.js";
-
 import { Request, Response, Router } from "express";
 import Utils from "../../utility/utils.js";
-import { RowDataPacket } from "mysql2";
 
 /**
  * @const
@@ -102,6 +97,10 @@ router.post("/", async (req: Request, res: Response) => {
       });
       return;
     }
+    if (!/^\d+$/.test(matchId) || !/^\d+$/.test(mapNumber) || !/^\d+$/.test(roundNumber)) {
+      res.status(400).send({ message: "Invalid Match ID, Map Number, or Round Number." });
+      return;
+    }
     // Check if our API key is correct.
     const matchApiCheck: number = await Utils.checkApiKey(apiKey, matchId);
     if (matchApiCheck == 1 || matchApiCheck == 2) {
@@ -110,16 +109,21 @@ router.post("/", async (req: Request, res: Response) => {
       });
       return;
     }
+    // Validate backup is a Buffer and check size (max 1MB)
+    const body = Buffer.isBuffer(req.body) ? new Uint8Array(req.body) : new Uint8Array(Buffer.from(req.body));
+    if (body.length > 1_048_576) {
+      res.status(413).json({ message: "Backup file too large (max 1MB)." });
+      return;
+    }
     if (!existsSync(`public/backups/${matchId}/`))
       mkdirSync(`public/backups/${matchId}/`, { recursive: true });
 
     writeFile(
       `public/backups/${matchId}/get5_backup_match${matchId}_map${mapNumber}_round${roundNumber}.cfg`,
-      req.body,
+      body,
       function (err) {
         if (err) {
           console.error(err);
-          throw err;
         }
       }
     );

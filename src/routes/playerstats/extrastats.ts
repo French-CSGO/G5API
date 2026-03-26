@@ -182,7 +182,7 @@ import { Response } from "express-serve-static-core";
  router.get("/:steam_id", async (req, res, next) => {
   try {
     let steamID: string = req.params.steam_id;
-    let sql: string = "SELECT id FROM player_stats WHERE steam_id = ?"
+    let sql: string = "SELECT id FROM player_stats WHERE steam_id = ?";
     let extraSql: string = "SELECT * FROM player_stat_extras where id IN (?)";
     const playerIds: RowDataPacket[] = await db.query(sql, [steamID]);
     if (!playerIds.length) {
@@ -836,6 +836,6 @@ const getIdFromMatches = async (steamId: string, isPug: boolean | number, season
     }
     res.json({ extrastats });
     return;
-}
+};
 
 export default router;

@@ -77,7 +77,7 @@ async function returnStrategy(identifier: any, profile: any, done: any) {
           large_image: profile.photos[2].value,
           api_key: Utils.encrypt(apiKey),
         };
-        curUser = await db.query(sql, [newUser]);
+        await db.query(sql, [newUser]);
         sql = "SELECT * FROM user WHERE steam_id = ?";
         curUser = await db.query(sql, [profile.id]);
         defaultMaps.push(['de_inferno', 'Inferno', curUser[0].id]);
@@ -191,7 +191,7 @@ passport.use('local-register',
       }
       let curUser = await db.query(sql, [username, req.body.steam_id]);
       if (curUser.length) {
-        return done(null, false, {message: "Username or SteamID already exists."})
+        return done(null, false, {message: "Username or SteamID already exists."});
       } else {
         // Check if steam64 is correct.
         if(await Utils.convertToSteam64(req.body.steam_id) == "") {

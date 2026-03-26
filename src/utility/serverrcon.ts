@@ -2,7 +2,7 @@ import Utils from "./utils.js";
 import { Rcon } from "dathost-rcon-client";
 import fetch from "node-fetch";
 import { compare } from "compare-versions";
-import { SteamApiResponse } from "../types/serverrcon/SteamApiResponse.js";
+
 
 interface SteamVersionResponse {
   response: {

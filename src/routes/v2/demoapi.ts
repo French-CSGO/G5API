@@ -14,11 +14,12 @@
  * @const
  */
 import JSZip from "jszip";
+import path from "path";
 
 /** Required to save files.
  * @const
  */
-import { existsSync, mkdirSync, writeFile } from "fs";
+import { writeFile } from "fs";
 
 /** Config to check demo uploads.
  * @const
@@ -115,6 +116,9 @@ router.post("/", async (req: Request, res: Response) => {
         .status(401)
         .send({ message: "API key, Match ID, or Map Number not provided." });
     }
+    if (!/^\d+$/.test(matchId) || !/^\d+$/.test(mapNumber) || !/^[\w\-. ]+$/.test(demoFilename)) {
+      return res.status(400).send({ message: "Invalid Match ID, Map Number, or filename." });
+    }
     // Check if our API key is correct.
     const matchApiCheck: number = await Utils.checkApiKey(apiKey, matchId);
     if (matchApiCheck == 1) {
@@ -148,11 +152,11 @@ router.post("/", async (req: Request, res: Response) => {
     zip
       .generateAsync({ type: "nodebuffer", compression: "DEFLATE" })
       .then((buf) => {
+        const safeDemoName = path.basename(demoFilename).replace(/[^a-zA-Z0-9._\-]/g, "_").replace(".dem", ".zip");
         // @ts-ignore
-        writeFile("public/demos/" + demoFilename.replace(".dem", ".zip"), buf, "binary", function (err) {
+        writeFile("public/demos/" + safeDemoName, buf, "binary", function (err) {
           if (err) {
             console.error(err);
-            throw err;
           }
         });
       });

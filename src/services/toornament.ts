@@ -3,7 +3,7 @@
  */
 import fetch from "node-fetch";
 
-import Utils from "../utility/utils.js";
+
 
 /** Database module.
  * @const
@@ -100,7 +100,7 @@ export default
     const mapsFromDb: any[] = await db.query(sqlMaps, [match_id]);
 
     const tMatchOpponent1Id = targetMatch.opponents[0].participant?.id;
-    const tMatchOpponent2Id = targetMatch.opponents[1].participant?.id;
+
 
     for (const map of mapsFromDb) {
         const gameNumber = map.map_number + 1;
@@ -128,7 +128,7 @@ export default
             }
         }
 
-        const gameUpdateResponse = await fetch(
+        await fetch(
             `https://api.toornament.com/organizer/v2/matches/${targetMatch.id}/games/${gameNumber}`,
             {
                 method: "PATCH",
@@ -196,7 +196,7 @@ export default
         }
     }
 
-    const matchUpdateResponse = await fetch(
+    await fetch(
         `https://api.toornament.com/organizer/v2/matches/${targetMatch.id}`,
         {
             method: "PATCH",

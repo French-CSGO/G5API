@@ -963,7 +963,7 @@ router.get("/:match_id/bombs", async (req, res, next) => {
     res.json({ bombInfo });
   } catch (err) {
     console.error((err as Error).toString());
-    res.status(500).write(`event: error\ndata: ${(err as Error).toString()}\n\n`);
+    res.status(500).write(`event: error\ndata: Internal server error\n\n`);
     res.end();
   }
 });
@@ -1243,9 +1243,9 @@ router.post("/", Utils.ensureAuthenticated, async (req, res, next) => {
       for (let key in cvarInsertSet) {
         await db.query(cvarSql, [
           insertMatch.insertId,
-          key.replace(/"/g, '\\"'),
+          key.replace(/\\/g, '\\\\').replace(/"/g, '\\"'),
           typeof cvarInsertSet[key] === "string"
-            ? cvarInsertSet[key].replace(/"/g, '\\"')
+            ? cvarInsertSet[key].replace(/\\/g, '\\\\').replace(/"/g, '\\"')
             : cvarInsertSet[key]
         ]);
       }

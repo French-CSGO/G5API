@@ -12,7 +12,9 @@
     "localLoginEnabled": true,
     "redisUrl": "redis://:super_secure@localhost:6379",
     "redisTTL": 86400,
-    "queueTTL": 3600
+    "queueTTL": 3600,
+    "rateLimitWindowMs": 900000,
+    "rateLimitMax": 500
   },
   "test": {
     "driver": "mysql",

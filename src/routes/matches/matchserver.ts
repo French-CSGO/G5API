@@ -16,6 +16,7 @@ import GameServer from "../../utility/serverrcon.js";
 import config from "config";
 
 import { existsSync, readdir } from "fs";
+import path from "path";
 import { AccessMessage } from "../../types/mapstats/AccessMessage.js";
 import { RowDataPacket } from "mysql2";
 import { MapStats } from "../../types/mapstats/MapStats.js";
@@ -139,7 +140,7 @@ router.get(
             );
         }
         let serverUpdate: GameServer = await getGameServer(req.params.match_id);
-        if (!serverUpdate.endGet5Match()) {
+        if (!await serverUpdate.endGet5Match()) {
           console.log(
             "Error attempting to stop match on game server side. Will continue."
           );
@@ -210,7 +211,6 @@ router.get(
         const mapStat: RowDataPacket[] = await db.query(mapStatSql, [
           req.params.match_id,
         ]);
-        let mapStatId: RowDataPacket[];
         let newStatStmt: MapStats = {
           end_time: new Date().toISOString().slice(0, 19).replace("T", " "),
           winner: null,
@@ -234,7 +234,7 @@ router.get(
         let matchSql: string = "UPDATE `match` SET ? WHERE id=?";
         let serverUpdateSql: string = "UPDATE game_server SET in_use=0 WHERE id=?";
         if (!mapStat.length) {
-          mapStatId = await db.query(mapStatSql, [newStatStmt]);
+          await db.query(mapStatSql, [newStatStmt]);
         }
         else
           await db.query(mapStatSql, [
@@ -261,7 +261,7 @@ router.get(
         // Let the server cancel the match first, or attempt to?
         if (matchRow[0].server_id != null) {
           let serverUpdate: GameServer = await getGameServer(req.params.match_id);
-          if (!serverUpdate.endGet5Match()) {
+          if (!await serverUpdate.endGet5Match()) {
             console.log(
               "Error attempting to stop match on game server side. Will continue."
             );
@@ -1198,6 +1198,10 @@ router.post(
         let newServerInfo: string =
           "SELECT id, user_id, ip_string, port, rcon_password, public_server FROM game_server WHERE id = ?";
         let configString: string = req.body[0].backup_file;
+        if (!/^[\w\-. ]+$/.test(configString) || !/^\d+$/.test(req.params.match_id)) {
+          res.status(400).json({ message: "Invalid backup file name or match ID." });
+          return;
+        }
 
         // Retrieve OLD server_id before any updates.
         const matchServerId: RowDataPacket[] = await db.query(
@@ -1218,7 +1222,8 @@ router.post(
         }
 
         // Check to see if file exists in our public directory.
-        if (!existsSync(`public/backups/${req.params.match_id}/${configString}`)) {
+        const safeConfigName = path.basename(configString);
+        if (!existsSync(`public/backups/${req.params.match_id}/${safeConfigName}`)) {
           res.status(412).json({ message: "Backup name invalid." });
           return;
         }
@@ -1252,14 +1257,14 @@ router.post(
 
           // 3. Send get5_loadbackup_url to server B.
           await serverUpdate.restoreBackupFromURL(
-            config.get("server.apiURL") + `/backups/${req.params.match_id}/${configString}`
+            config.get("server.apiURL") + `/backups/${req.params.match_id}/${safeConfigName}`
           );
 
           // 4. Update match server_id.
           await db.query("UPDATE `match` SET server_id = ? WHERE id = ?", [newServerId, req.params.match_id]);
 
           res.json({
-            message: `Backup ${configString} successfully restored on server ${newServerId}.`
+            message: `Backup ${safeConfigName} successfully restored on server ${newServerId}.`
           });
         } catch (err) {
           res.status(500).json({ message: "Error on game server.", response: err });
@@ -1318,6 +1323,10 @@ router.get(
         res.status(errMessage.status).json({ message: errMessage.message });
         return;
       } else {
+        if (!/^\d+$/.test(req.params.match_id)) {
+          res.status(400).json({ message: "Invalid match ID." });
+          return;
+        }
         let fileArray: Array<string> = [];
         readdir(`public/backups/${req.params.match_id}`, function (err, files) {
           //handling error
