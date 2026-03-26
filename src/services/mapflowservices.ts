@@ -132,7 +132,7 @@ class MapFlowService {
       let mapInfo: RowDataPacket[];
       let insertObj: object;
       let playerTeamId: RowDataPacket[];
-      let playerStatVals: RowDataPacket[];
+
       sqlString =
         "SELECT id FROM map_stats WHERE match_id = ? AND map_number = ?";
       mapInfo = await db.query(sqlString, [event.matchid, event.map_number]);
@@ -313,7 +313,7 @@ class MapFlowService {
       insUpdStatement = {
         team1_score: event.team1.score,
         team2_score: event.team2.score
-      }
+      };
       await db.query(sqlString, [insUpdStatement, mapStatInfo[0].id]);
       // Update Challonge info if needed.
       sqlString = "SELECT max_maps, season_id, team1_id, team2_id FROM `match` WHERE id = ?";

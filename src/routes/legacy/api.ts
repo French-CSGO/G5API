@@ -132,7 +132,7 @@ const keyCheck = (request: Request<ParamsDictionary, any, any, ParsedQs, Record<
     return request.get("key");
   }
   return request.body.key;
-}
+};
 
 /**
  * @swagger
@@ -1662,6 +1662,11 @@ router.put(
       // Throw error if wrong key. Match finish doesn't matter.
       await check_api_key(matchValues[0].api_key, apiKey, matchFinalized);
 
+      // Validate backup size (max 1MB)
+      if (req.body && req.body.length > 1_048_576) {
+        res.status(413).json({ message: "Backup file too large (max 1MB)." });
+        return;
+      }
       if (!existsSync(`public/backups/${matchID}/`)) mkdirSync(`public/backups/${matchID}/`, {recursive: true});
 
       writeFile(

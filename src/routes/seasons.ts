@@ -23,7 +23,7 @@ import { ToornamentParticipant } from "../types/toornament/ToornamentParticipant
 import { ToornamentTokenResponse } from "../types/toornament/ToornamentTokenResponse.js";
 import { ToornamentMatch } from "../types/toornament/ToornamentMatch.js";
 
-import { getSetting, getSettingBool } from "../services/settings.js";
+import { getSetting } from "../services/settings.js";
 
 /**
  * @swagger
@@ -669,7 +669,7 @@ router.post("/challonge", Utils.ensureAuthenticated, async (req, res, next) => {
     const rawTournamentId: string = req.body[0].tournament_id;
 
     if (rawTournamentId.startsWith("t:")) {
-      console.log("Toornament import requested.")
+      console.log("Toornament import requested.");
       const result = await handleToornamentImport(rawTournamentId, req.user!.id, req.body[0]);
       return res.json(result);
     }
@@ -692,7 +692,7 @@ router.post("/challonge", Utils.ensureAuthenticated, async (req, res, next) => {
       challongeAPIKey +
       "&include_participants=1");
 
-    let challongeData = await challongeResponse.json()
+    let challongeData = await challongeResponse.json();
     if (challongeData) {
       // Insert the season.
       let sqlString: string = "INSERT INTO season SET ?";
@@ -815,7 +815,7 @@ async function handleToornamentImport(tournamentId: string, userId: number, reqB
 
     const contentRange = participantsResponse.headers.get("Content-Range");
     if (contentRange) {
-      const [range, total] = contentRange.split("/");
+      const [, total] = contentRange.split("/");
       if (allParticipants.length >= parseInt(total)) {
         hasMore = false;
       } else {

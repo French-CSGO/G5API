@@ -159,8 +159,7 @@ class SeriesFlowService {
       let sqlString: string;
       let matchInfo: RowDataPacket[];
       let mapInfo: RowDataPacket[];
-      let playerStats: RowDataPacket[];
-      let singlePlayerStat: RowDataPacket[];
+
       let mapEndTime: string = new Date()
         .toISOString()
         .slice(0, 19)

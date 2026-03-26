@@ -578,7 +578,7 @@ router.get("/teams/:team_id/:season_id", async (req, res) => {
          name:
            player.name == null
              ? await Utils.getSteamName(player.steam_id)
-             : player.name.replace('/"/g', '\\"'),
+             : player.name.replace(/"/g, '\\"'),
          kills: parseFloat(player.kills),
          deaths: parseFloat(player.deaths),
          assists: parseFloat(player.assists),
@@ -627,11 +627,11 @@ router.get("/teams/:team_id/:season_id", async (req, res) => {
        if (player.name == "")
          collisionPlayer!.name = (collisionPlayer!.name + "/" + player.name)
            .replace(/\/+$/, "")
-           .replace('/"/g', '\\"');
+           .replace(/"/g, '\\"');
        else
          collisionPlayer!.name = player.name
            .replace(/\/+$/, "")
-           .replace('/"/g', '\\"');
+           .replace(/"/g, '\\"');
        collisionPlayer!.kills += parseFloat(player.kills);
        collisionPlayer!.deaths += parseFloat(player.deaths);
        collisionPlayer!.assists += parseFloat(player.assists);
@@ -765,7 +765,7 @@ router.get("/teams/:team_id/:season_id", async (req, res) => {
         name:
           player.name == null
             ? await Utils.getSteamName(player.steam_id)
-            : player.name.replace('/"/g', '\\"'),
+            : player.name.replace(/"/g, '\\"'),
         kills: parseFloat(player.kills),
         deaths: parseFloat(player.deaths),
         assists: parseFloat(player.assists),
@@ -814,11 +814,11 @@ router.get("/teams/:team_id/:season_id", async (req, res) => {
       if (player.name == "")
         collisionPlayer.name = (collisionPlayer.name + "/" + player.name)
           .replace(/\/+$/, "")
-          .replace('/"/g', '\\"');
+          .replace(/"/g, '\\"');
       else
         collisionPlayer.name = player.name
           .replace(/\/+$/, "")
-          .replace('/"/g', '\\"');
+          .replace(/"/g, '\\"');
       collisionPlayer.kills += parseFloat(player.kills);
       collisionPlayer.deaths += parseFloat(player.deaths);
       collisionPlayer.assists += parseFloat(player.assists);

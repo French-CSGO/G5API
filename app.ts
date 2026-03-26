@@ -114,6 +114,21 @@ app.use(
   })
 );
 
+// CSRF protection: validate Origin header on state-changing requests
+app.use((req, res, next) => {
+  if (["GET", "HEAD", "OPTIONS"].includes(req.method)) return next();
+  // Skip CSRF for bearer-token authenticated API calls (server-to-server)
+  if (req.token) return next();
+  const origin = req.get("origin");
+  if (origin && allowedOrigins.some((allowed) => origin === allowed)) return next();
+  // No origin header (same-origin form or server call) — allow if referer matches
+  const referer = req.get("referer");
+  if (!origin && referer && allowedOrigins.some((allowed) => referer.startsWith(allowed))) return next();
+  // No origin/referer (non-browser client) with valid session — allow
+  if (!origin && !referer) return next();
+  res.status(403).json({ message: "CSRF validation failed." });
+});
+
 // Global rate limiting (configurable via server.rateLimitWindowMs / server.rateLimitMax)
 const globalLimiter = rateLimit({
   windowMs: config.get<number>("server.rateLimitWindowMs"),

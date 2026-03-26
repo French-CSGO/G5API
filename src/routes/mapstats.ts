@@ -4,8 +4,6 @@
  * description: Express API router for mapstats in get5.
  */
 import { Router } from "express";
-import app from "../../app.js";
-
 const router = Router();
 
 import {db} from "../services/db.js";

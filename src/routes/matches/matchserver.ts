@@ -211,7 +211,6 @@ router.get(
         const mapStat: RowDataPacket[] = await db.query(mapStatSql, [
           req.params.match_id,
         ]);
-        let mapStatId: RowDataPacket[];
         let newStatStmt: MapStats = {
           end_time: new Date().toISOString().slice(0, 19).replace("T", " "),
           winner: null,
@@ -235,7 +234,7 @@ router.get(
         let matchSql: string = "UPDATE `match` SET ? WHERE id=?";
         let serverUpdateSql: string = "UPDATE game_server SET in_use=0 WHERE id=?";
         if (!mapStat.length) {
-          mapStatId = await db.query(mapStatSql, [newStatStmt]);
+          await db.query(mapStatSql, [newStatStmt]);
         }
         else
           await db.query(mapStatSql, [

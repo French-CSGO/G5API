@@ -13,13 +13,8 @@
 /** Config to check demo uploads.
  * @const
  */
-import config from "config";
-
-import { db } from "../../services/db.js";
-
 import { Request, Response, Router } from "express";
 import Utils from "../../utility/utils.js";
-import { RowDataPacket } from "mysql2";
 
 /**
  * @const
@@ -112,6 +107,11 @@ router.post("/", async (req: Request, res: Response) => {
       res.status(401).send({
         message: "Invalid API key has been given."
       });
+      return;
+    }
+    // Validate backup size (max 1MB)
+    if (req.body && req.body.length > 1_048_576) {
+      res.status(413).json({ message: "Backup file too large (max 1MB)." });
       return;
     }
     if (!existsSync(`public/backups/${matchId}/`))

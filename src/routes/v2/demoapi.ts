@@ -19,7 +19,7 @@ import path from "path";
 /** Required to save files.
  * @const
  */
-import { existsSync, mkdirSync, writeFile } from "fs";
+import { mkdirSync, writeFile } from "fs";
 
 /** Config to check demo uploads.
  * @const

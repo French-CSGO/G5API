@@ -10,7 +10,7 @@ const router = Router();
 import {db} from "../services/db.js";
 
 import Utils from "../utility/utils.js";
-import { User } from "../types/User.js"
+
 import { RowDataPacket } from "mysql2";
 import { MapObject } from "../types/maps/MapObject.js";
 /* Swagger shared definitions */
@@ -217,7 +217,7 @@ router.post("/", Utils.ensureAuthenticated, async (req, res, next) => {
       map_name: req.body[0].map_name,
       map_display_name: req.body[0].map_display_name,
       enabled: enabled
-    }
+    };
     insertSet = await db.buildUpdateStatement(insertSet);
     // Check if user is allowed to create?
     let sql: string =
@@ -282,7 +282,7 @@ router.put("/", Utils.ensureAuthenticated, async (req, res, next) => {
       map_name: req.body[0].map_name,
       map_display_name: req.body[0].map_display_name,
       enabled: enabled
-    }
+    };
     insertSet = await db.buildUpdateStatement(insertSet);
     // Check if user is allowed to create?
     let sql: string =

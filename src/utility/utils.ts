@@ -434,8 +434,6 @@ class Utils {
     let pugTeamNameSql: string = "SELECT name FROM team WHERE id = ?";
     let playerStatUpdateSql: string =
       "UPDATE player_stats SET team_name = ?, winner = ? WHERE match_id = ? AND map_id = ? AND steam_id IN (?)";
-    let pugSql: string =
-      "DELETE FROM team_auth_names WHERE team_id = ? OR team_id = ?";
     let playerStatCheckExistsSql =
       "SELECT COUNT(*) as cnt FROM player_stats WHERE match_id = ? AND map_id = ?";
     const teamNameOne: RowDataPacket[] = await db.query(pugTeamNameSql, [
