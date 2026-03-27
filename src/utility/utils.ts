@@ -274,7 +274,7 @@ class Utils {
     try {
       const summaryInfo = await steam.getUserSummary(auth64);
 
-      // steamapi renvoie toujours un tableau :
+      // SteamAPI is expected to return an array, but handle both array and non-array results defensively.
       const user = Array.isArray(summaryInfo) ? summaryInfo[0] : summaryInfo;
 
       return user?.avatar?.medium ?? null;

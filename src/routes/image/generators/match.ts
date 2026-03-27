@@ -31,7 +31,7 @@ export async function generateMatchImage(
   });
 
   const team1Players = players.filter(pl => pl.team_id === match.team1_id).slice(0, 5).map(withRating);
-  const team2Players = players.filter(pl => pl.team_id !== match.team1_id).slice(0, 5).map(withRating);
+  const team2Players = players.filter(pl => pl.team_id === match.team2_id).slice(0, 5).map(withRating);
 
   const team1Name  = match.team1_string || match.team1_name || "Team 1";
   const team2Name  = match.team2_string || match.team2_name || "Team 2";
@@ -78,9 +78,9 @@ export async function generateMatchImage(
         // Row stripes
         activeRows.forEach((ry, i) => {
           const rowY = ry - st.row_height / 2;
-          const isOdd = i % 2 === 0;
-          const rFill  = isOdd ? st.odd_fill  : st.even_fill;
-          const rAlpha = isOdd ? st.odd_alpha : st.even_alpha;
+          const isEven = i % 2 === 0;
+          const rFill  = isEven ? st.odd_fill  : st.even_fill;
+          const rAlpha = isEven ? st.odd_alpha : st.even_alpha;
           if (rAlpha > 0) {
             // Clip to table bounds for stripes
             ctx.save();
@@ -135,7 +135,7 @@ export async function generateMatchImage(
   // ── Player rows ────────────────────────────────────────────────────────────
   for (let i = 0; i < 5; i++) {
     const rowY = m.rows_y[i];
-    if (!rowY) continue; // Y=0 → ligne désactivée
+    if (!rowY) continue; // Y=0 → row disabled
 
     const p1 = team1Players[i];
     if (p1) {
