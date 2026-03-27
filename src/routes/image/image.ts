@@ -150,17 +150,24 @@ router.post(
 
 // ─── Match image routes ───────────────────────────────────────────────────────
 
-/** GET /image/match/:match_id */
+/** GET /image/match/:match_id — full match stats (aggregated across all maps) */
 router.get("/match/:match_id", async (req: Request, res: Response) => {
-  await renderMatchImage(req, res, null);
+  await renderMatchImage(req, res, null, "full");
 });
 
-/** GET /image/match/:match_id/map/:map_id */
-router.get("/match/:match_id/map/:map_id", async (req: Request, res: Response) => {
-  await renderMatchImage(req, res, parseInt(req.params.map_id));
+/** GET /image/match/:match_id/map — current (latest) map stats */
+router.get("/match/:match_id/map", async (req: Request, res: Response) => {
+  await renderMatchImage(req, res, null, "latest");
 });
 
-async function renderMatchImage(req: Request, res: Response, mapId: number | null) {
+/** GET /image/match/:match_id/map/:map_number — stats by map number (1, 2, 3...) */
+router.get("/match/:match_id/map/:map_number", async (req: Request, res: Response) => {
+  const mapNumber = parseInt(req.params.map_number);
+  if (isNaN(mapNumber) || mapNumber < 1) { res.status(400).json({ error: "Invalid map number" }); return; }
+  await renderMatchImage(req, res, mapNumber, "byNumber");
+});
+
+async function renderMatchImage(req: Request, res: Response, mapParam: number | null, mode: "full" | "latest" | "byNumber") {
   try {
     const matchId = parseInt(req.params.match_id);
     if (isNaN(matchId)) { res.status(400).json({ error: "Invalid match ID" }); return; }
@@ -177,13 +184,26 @@ async function renderMatchImage(req: Request, res: Response, mapId: number | nul
     if (!matchRows?.length) { res.status(404).json({ error: "Match not found" }); return; }
 
     let mapRow: MapStatRow | null = null;
-    if (mapId !== null) {
+    let mapStatsId: number | null = null;
+
+    if (mode === "byNumber" && mapParam !== null) {
+      // map_number is 0-indexed in DB, user passes 1-indexed
       const rows = await db.query(
-        `SELECT id, map_name, team1_score, team2_score FROM map_stats WHERE id = ? AND match_id = ? LIMIT 1`,
-        [mapId, matchId]
+        `SELECT id, map_name, team1_score, team2_score FROM map_stats WHERE match_id = ? AND map_number = ? LIMIT 1`,
+        [matchId, mapParam - 1]
+      ) as MapStatRow[];
+      if (!rows?.length) { res.status(404).json({ error: `Map ${mapParam} not found for this match` }); return; }
+      mapRow = rows[0];
+      mapStatsId = mapRow.id;
+    } else if (mode === "latest") {
+      const rows = await db.query(
+        `SELECT id, map_name, team1_score, team2_score FROM map_stats WHERE match_id = ? ORDER BY id DESC LIMIT 1`,
+        [matchId]
       ) as MapStatRow[];
       mapRow = rows?.[0] ?? null;
+      mapStatsId = mapRow?.id ?? null;
     } else {
+      // "full" mode — get latest map for display but aggregate all player stats
       const rows = await db.query(
         `SELECT id, map_name, team1_score, team2_score FROM map_stats WHERE match_id = ? ORDER BY id DESC LIMIT 1`,
         [matchId]
@@ -191,8 +211,11 @@ async function renderMatchImage(req: Request, res: Response, mapId: number | nul
       mapRow = rows?.[0] ?? null;
     }
 
-    const playerFilter = mapId !== null ? "AND map_id = ?" : "";
-    const playerArgs   = mapId !== null ? [matchId, mapId] : [matchId];
+    // For "latest" and "byNumber", filter player stats to that specific map
+    // For "full", aggregate across all maps
+    const filterByMap = mode !== "full" && mapStatsId !== null;
+    const playerFilter = filterByMap ? "AND map_id = ?" : "";
+    const playerArgs   = filterByMap ? [matchId, mapStatsId] : [matchId];
     const players = await db.query(
       `SELECT steam_id, name, team_id,
          SUM(kills) AS kills, SUM(deaths) AS deaths, SUM(assists) AS assists,
@@ -222,12 +245,14 @@ router.get("/match/:match_id/player/:steam_id", async (req: Request, res: Respon
   await renderPlayerImage(req, res, null);
 });
 
-/** GET /image/match/:match_id/map/:map_id/player/:steam_id — stats joueur sur une map */
-router.get("/match/:match_id/map/:map_id/player/:steam_id", async (req: Request, res: Response) => {
-  await renderPlayerImage(req, res, parseInt(req.params.map_id));
+/** GET /image/match/:match_id/map/:map_number/player/:steam_id — stats joueur sur une map (par numéro 1, 2, 3...) */
+router.get("/match/:match_id/map/:map_number/player/:steam_id", async (req: Request, res: Response) => {
+  const mapNumber = parseInt(req.params.map_number);
+  if (isNaN(mapNumber) || mapNumber < 1) { res.status(400).json({ error: "Invalid map number" }); return; }
+  await renderPlayerImage(req, res, mapNumber);
 });
 
-async function renderPlayerImage(req: Request, res: Response, mapId: number | null) {
+async function renderPlayerImage(req: Request, res: Response, mapNumber: number | null) {
   try {
     const matchId = parseInt(req.params.match_id);
     const steamId = req.params.steam_id;
@@ -243,6 +268,17 @@ async function renderPlayerImage(req: Request, res: Response, mapId: number | nu
       [matchId]
     ) as MatchRow[];
     if (!matchRows?.length) { res.status(404).json({ error: "Match not found" }); return; }
+
+    // Resolve map_number (1-indexed) to map_stats.id
+    let mapId: number | null = null;
+    if (mapNumber !== null) {
+      const mapRows = await db.query(
+        `SELECT id FROM map_stats WHERE match_id = ? AND map_number = ? LIMIT 1`,
+        [matchId, mapNumber - 1]
+      ) as MapStatRow[];
+      if (!mapRows?.length) { res.status(404).json({ error: `Map ${mapNumber} not found for this match` }); return; }
+      mapId = mapRows[0].id;
+    }
 
     const mapFilter = mapId !== null ? "AND map_id = ?" : "";
     const queryArgs = mapId !== null ? [matchId, steamId, mapId] : [matchId, steamId];
