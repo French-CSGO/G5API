@@ -211,6 +211,17 @@ async function renderMatchImage(req: Request, res: Response, mapParam: number | 
       mapRow = rows?.[0] ?? null;
     }
 
+    // For "full" mode, fetch all maps for the series score display
+    let allMaps: MapStatRow[] = [];
+    if (mode === "full") {
+      allMaps = await db.query(
+        `SELECT id, map_name, team1_score, team2_score FROM map_stats WHERE match_id = ? ORDER BY map_number ASC`,
+        [matchId]
+      ) as MapStatRow[];
+    } else {
+      allMaps = mapRow ? [mapRow] : [];
+    }
+
     // For "latest" and "byNumber", filter player stats to that specific map
     // For "full", aggregate across all maps
     const filterByMap = mode !== "full" && mapStatsId !== null;
@@ -228,7 +239,7 @@ async function renderMatchImage(req: Request, res: Response, mapParam: number | 
       playerArgs
     ) as PlayerStatRow[];
 
-    const png = await generateMatchImage(matchRows[0], mapRow, players, loadSettings());
+    const png = await generateMatchImage(matchRows[0], mapRow, allMaps, players, loadSettings());
     res.setHeader("Content-Type", "image/png");
     res.setHeader("Cache-Control", "no-cache, no-store");
     res.send(png);

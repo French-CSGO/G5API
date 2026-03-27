@@ -7,6 +7,7 @@ import type { ImageSettings, MatchRow, MapStatRow, PlayerStatRow, PlayerWithRati
 export async function generateMatchImage(
   match: MatchRow,
   mapRow: MapStatRow | null,
+  allMaps: MapStatRow[],
   players: PlayerStatRow[],
   s: ImageSettings
 ): Promise<Buffer> {
@@ -36,7 +37,9 @@ export async function generateMatchImage(
   const team2Name  = match.team2_string || match.team2_name || "Team 2";
   const t1Score    = mapRow?.team1_score ?? 0;
   const t2Score    = mapRow?.team2_score ?? 0;
-  const mapDisplay = (mapRow?.map_name ?? "").replace(/^de_/, "").toUpperCase().split("").join(" ");
+  const mapDisplay = allMaps.length > 0
+    ? allMaps.map(m => `${m.team1_score} ${m.map_name.replace(/^de_/, "").toUpperCase()}  ${m.team2_score}`).join("  |  ")
+    : (mapRow?.map_name ?? "").replace(/^de_/, "").toUpperCase().split("").join(" ");
 
   const canvas = createCanvas(W, H);
   const ctx    = canvas.getContext("2d");
