@@ -23,6 +23,24 @@ export function drawText(
   ctx.fillText(stripAccents(str), x, y);
 }
 
+export function drawMultilineText(
+  ctx: CanvasRenderingContext2D,
+  str: string, x: number, y: number,
+  font: string, color = "#1a1a2e",
+  lineHeight: number,
+  align: CanvasTextAlign = "center"
+) {
+  const lines = str.split("\n");
+  const totalH = (lines.length - 1) * lineHeight;
+  ctx.font         = font;
+  ctx.fillStyle    = color;
+  ctx.textAlign    = align;
+  ctx.textBaseline = "middle";
+  lines.forEach((line, i) => {
+    ctx.fillText(stripAccents(line), x, y - totalH / 2 + i * lineHeight);
+  });
+}
+
 export function drawRoundRect(
   ctx: CanvasRenderingContext2D,
   x: number, y: number, w: number, h: number, radius: number,

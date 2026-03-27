@@ -1,7 +1,7 @@
 import { createCanvas, loadImage } from "canvas";
 import path from "path";
 import Utils from "../../../utility/utils.js";
-import { drawText, drawRoundRect, fieldFont, tryRegisterFont } from "../helpers.js";
+import { drawText, drawMultilineText, drawRoundRect, fieldFont, tryRegisterFont } from "../helpers.js";
 import type { ImageSettings, MatchRow, MapStatRow, PlayerStatRow, PlayerWithRating } from "../types.js";
 
 export async function generateMatchImage(
@@ -33,12 +33,21 @@ export async function generateMatchImage(
   const team1Players = players.filter(pl => pl.team_id === match.team1_id).slice(0, 5).map(withRating);
   const team2Players = players.filter(pl => pl.team_id === match.team2_id).slice(0, 5).map(withRating);
 
-  const team1Name  = match.team1_string || match.team1_name || "Team 1";
-  const team2Name  = match.team2_string || match.team2_name || "Team 2";
-  const t1Score    = mapRow?.team1_score ?? 0;
-  const t2Score    = mapRow?.team2_score ?? 0;
+  const team1Name = match.team1_string || match.team1_name || "Team 1";
+  const team2Name = match.team2_string || match.team2_name || "Team 2";
+
+  // Series score: count maps won by each team
+  const isMultiMap = allMaps.length > 1;
+  const t1Score = isMultiMap
+    ? allMaps.filter(r => r.team1_score > r.team2_score).length
+    : (mapRow?.team1_score ?? 0);
+  const t2Score = isMultiMap
+    ? allMaps.filter(r => r.team2_score > r.team1_score).length
+    : (mapRow?.team2_score ?? 0);
+
+  // Map display: one line per map "13 ANCIENT 12", or spaced single map name
   const mapDisplay = allMaps.length > 0
-    ? allMaps.map(m => `${m.team1_score} ${m.map_name.replace(/^de_/, "").toUpperCase()}  ${m.team2_score}`).join("  |  ")
+    ? allMaps.map(r => `${r.team1_score}  ${r.map_name.replace(/^de_/, "").toUpperCase()}  ${r.team2_score}`).join("\n")
     : (mapRow?.map_name ?? "").replace(/^de_/, "").toUpperCase().split("").join(" ");
 
   const canvas = createCanvas(W, H);
@@ -116,7 +125,7 @@ export async function generateMatchImage(
     }
   }
 
-  // ── Team pills ─────────────────────────────────────────────────────────────
+  // ── Team names + series scores ──────────────────────────────────────────────
   if (m.team1_name.enabled)  drawText(ctx, team1Name,       m.team1_name.x,  m.team1_name.y,  fieldFont(m.team1_name),  m.team1_name.color);
   if (m.team1_score.enabled) drawText(ctx, String(t1Score), m.team1_score.x, m.team1_score.y, fieldFont(m.team1_score), m.team1_score.color);
   if (m.team2_score.enabled) drawText(ctx, String(t2Score), m.team2_score.x, m.team2_score.y, fieldFont(m.team2_score), m.team2_score.color);
@@ -139,26 +148,28 @@ export async function generateMatchImage(
 
     const p1 = team1Players[i];
     if (p1) {
-      if (m.player_name_l.enabled) drawText(ctx, p1.name,           m.player_name_l.x, rowY, fieldFont(m.player_name_l), m.player_name_l.color);
-      if (m.kills_l.enabled)       drawText(ctx, String(p1.kills),  m.kills_l.x,       rowY, fieldFont(m.kills_l),       m.kills_l.color);
+      if (m.player_name_l.enabled) drawText(ctx, p1.name,            m.player_name_l.x, rowY, fieldFont(m.player_name_l), m.player_name_l.color);
+      if (m.kills_l.enabled)       drawText(ctx, String(p1.kills),   m.kills_l.x,       rowY, fieldFont(m.kills_l),       m.kills_l.color);
       if (m.assists_l.enabled)     drawText(ctx, String(p1.assists), m.assists_l.x,     rowY, fieldFont(m.assists_l),     m.assists_l.color);
-      if (m.deaths_l.enabled)      drawText(ctx, String(p1.deaths), m.deaths_l.x,      rowY, fieldFont(m.deaths_l),      m.deaths_l.color);
-      if (m.rating_l.enabled)      drawText(ctx, String(p1.rating), m.rating_l.x,      rowY, fieldFont(m.rating_l),      m.rating_l.color);
+      if (m.deaths_l.enabled)      drawText(ctx, String(p1.deaths),  m.deaths_l.x,      rowY, fieldFont(m.deaths_l),      m.deaths_l.color);
+      if (m.rating_l.enabled)      drawText(ctx, String(p1.rating),  m.rating_l.x,      rowY, fieldFont(m.rating_l),      m.rating_l.color);
     }
 
     const p2 = team2Players[i];
     if (p2) {
-      if (m.player_name_r.enabled) drawText(ctx, p2.name,           m.player_name_r.x, rowY, fieldFont(m.player_name_r), m.player_name_r.color);
-      if (m.kills_r.enabled)       drawText(ctx, String(p2.kills),  m.kills_r.x,       rowY, fieldFont(m.kills_r),       m.kills_r.color);
+      if (m.player_name_r.enabled) drawText(ctx, p2.name,            m.player_name_r.x, rowY, fieldFont(m.player_name_r), m.player_name_r.color);
+      if (m.kills_r.enabled)       drawText(ctx, String(p2.kills),   m.kills_r.x,       rowY, fieldFont(m.kills_r),       m.kills_r.color);
       if (m.assists_r.enabled)     drawText(ctx, String(p2.assists), m.assists_r.x,     rowY, fieldFont(m.assists_r),     m.assists_r.color);
-      if (m.deaths_r.enabled)      drawText(ctx, String(p2.deaths), m.deaths_r.x,      rowY, fieldFont(m.deaths_r),      m.deaths_r.color);
-      if (m.rating_r.enabled)      drawText(ctx, String(p2.rating), m.rating_r.x,      rowY, fieldFont(m.rating_r),      m.rating_r.color);
+      if (m.deaths_r.enabled)      drawText(ctx, String(p2.deaths),  m.deaths_r.x,      rowY, fieldFont(m.deaths_r),      m.deaths_r.color);
+      if (m.rating_r.enabled)      drawText(ctx, String(p2.rating),  m.rating_r.x,      rowY, fieldFont(m.rating_r),      m.rating_r.color);
     }
   }
 
-  // ── Map name ───────────────────────────────────────────────────────────────
-  if (m.map_name.enabled && mapDisplay)
-    drawText(ctx, mapDisplay, m.map_name.x, m.map_name.y, fieldFont(m.map_name), m.map_name.color);
+  // ── Map display (multi-line for series, single for one map) ────────────────
+  if (m.map_name.enabled && mapDisplay) {
+    const lineHeight = Math.round(m.map_name.size * 1.5);
+    drawMultilineText(ctx, mapDisplay, m.map_name.x, m.map_name.y, fieldFont(m.map_name), m.map_name.color, lineHeight);
+  }
 
   return canvas.toBuffer("image/png");
 }
