@@ -219,7 +219,7 @@ async function renderMatchImage(req: Request, res: Response, mapParam: number | 
         [matchId]
       ) as MapStatRow[];
     } else {
-      allMaps = mapRow ? [mapRow] : [];
+      allMaps = []; // per-map mode: map name only, no scores
     }
 
     // For "latest" and "byNumber", filter player stats to that specific map
