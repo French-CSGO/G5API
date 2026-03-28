@@ -136,7 +136,8 @@ router.get(
               !mapStat.length ? mapStatId.insertId : mapStat[0].id,
               matchRow[0].team1_id,
               matchRow[0].team2_id,
-              teamIdWinner == 1 ? matchRow[0].team1_id : matchRow[0].team2_id
+              teamIdWinner == 1 ? matchRow[0].team1_id : matchRow[0].team2_id,
+              false
             );
         }
         let serverUpdate: GameServer = await getGameServer(req.params.match_id);
@@ -246,18 +247,6 @@ router.get(
           req.params.match_id,
         ]);
         await db.query(serverUpdateSql, [matchRow[0].server_id]);
-        if (matchRow[0].is_pug != null && matchRow[0].is_pug == 1) {
-          // For cancelled pug matches, just delete the temporary teams directly
-          // (updatePugStats can crash if team2 has 0 members from GROUP_CONCAT returning NULL)
-          await db.query(
-            "DELETE FROM team_auth_names WHERE team_id = ? OR team_id = ?",
-            [matchRow[0].team1_id, matchRow[0].team2_id]
-          );
-          await db.query(
-            "DELETE FROM team WHERE id = ? OR id = ?",
-            [matchRow[0].team1_id, matchRow[0].team2_id]
-          );
-        }
         // Let the server cancel the match first, or attempt to?
         if (matchRow[0].server_id != null) {
           let serverUpdate: GameServer = await getGameServer(req.params.match_id);

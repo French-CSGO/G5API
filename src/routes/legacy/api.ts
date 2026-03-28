@@ -287,7 +287,8 @@ router.post("/:match_id/finish", basicRateLimit, async (req, res, next) => {
         !finalMapStat.length ? newMapStat.insertId : finalMapStat[0].id,
         matchValues[0].team1_id,
         matchValues[0].team2_id,
-        teamIdWinner
+        teamIdWinner,
+        false
       );
     }
     // Check if a match has a season ID and we're not cancelled.

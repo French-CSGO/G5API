@@ -106,7 +106,8 @@ class SeriesFlowService {
           mapStatInfoId!,
           matchInfo[0].team1_id,
           matchInfo[0].team2_id,
-          winnerId!
+          winnerId!,
+          false
         );
       }
 
