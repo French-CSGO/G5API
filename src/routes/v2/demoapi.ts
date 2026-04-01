@@ -184,7 +184,7 @@ router.post("/", async (req: Request, res: Response) => {
       mapName: mapNameRow[0]?.map_name ?? null,
       demoFile: safeDemoFilename,
       matchUrl,
-      downloadUrl: `${hostname.replace(/\/$/, "")}/demos/${safeDemoFilename}`,
+      downloadUrl: `https://ebot.white-gaming.fr/api/demo/${safeDemoFilename}`,
     }).catch(() => {});
 
     res.status(200).send({message: "Success"});

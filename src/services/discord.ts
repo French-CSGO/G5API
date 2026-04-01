@@ -489,7 +489,7 @@ export async function sendVetoCompleteEmbed(matchId: number): Promise<void> {
 
     const embed = new EmbedBuilder()
       .setColor(0x9b59b6)
-      .setTitle("🎯 Veto terminé")
+      .setTitle("🎯 Veto Finish")
       .setURL(matchUrl)
       .setDescription(desc)
       .setTimestamp();
@@ -512,13 +512,13 @@ export async function sendDemoReadyEmbed(data: {
     const mapLabel = data.mapName ?? `Map ${data.mapNumber + 1}`;
     const embed = new EmbedBuilder()
       .setColor(0x1abc9c)
-      .setTitle(`📹 Démo disponible — ${mapLabel}`)
+      .setTitle(`📹 Demo Available — ${mapLabel}`)
       .setURL(data.matchUrl)
-      .setDescription(`[⬇️ Télécharger la démo](${data.downloadUrl})`)
+      .setDescription(`[⬇️ Download demo](${data.downloadUrl})`)
       .addFields(
         { name: "Match", value: `[#${data.matchId}](${data.matchUrl})`, inline: true },
         { name: "Map", value: mapLabel, inline: true },
-        { name: "Fichier", value: `\`${data.demoFile}\``, inline: false }
+        { name: "File", value: `\`${data.demoFile}\``, inline: false }
       )
       .setTimestamp();
     await sendEmbedToEventTarget(embed);
