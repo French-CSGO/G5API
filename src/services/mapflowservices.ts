@@ -81,10 +81,32 @@ class MapFlowService {
         event.matchid,
         event.map_number
       ]);
+      // Determine team1's first side from veto_side
+      let team1FirstSide: string | null = null;
+      const sidePickInfo: RowDataPacket[] = await db.query(
+        `SELECT vs.team_name, vs.side, t1.name AS team1_name, t2.name AS team2_name
+         FROM \`match\` m
+         JOIN team t1 ON t1.id = m.team1_id
+         JOIN team t2 ON t2.id = m.team2_id
+         LEFT JOIN veto_side vs ON vs.match_id = m.id AND vs.map = ?
+         WHERE m.id = ?`,
+        [mapName, event.matchid]
+      );
+      if (sidePickInfo.length && sidePickInfo[0].team_name) {
+        const pickerName: string = sidePickInfo[0].team_name;
+        const pickedSide: string = sidePickInfo[0].side?.toUpperCase();
+        if (pickerName === sidePickInfo[0].team1_name) {
+          team1FirstSide = pickedSide === "CT" ? "CT" : "T";
+        } else {
+          team1FirstSide = pickedSide === "CT" ? "T" : "CT";
+        }
+      }
+
       if (mapStatInfo.length) {
         insUpdStatement = {
           map_number: event.map_number,
-          map_name: mapName
+          map_name: mapName,
+          ...(team1FirstSide !== null && { team1_first_side: team1FirstSide })
         };
         sqlString =
           "UPDATE map_stats SET ? WHERE match_id = ? AND map_number = ?";
@@ -97,7 +119,12 @@ class MapFlowService {
           map_name: mapName,
           start_time: startTime,
           team1_score: 0,
-          team2_score: 0
+          team2_score: 0,
+          team1_score_ct: 0,
+          team1_score_t: 0,
+          team2_score_ct: 0,
+          team2_score_t: 0,
+          team1_first_side: team1FirstSide
         };
         sqlString = "INSERT INTO map_stats SET ?";
         await db.query(sqlString, insUpdStatement);
@@ -312,7 +339,11 @@ class MapFlowService {
       sqlString = "UPDATE map_stats SET ? WHERE id = ?";
       insUpdStatement = {
         team1_score: event.team1.score,
-        team2_score: event.team2.score
+        team1_score_ct: event.team1.score_ct,
+        team1_score_t: event.team1.score_t,
+        team2_score: event.team2.score,
+        team2_score_ct: event.team2.score_ct,
+        team2_score_t: event.team2.score_t
       };
       await db.query(sqlString, [insUpdStatement, mapStatInfo[0].id]);
       // Update Challonge info if needed.

@@ -184,7 +184,13 @@ class SeriesFlowService {
       }
       updateStmt = {
         end_time: mapEndTime,
-        winner: winnerId
+        winner: winnerId,
+        team1_score: event.team1.score,
+        team1_score_ct: event.team1.score_ct,
+        team1_score_t: event.team1.score_t,
+        team2_score: event.team2.score,
+        team2_score_ct: event.team2.score_ct,
+        team2_score_t: event.team2.score_t
       };
 
       sqlString = "UPDATE map_stats SET ? WHERE id = ?";
