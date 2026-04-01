@@ -93,7 +93,7 @@ export async function initTwitch(): Promise<void> {
 
     // Connexion TMI
     client = new tmi.Client({
-      options: { debug: false },
+      options: { debug: true },
       identity: {
         username,
         password: token.startsWith("oauth:") ? token : `oauth:${token}`
