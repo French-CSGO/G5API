@@ -29,22 +29,79 @@ import update_challonge_match from "./challonge.js";
 import { sendPauseEvent } from "./discord.js";
 import config from "config";
 
-/**
- * @class
- * Map flow service class for live games.
- */
-/** Per-match round state: true = round in live play (post-freeze), false = freeze time or between rounds */
+// ── TeamSpeak talk power levels ────────────────────────────────────────────
+const TS_POWER = {
+  LIVE:   45, // round en cours (post-freeze)
+  FREEZE: 35, // entre les rounds / pause tactique
+  TECH:   55, // pause technique ou admin
+} as const;
+
+// ── CS2 round constants ────────────────────────────────────────────────────
+/** Last regulation round (MR12) */
+const REG_ROUNDS = 24;
+/** Rounds per OT period (MR3 → 6 rounds total per OT) */
+const OT_LEN = 6;
+
+// ── Per-match state ────────────────────────────────────────────────────────
+/** true = round in live play (post-freeze), false = freeze time / between rounds */
 const roundLiveState = new Map<string, boolean>();
 
-/** Pending TS talk power changes deferred until round end */
-interface PendingTsChange {
-  team1Id?: number;
-  team2Id?: number;
-  power: number;
-}
-const pendingTalkPower = new Map<string, PendingTsChange>();
-
 class MapFlowService {
+  // ── Helpers ──────────────────────────────────────────────────────────────
+
+  /**
+   * Sets both teams' TS channel talk power for a given match.
+   * Silently ignores teams without TS configured.
+   */
+  private static async setTsMatchTeams(matchId: string, power: number): Promise<void> {
+    try {
+      const matchInfo: RowDataPacket[] = await db.query(
+        "SELECT team1_id, team2_id FROM `match` WHERE id = ?",
+        [matchId]
+      );
+      if (!matchInfo.length) return;
+      const [t1, t2] = await Promise.all([
+        db.query("SELECT ts_server, ts_channel_id FROM team WHERE id = ?", [matchInfo[0].team1_id]),
+        db.query("SELECT ts_server, ts_channel_id FROM team WHERE id = ?", [matchInfo[0].team2_id]),
+      ]);
+      await Promise.all([
+        MapFlowService.setTsChannelTalkPower(t1[0], power),
+        MapFlowService.setTsChannelTalkPower(t2[0], power),
+      ]);
+    } catch (e) {
+      console.error("[TS3] setTsMatchTeams error:", (e as Error).message);
+    }
+  }
+
+  /**
+   * Connects to a TeamSpeak server and sets a channel's needed talk power.
+   * The ts_server format is "host:queryport" (e.g. "nuc1.infra.local:10011").
+   */
+  private static async setTsChannelTalkPower(
+    tsRow: RowDataPacket | undefined,
+    talkPower: number
+  ): Promise<void> {
+    if (!tsRow || !tsRow.ts_server || !tsRow.ts_channel_id) return;
+    const [host, portStr] = String(tsRow.ts_server).split(":");
+    const queryport = parseInt(portStr || "10011");
+    const serverport = queryport - 30;
+    const ts3 = await TeamSpeak.connect({
+      host,
+      queryport,
+      serverport,
+      username: "serveradmin",
+      password: "80048821",
+      nickname: "G5API",
+    });
+    try {
+      await ts3.channelEdit(tsRow.ts_channel_id, { channel_needed_talk_power: talkPower });
+    } finally {
+      await ts3.quit();
+    }
+  }
+
+  // ── Map / series flow ─────────────────────────────────────────────────────
+
   /**
    * Updates the database and emits mapStatUpdate when the map has gone live.
    * @param {Get5_OnGoingLive} event The OnGoingLive event provided from the game server.
@@ -129,8 +186,12 @@ class MapFlowService {
         sqlString = "INSERT INTO map_stats SET ?";
         await db.query(sqlString, insUpdStatement);
         GlobalEmitter.emit("mapStatUpdate");
-        return res.status(200).send({ message: "Success" });
       }
+
+      // TS: freeze time starting → FREEZE power
+      await MapFlowService.setTsMatchTeams(String(event.matchid), TS_POWER.FREEZE);
+
+      return res.status(200).send({ message: "Success" });
     } catch (error: unknown) {
       console.error(error);
       if (error instanceof Error)
@@ -205,7 +266,6 @@ class MapFlowService {
       if (error instanceof Error)
         return res.status(500).send({ message: error.message });
       else return res.status(500).send({ message: error });
-      
     }
   }
 
@@ -240,7 +300,6 @@ class MapFlowService {
         mapInfo[0].id,
         event.player.steamid
       ]);
-      // If player does not have player stats yet, insert them.
       if (!playerStatInfo.length && !event.player?.is_bot) {
         let teamId: RowDataPacket[];
         sqlString =
@@ -248,7 +307,6 @@ class MapFlowService {
         teamId = await db.query(sqlString, [event.player.steamid]);
         await Utils.updatePlayerStats(event.matchid, teamId[0].id, mapInfo[0].id, event.player, null);
 
-        // Grab player info again!
         sqlString =
           "SELECT id FROM player_stats WHERE match_id = ? AND map_id = ? AND steam_id = ?";
         playerStatInfo = await db.query(sqlString, [
@@ -283,6 +341,7 @@ class MapFlowService {
 
   /**
    * Updates the database and emits playerStatsUpdate when a round has ended.
+   * Also snapshots regulation scores at round 24 and tracks per-OT scores.
    * @param {Get5_OnRoundEnd} event The Get5_OnRoundEnd event provided from the game server.
    * @param {Response} res The express response object to send status responses to the game server.
    */
@@ -291,9 +350,11 @@ class MapFlowService {
     res: Response
   ) {
     try {
+      // Query current map_stats INCLUDING scores BEFORE this round's update.
+      // The pre-update scores are needed as the OT baseline.
       let sqlString: string =
-        "SELECT id FROM map_stats WHERE match_id = ? AND map_number = ?";
-      let insUpdStatement: object;
+        "SELECT id, team1_score_ct, team1_score_t, team2_score_ct, team2_score_t " +
+        "FROM map_stats WHERE match_id = ? AND map_number = ?";
       let mapStatInfo: RowDataPacket[];
       let matchSeasonInfo: RowDataPacket[];
       let playerStats: RowDataPacket[];
@@ -309,6 +370,8 @@ class MapFlowService {
         event.matchid,
         mapStatInfo[0]?.id
       ]);
+
+      // ── Player stats update ──────────────────────────────────────────────
       for (let player of event.team1.players) {
         singlePlayerStat = playerStats.filter(
           (dbPlayer) => dbPlayer.steam_id == player.steamid
@@ -334,19 +397,75 @@ class MapFlowService {
         );
       }
       GlobalEmitter.emit("playerStatsUpdate");
-      
-      // Update map stats. Grab season info
+
+      // ── Regulation score snapshot (end of round 24) ──────────────────────
+      if (event.round_number === REG_ROUNDS) {
+        await db.query(
+          "UPDATE map_stats SET team1_reg_score_ct=?, team1_reg_score_t=?, team2_reg_score_ct=?, team2_reg_score_t=? WHERE id=?",
+          [
+            event.team1.score_ct, event.team1.score_t,
+            event.team2.score_ct, event.team2.score_t,
+            mapStatInfo[0].id
+          ]
+        );
+      }
+
+      // ── OT tracking ──────────────────────────────────────────────────────
+      if (event.round_number > REG_ROUNDS) {
+        const otNum = Math.ceil((event.round_number - REG_ROUNDS) / OT_LEN);
+        const isFirstOtRound = (event.round_number - REG_ROUNDS - 1) % OT_LEN === 0;
+
+        if (isFirstOtRound) {
+          // Scores in DB right now (before this update) = baseline for this OT
+          await db.query(
+            `INSERT INTO map_stats_ot
+               (map_stats_id, ot_number, team1_first_side,
+                team1_score_ct, team1_score_t, team2_score_ct, team2_score_t,
+                offset_t1_ct, offset_t1_t, offset_t2_ct, offset_t2_t)
+             VALUES (?, ?, ?, 0, 0, 0, 0, ?, ?, ?, ?)
+             ON DUPLICATE KEY UPDATE team1_first_side = VALUES(team1_first_side)`,
+            [
+              mapStatInfo[0].id, otNum,
+              event.team1.starting_side?.toUpperCase() ?? null,
+              mapStatInfo[0].team1_score_ct, mapStatInfo[0].team1_score_t,
+              mapStatInfo[0].team2_score_ct, mapStatInfo[0].team2_score_t
+            ]
+          );
+        }
+
+        // Update per-OT scores (cumulative - offset stored at OT start)
+        const otRow: RowDataPacket[] = await db.query(
+          "SELECT offset_t1_ct, offset_t1_t, offset_t2_ct, offset_t2_t FROM map_stats_ot WHERE map_stats_id = ? AND ot_number = ?",
+          [mapStatInfo[0].id, otNum]
+        );
+        if (otRow.length) {
+          await db.query(
+            `UPDATE map_stats_ot SET team1_score_ct=?, team1_score_t=?, team2_score_ct=?, team2_score_t=?
+             WHERE map_stats_id=? AND ot_number=?`,
+            [
+              event.team1.score_ct - otRow[0].offset_t1_ct,
+              event.team1.score_t  - otRow[0].offset_t1_t,
+              event.team2.score_ct - otRow[0].offset_t2_ct,
+              event.team2.score_t  - otRow[0].offset_t2_t,
+              mapStatInfo[0].id, otNum
+            ]
+          );
+        }
+      }
+
+      // ── Map stats update ─────────────────────────────────────────────────
       sqlString = "UPDATE map_stats SET ? WHERE id = ?";
-      insUpdStatement = {
-        team1_score: event.team1.score,
+      const insUpdStatement = {
+        team1_score:    event.team1.score,
         team1_score_ct: event.team1.score_ct,
-        team1_score_t: event.team1.score_t,
-        team2_score: event.team2.score,
+        team1_score_t:  event.team1.score_t,
+        team2_score:    event.team2.score,
         team2_score_ct: event.team2.score_ct,
-        team2_score_t: event.team2.score_t
+        team2_score_t:  event.team2.score_t
       };
       await db.query(sqlString, [insUpdStatement, mapStatInfo[0].id]);
-      // Update Challonge info if needed.
+
+      // Challonge update if needed
       sqlString = "SELECT max_maps, season_id, team1_id, team2_id FROM `match` WHERE id = ?";
       matchSeasonInfo = await db.query(sqlString, [event.matchid]);
       if (matchSeasonInfo[0]?.season_id) {
@@ -360,23 +479,10 @@ class MapFlowService {
       }
       GlobalEmitter.emit("mapStatUpdate");
 
-      // Round ended: mark not live, apply any deferred TS talk power change
+      // ── TS: freeze time between rounds ───────────────────────────────────
       const matchKey = String(event.matchid);
       roundLiveState.set(matchKey, false);
-      const pending = pendingTalkPower.get(matchKey);
-      if (pending) {
-        pendingTalkPower.delete(matchKey);
-        const ops: Promise<void>[] = [];
-        if (pending.team1Id) {
-          const t1: RowDataPacket[] = await db.query("SELECT ts_server, ts_channel_id FROM team WHERE id = ?", [pending.team1Id]);
-          ops.push(MapFlowService.setTsChannelTalkPower(t1[0], pending.power));
-        }
-        if (pending.team2Id) {
-          const t2: RowDataPacket[] = await db.query("SELECT ts_server, ts_channel_id FROM team WHERE id = ?", [pending.team2Id]);
-          ops.push(MapFlowService.setTsChannelTalkPower(t2[0], pending.power));
-        }
-        await Promise.all(ops).catch(e => console.error("[TS3] Erreur pending talk power:", (e as Error).message));
-      }
+      await MapFlowService.setTsMatchTeams(matchKey, TS_POWER.FREEZE);
 
       return res.status(200).send({ message: "Success" });
     } catch (error: unknown) {
@@ -386,8 +492,6 @@ class MapFlowService {
       else return res.status(500).send({ message: error });
     }
   }
-
-
 
   /**
    * Updates the database and emits playerStatsUpdate when a round has been restored and the match has started again.
@@ -400,12 +504,14 @@ class MapFlowService {
   ) {
     let sqlString: string;
     let mapStatInfo: RowDataPacket[];
-    // Check if round was backed up and nuke the additional player stats and bomb plants.
     sqlString = "SELECT round_restored, id FROM map_stats WHERE match_id = ? AND map_number = ?";
     mapStatInfo = await db.query(sqlString, [event.matchid, event.map_number]);
-    // Freeze time started: round is no longer live
-    const _mk = String(event.matchid);
-    roundLiveState.set(_mk, false);
+
+    // Freeze time started
+    const matchKey = String(event.matchid);
+    roundLiveState.set(matchKey, false);
+    // TS: stay at FREEZE (explicit, in case of backup restore)
+    await MapFlowService.setTsMatchTeams(matchKey, TS_POWER.FREEZE);
 
     if (mapStatInfo[0]?.round_restored) {
       sqlString =
@@ -423,16 +529,17 @@ class MapFlowService {
         mapStatInfo[0].id,
         event.round_number
       ]);
-      // Only emit if there was an actual update.
       GlobalEmitter.emit("playerStatsUpdate");
     }
     return res.status(200).send({ message: "Success" });
   }
 
-  /** Called when freeze time ends and the round goes live. Sets roundLiveState explicitly. */
+  /** Called when freeze time ends and the round goes live. */
   static async OnRoundLive(event: { matchid: string }, res: Response) {
-    const mk = String(event.matchid);
-    roundLiveState.set(mk, true);
+    const matchKey = String(event.matchid);
+    roundLiveState.set(matchKey, true);
+    // TS: round is live
+    await MapFlowService.setTsMatchTeams(matchKey, TS_POWER.LIVE);
     return res.status(200).send({ message: "Success" });
   }
 
@@ -485,60 +592,22 @@ class MapFlowService {
       await db.query(sqlString, insUpdStatement);
     }
 
-    // ── TeamSpeak channel talk power management ────────────────────────────
+    // ── TeamSpeak talk power management ───────────────────────────────────
+    // Tactical pause: no TS change (already at FREEZE between rounds)
+    // Tech / Admin pause  → TECH (55)
+    // Tech / Admin unpause → restore LIVE or FREEZE based on round state
     const isPaused = event.event === "game_paused";
     const isTactical = event.pause_type === "tactical";
+    const matchKey = String(event.matchid);
 
     if (!isTactical) {
-      const matchKey = String(event.matchid);
       try {
         if (isPaused) {
-          const isLive = roundLiveState.get(matchKey) === true;
-          if (event.team === "admin") {
-            // Admin pause: both teams
-            if (isLive) {
-              // Round in progress: defer until round end
-              pendingTalkPower.set(matchKey, {
-                team1Id: matchInfo[0].team1_id,
-                team2Id: matchInfo[0].team2_id,
-                power: 60,
-              });
-              console.log("[TS3] Pause admin différée (round en cours).");
-            } else {
-              // Freeze time or between rounds: apply immediately
-              const [t1, t2] = await Promise.all([
-                db.query("SELECT ts_server, ts_channel_id FROM team WHERE id = ?", [matchInfo[0].team1_id]),
-                db.query("SELECT ts_server, ts_channel_id FROM team WHERE id = ?", [matchInfo[0].team2_id]),
-              ]);
-              await Promise.all([
-                MapFlowService.setTsChannelTalkPower(t1[0], 60),
-                MapFlowService.setTsChannelTalkPower(t2[0], 60),
-              ]);
-            }
-          } else {
-            // Tech pause: only the pausing team
-            const teamId = event.team === "team1" ? matchInfo[0].team1_id : matchInfo[0].team2_id;
-            if (isLive) {
-              pendingTalkPower.set(matchKey, { team1Id: teamId, power: 60 });
-              console.log("[TS3] Pause tech différée (round en cours).");
-            } else {
-              const tsInfo: RowDataPacket[] = await db.query(
-                "SELECT ts_server, ts_channel_id FROM team WHERE id = ?", [teamId]
-              );
-              await MapFlowService.setTsChannelTalkPower(tsInfo[0], 60);
-            }
-          }
+          await MapFlowService.setTsMatchTeams(matchKey, TS_POWER.TECH);
         } else {
-          // Unpause: always apply immediately + cancel any pending
-          pendingTalkPower.delete(matchKey);
-          const [t1, t2] = await Promise.all([
-            db.query("SELECT ts_server, ts_channel_id FROM team WHERE id = ?", [matchInfo[0].team1_id]),
-            db.query("SELECT ts_server, ts_channel_id FROM team WHERE id = ?", [matchInfo[0].team2_id]),
-          ]);
-          await Promise.all([
-            MapFlowService.setTsChannelTalkPower(t1[0], 40),
-            MapFlowService.setTsChannelTalkPower(t2[0], 40),
-          ]);
+          // Restore to LIVE if round was in progress, else FREEZE
+          const power = roundLiveState.get(matchKey) === true ? TS_POWER.LIVE : TS_POWER.FREEZE;
+          await MapFlowService.setTsMatchTeams(matchKey, power);
         }
       } catch (tsErr) {
         console.error("[TS3] Erreur gestion talk power:", (tsErr as Error).message);
@@ -581,26 +650,6 @@ class MapFlowService {
 
     GlobalEmitter.emit("matchUpdate");
     return res.status(200).send({ message: "Success" });
-  }
-
-  /**
-   * Connects to a TeamSpeak server and sets a channel's needed talk power.
-   * The ts_server format is "host:queryport" (e.g. "nuc1.infra.local:10011").
-   */
-  private static async setTsChannelTalkPower(
-    tsRow: RowDataPacket | undefined,
-    talkPower: number
-  ): Promise<void> {
-    if (!tsRow || !tsRow.ts_server || !tsRow.ts_channel_id) return;
-    const [host, portStr] = String(tsRow.ts_server).split(":");
-    const queryport = parseInt(portStr || "10011");
-    const serverport = queryport - 30;
-    const ts3 = await TeamSpeak.connect({ host, queryport, serverport, username: "serveradmin", password: "80048821", nickname: "G5API" });
-    try {
-      await ts3.channelEdit(tsRow.ts_channel_id, { channel_needed_talk_power: talkPower });
-    } finally {
-      await ts3.quit();
-    }
   }
 }
 

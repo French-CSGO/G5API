@@ -595,4 +595,53 @@ router.delete("/", Utils.ensureAuthenticated, async (req, res, next) => {
   }
 });
 
+/**
+ * @swagger
+ *
+ * /mapstats/:match_id/:map_number/overtime:
+ *   get:
+ *     description: OT breakdown for a specific map in a match.
+ *     produces:
+ *       - application/json
+ *     parameters:
+ *       - name: match_id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *       - name: map_number
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     tags:
+ *       - mapstats
+ *     responses:
+ *       200:
+ *         description: List of OT rows ordered by ot_number.
+ *       404:
+ *         $ref: '#/components/responses/NotFound'
+ *       500:
+ *         $ref: '#/components/responses/Error'
+ */
+router.get("/:match_id/:map_number/overtime", async (req, res) => {
+  try {
+    const { match_id, map_number } = req.params;
+    const mapStatRows: RowDataPacket[] = await db.query(
+      "SELECT id FROM map_stats WHERE match_id = ? AND map_number = ?",
+      [match_id, map_number]
+    );
+    if (!mapStatRows.length) {
+      res.status(404).json({ message: "No map stats found." });
+      return;
+    }
+    const overtime: RowDataPacket[] = await db.query(
+      "SELECT * FROM map_stats_ot WHERE map_stats_id = ? ORDER BY ot_number ASC",
+      [mapStatRows[0].id]
+    );
+    res.json({ overtime });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: (err as Error).toString() });
+  }
+});
+
 export default router;
