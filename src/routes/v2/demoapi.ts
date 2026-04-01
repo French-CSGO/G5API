@@ -37,6 +37,7 @@ import { RowDataPacket } from "mysql2";
  * Global Server Sent Emitter class for real time data.
  */
 import GlobalEmitter from "../../utility/emitter.js";
+import { sendDemoReadyEmbed } from "../../services/discord.js";
 
 /** Express module
  * @const
@@ -169,6 +170,23 @@ router.post("/", async (req: Request, res: Response) => {
     sqlString = "UPDATE map_stats SET ? WHERE id = ?";
     await db.query(sqlString, [updateStmt, mapInfo[0].id]);
     GlobalEmitter.emit("demoUpdate");
+
+    // Discord notification
+    const hostname: string = config.get("server.hostname");
+    const matchUrl = `${hostname.replace(/\/$/, "")}/match/${matchId}`;
+    const mapNameRow: RowDataPacket[] = await db.query(
+      "SELECT map_name FROM map_stats WHERE id = ?", [mapInfo[0].id]
+    );
+    const safeDemoFilename = path.basename(demoFilename).replace(/[^a-zA-Z0-9._\-]/g, "_").replace(".dem", ".zip");
+    sendDemoReadyEmbed({
+      matchId,
+      mapNumber: parseInt(mapNumber),
+      mapName: mapNameRow[0]?.map_name ?? null,
+      demoFile: safeDemoFilename,
+      matchUrl,
+      downloadUrl: `${hostname.replace(/\/$/, "")}/demos/${safeDemoFilename}`,
+    }).catch(() => {});
+
     res.status(200).send({message: "Success"});
     return;
   } catch (error) {

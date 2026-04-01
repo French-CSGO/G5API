@@ -26,7 +26,7 @@ import { Get5_OnBombEvent } from "../types/map_flow/Get5_OnBombEvent.js";
 import { Get5_OnRoundEnd } from "../types/map_flow/Get5_OnRoundEnd.js";
 import { Get5_OnRoundStart } from "../types/map_flow/Get5_OnRoundStart.js";
 import update_challonge_match from "./challonge.js";
-import { sendPauseEvent } from "./discord.js";
+import { sendPauseEvent, sendVetoCompleteEmbed } from "./discord.js";
 import config from "config";
 
 // ── TeamSpeak talk power levels ────────────────────────────────────────────
@@ -190,6 +190,11 @@ class MapFlowService {
 
       // TS: freeze time starting → FREEZE power
       await MapFlowService.setTsMatchTeams(String(event.matchid), TS_POWER.FREEZE);
+
+      // Veto complete: send Discord embed on first map going live
+      if (event.map_number === 0) {
+        sendVetoCompleteEmbed(Number(event.matchid)).catch(() => {});
+      }
 
       return res.status(200).send({ message: "Success" });
     } catch (error: unknown) {

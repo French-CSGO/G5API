@@ -1,6 +1,7 @@
 import { Client, GatewayIntentBits, TextChannel, REST, Routes, SlashCommandBuilder, EmbedBuilder } from "discord.js";
 import { db } from "./db.js";
 import { getSetting } from "./settings.js";
+import config from "config";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -362,6 +363,24 @@ async function sendToServerEventChannel(embed: EmbedBuilder): Promise<void> {
   }
 }
 
+/**
+ * Envoie un embed via le webhook configuré (discord.eventWebhookUrl) si disponible,
+ * sinon fallback sur le channel bot serverEventChannelId.
+ */
+async function sendEmbedToEventTarget(embed: EmbedBuilder): Promise<void> {
+  const webhookUrl = getSetting("discord.eventWebhookUrl");
+  if (webhookUrl) {
+    const payload = { embeds: [embed.toJSON()] };
+    await fetch(webhookUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  } else {
+    await sendToServerEventChannel(embed);
+  }
+}
+
 export async function sendPauseEvent(data: {
   matchid: string;
   matchUrl: string;
@@ -438,4 +457,72 @@ export async function sendSeriesResultEvent(data: {
     )
     .setTimestamp();
   await sendToServerEventChannel(embed);
+}
+
+export async function sendVetoCompleteEmbed(matchId: number): Promise<void> {
+  try {
+    const hostname: string = config.get("server.hostname");
+    const matchUrl = `${hostname.replace(/\/$/, "")}/match/${matchId}`;
+
+    const vetos: RowDataPacket[] = await db.query(
+      `SELECT v.team_name, v.map, v.pick_or_veto,
+              vs.side, vs.team_name AS side_team
+       FROM veto v
+       LEFT JOIN veto_side vs ON vs.veto_id = v.id
+       WHERE v.match_id = ?
+       ORDER BY v.id`,
+      [matchId]
+    );
+
+    if (!vetos.length) return;
+
+    let desc = "";
+    for (const v of vetos) {
+      const icon = v.pick_or_veto === "pick" ? "✅" : (v.pick_or_veto === "veto" ? "❌" : "🎯");
+      const action = v.pick_or_veto === "pick" ? "Pick" : (v.pick_or_veto === "veto" ? "Ban" : "Decider");
+      let line = `${icon} **${v.team_name}** — ${action} — \`${v.map}\``;
+      if (v.pick_or_veto === "pick" && v.side && v.side_team) {
+        line += ` | ${v.side_team} joue **${v.side.toUpperCase()}**`;
+      }
+      desc += line + "\n";
+    }
+
+    const embed = new EmbedBuilder()
+      .setColor(0x9b59b6)
+      .setTitle("🎯 Veto terminé")
+      .setURL(matchUrl)
+      .setDescription(desc)
+      .setTimestamp();
+
+    await sendEmbedToEventTarget(embed);
+  } catch (err) {
+    console.error("Discord sendVetoCompleteEmbed error:", (err as Error).message);
+  }
+}
+
+export async function sendDemoReadyEmbed(data: {
+  matchId: string;
+  mapNumber: number;
+  mapName: string | null;
+  demoFile: string;
+  matchUrl: string;
+  downloadUrl: string;
+}): Promise<void> {
+  try {
+    const mapLabel = data.mapName ?? `Map ${data.mapNumber + 1}`;
+    const embed = new EmbedBuilder()
+      .setColor(0x1abc9c)
+      .setTitle(`📹 Démo disponible — ${mapLabel}`)
+      .setURL(data.matchUrl)
+      .setDescription(`[⬇️ Télécharger la démo](${data.downloadUrl})`)
+      .addFields(
+        { name: "Match", value: `[#${data.matchId}](${data.matchUrl})`, inline: true },
+        { name: "Map", value: mapLabel, inline: true },
+        { name: "Fichier", value: `\`${data.demoFile}\``, inline: false }
+      )
+      .setTimestamp();
+    await sendEmbedToEventTarget(embed);
+  } catch (err) {
+    console.error("Discord sendDemoReadyEmbed error:", (err as Error).message);
+  }
 }
