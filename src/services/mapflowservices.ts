@@ -626,6 +626,7 @@ class MapFlowService {
         const targetPower = isTactical ? TS_POWER.FREEZE : TS_POWER.TECH;
         const isLive = roundLiveState.get(matchKey) === true;
         if (isLive) {
+          console.log(`[TS3] ${isTactical ? "Tactical" : "Technical/Admin"} pause requested during live round - deferring TS talk power change until round end.`)
           // Round en cours : différer jusqu'au round end
           pendingTalkPower.set(matchKey, {
             team1Id: matchInfo[0].team1_id,
