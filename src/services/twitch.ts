@@ -169,7 +169,11 @@ async function onMessage(
     }
   }
 
-  // Vérification cooldown (par channel)
+  // Ignorer les messages qui ne sont pas des commandes (évite de polluer le cooldown)
+  const knownCmds = ["!score", "!match", "!live", "!maps", "!stats", "!help", "!commandes"];
+  if (!knownCmds.includes(cmd)) return;
+
+  // Vérification cooldown (par channel, uniquement sur les vraies commandes)
   if (!checkCooldown(channel)) return;
 
   // Commandes publiques
