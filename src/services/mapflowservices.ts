@@ -46,6 +46,14 @@ const OT_LEN = 6;
 /** true = round in live play (post-freeze), false = freeze time / between rounds */
 const roundLiveState = new Map<string, boolean>();
 
+/** Pending TS talk power changes deferred until freeze time (round end) */
+interface PendingTsChange {
+  team1Id?: number;
+  team2Id?: number;
+  power: number;
+}
+const pendingTalkPower = new Map<string, PendingTsChange>();
+
 class MapFlowService {
   // ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -487,7 +495,15 @@ class MapFlowService {
       // ── TS: freeze time between rounds ───────────────────────────────────
       const matchKey = String(event.matchid);
       roundLiveState.set(matchKey, false);
-      await MapFlowService.setTsMatchTeams(matchKey, TS_POWER.FREEZE);
+
+      // Si une pause (tactique ou tech) était différée, l'appliquer maintenant
+      const pending = pendingTalkPower.get(matchKey);
+      if (pending) {
+        pendingTalkPower.delete(matchKey);
+        await MapFlowService.setTsMatchTeams(matchKey, pending.power);
+      } else {
+        await MapFlowService.setTsMatchTeams(matchKey, TS_POWER.FREEZE);
+      }
 
       return res.status(200).send({ message: "Success" });
     } catch (error: unknown) {
@@ -598,25 +614,36 @@ class MapFlowService {
     }
 
     // ── TeamSpeak talk power management ───────────────────────────────────
-    // Tactical pause: no TS change (already at FREEZE between rounds)
-    // Tech / Admin pause  → TECH (55)
-    // Tech / Admin unpause → restore LIVE or FREEZE based on round state
+    // Tactical → FREEZE (35) | Technical/Admin → TECH (55)
+    // Appliqué uniquement en freeze time (après round end, avant round start).
+    // Si le round est en cours, différé jusqu'au prochain round end.
     const isPaused = event.event === "game_paused";
     const isTactical = event.pause_type === "tactical";
     const matchKey = String(event.matchid);
 
-    if (!isTactical) {
-      try {
-        if (isPaused) {
-          await MapFlowService.setTsMatchTeams(matchKey, TS_POWER.TECH);
+    try {
+      if (isPaused) {
+        const targetPower = isTactical ? TS_POWER.FREEZE : TS_POWER.TECH;
+        const isLive = roundLiveState.get(matchKey) === true;
+        if (isLive) {
+          // Round en cours : différer jusqu'au round end
+          pendingTalkPower.set(matchKey, {
+            team1Id: matchInfo[0].team1_id,
+            team2Id: matchInfo[0].team2_id,
+            power: targetPower,
+          });
         } else {
-          // Restore to LIVE if round was in progress, else FREEZE
-          const power = roundLiveState.get(matchKey) === true ? TS_POWER.LIVE : TS_POWER.FREEZE;
-          await MapFlowService.setTsMatchTeams(matchKey, power);
+          // En freeze time : appliquer immédiatement
+          await MapFlowService.setTsMatchTeams(matchKey, targetPower);
         }
-      } catch (tsErr) {
-        console.error("[TS3] Erreur gestion talk power:", (tsErr as Error).message);
+      } else {
+        // Unpause : annuler tout différé et restaurer l'état courant
+        pendingTalkPower.delete(matchKey);
+        const power = roundLiveState.get(matchKey) === true ? TS_POWER.LIVE : TS_POWER.FREEZE;
+        await MapFlowService.setTsMatchTeams(matchKey, power);
       }
+    } catch (tsErr) {
+      console.error("[TS3] Erreur gestion talk power:", (tsErr as Error).message);
     }
 
     // ── Server event SSE notification ─────────────────────────────────────

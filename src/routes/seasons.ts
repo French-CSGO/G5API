@@ -198,7 +198,7 @@ router.get("/myseasons", Utils.ensureAuthenticated, async (req, res, next) => {
  *         $ref: '#/components/responses/Error'
  */
 router.get(
-  "/myseasons/available",
+  "/myavailable",
   Utils.ensureAuthenticated,
   async (req, res, next) => {
     let sql: string;
