@@ -1306,7 +1306,7 @@ router.post("/", Utils.ensureAuthenticated, async (req, res, next) => {
     announceNewMatch(insertMatch.insertId);
     updateScoreboard();
     // GOTV webhook
-    /*if (req.body[0].server_id != null) {
+    if (req.body[0].server_id != null) {
       try {
         const gotvServerSql =
           "SELECT gs.ip_string, gs.port, t1.name AS team1_name, t2.name AS team2_name " +
@@ -1333,7 +1333,7 @@ router.post("/", Utils.ensureAuthenticated, async (req, res, next) => {
       } catch (gotvErr) {
         console.error("GOTV webhook error:", (gotvErr as Error).message);
       }
-    }*/
+    }
     res.json({
       message: "Match inserted successfully!",
       id: insertMatch.insertId
