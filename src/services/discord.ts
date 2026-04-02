@@ -1,6 +1,6 @@
 import { Client, GatewayIntentBits, TextChannel, REST, Routes, SlashCommandBuilder, EmbedBuilder } from "discord.js";
 import { db } from "./db.js";
-import { getSetting } from "./settings.js";
+import { getSetting, getSettingBool } from "./settings.js";
 import config from "config";
 import fs from "fs";
 import path from "path";
@@ -524,5 +524,51 @@ export async function sendDemoReadyEmbed(data: {
     await sendEmbedToEventTarget(embed);
   } catch (err) {
     console.error("Discord sendDemoReadyEmbed error:", (err as Error).message);
+  }
+}
+
+/**
+ * Calcule le port GOTV depuis l'IP du serveur de jeu.
+ * Règle : remplacer le chiffre des centaines du port par (dernier chiffre du dernier octet de l'IP - 1).
+ * Ex : IP .243 (dernier digit=3), port 27015 → 3-1=2 → 27215
+ */
+function computeGotvPort(serverIp: string, serverPort: number): number {
+  const lastOctet = parseInt(serverIp.split(".").pop() || "0", 10);
+  const lastDigit = lastOctet % 10;
+  const hundredsDigit = Math.max(0, lastDigit - 1);
+  const portRemainder = serverPort % 100; // garde les unités/dizaines du port d'origine
+  return 27000 + hundredsDigit * 100 + portRemainder;
+}
+
+export async function sendGotvMatchEmbed(data: {
+  matchId: number;
+  team1Name: string;
+  team2Name: string;
+  serverIp: string;
+  serverPort: number;
+  matchUrl: string;
+}): Promise<void> {
+  if (!getSettingBool("discord.gotvWebhookEnabled")) return;
+  const webhookUrl = getSetting("discord.eventWebhookUrl");
+  if (!webhookUrl) return;
+  try {
+    const gotvPort = computeGotvPort(data.serverIp, data.serverPort);
+    const embed = new EmbedBuilder()
+      .setColor(0xe67e22)
+      .setTitle("📡 Match créé — GOTV disponible")
+      .setURL(data.matchUrl)
+      .addFields(
+        { name: "Match", value: `[#${data.matchId}](${data.matchUrl})`, inline: false },
+        { name: "Équipes", value: `**${data.team1Name}** vs **${data.team2Name}**`, inline: false },
+        { name: "GOTV", value: `\`connect 54.37.50.33:${gotvPort}\``, inline: false }
+      )
+      .setTimestamp();
+    await fetch(webhookUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ embeds: [embed.toJSON()] }),
+    });
+  } catch (err) {
+    console.error("Discord sendGotvMatchEmbed error:", (err as Error).message);
   }
 }

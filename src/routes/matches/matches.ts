@@ -18,7 +18,7 @@ import GameServer from "../../utility/serverrcon.js";
 import config from "config";
 
 import GlobalEmitter from "../../utility/emitter.js";
-import { announceNewMatch, updateScoreboard } from "../../services/discord.js";
+import { announceNewMatch, updateScoreboard, sendGotvMatchEmbed } from "../../services/discord.js";
 
 import { compare } from "compare-versions";
 import { MatchJSON } from "../../types/matches/MatchJson.js";
@@ -1305,6 +1305,35 @@ router.post("/", Utils.ensureAuthenticated, async (req, res, next) => {
     }
     announceNewMatch(insertMatch.insertId);
     updateScoreboard();
+    // GOTV webhook
+    /*if (req.body[0].server_id != null) {
+      try {
+        const gotvServerSql =
+          "SELECT gs.ip_string, gs.port, t1.name AS team1_name, t2.name AS team2_name " +
+          "FROM game_server gs " +
+          "JOIN team t1 ON t1.id = ? " +
+          "JOIN team t2 ON t2.id = ? " +
+          "WHERE gs.id = ?";
+        const gotvInfo: RowDataPacket[] = await db.query(gotvServerSql, [
+          req.body[0].team1_id,
+          req.body[0].team2_id,
+          req.body[0].server_id,
+        ]);
+        if (gotvInfo.length > 0) {
+          const matchUrl = `${config.get("server.apiURL")}/matches/${insertMatch.insertId}`;
+          await sendGotvMatchEmbed({
+            matchId: insertMatch.insertId,
+            team1Name: gotvInfo[0].team1_name,
+            team2Name: gotvInfo[0].team2_name,
+            serverIp: gotvInfo[0].ip_string,
+            serverPort: gotvInfo[0].port,
+            matchUrl,
+          });
+        }
+      } catch (gotvErr) {
+        console.error("GOTV webhook error:", (gotvErr as Error).message);
+      }
+    }*/
     res.json({
       message: "Match inserted successfully!",
       id: insertMatch.insertId

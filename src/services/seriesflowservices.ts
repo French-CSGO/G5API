@@ -11,7 +11,7 @@ import { Response } from "express";
 import Utils from "../utility/utils.js";
 import update_challonge_match from "../services/challonge.js";
 import { stopAfterDelay, isEnabled as pterodactylEnabled, getShutdownDelay } from "./pterodactyl.js";
-import { sendMapResultEvent, sendSeriesResultEvent } from "./discord.js";
+import { sendMapResultEvent, sendSeriesResultEvent, sendVetoCompleteEmbed } from "./discord.js";
 import config from "config";
 
 class SeriesFlowService {
@@ -423,6 +423,14 @@ class SeriesFlowService {
     sqlString = "INSERT INTO veto SET ?";
     await db.query(sqlString, [insertObj]);
     GlobalEmitter.emit("vetoUpdate");
+
+    // Déclenche l'embed veto dès que 7 étapes sont complètes
+    const vetoCount: RowDataPacket[] = await db.query(
+      "SELECT COUNT(*) AS cnt FROM veto WHERE match_id = ?", [matchid]
+    );
+    if (vetoCount[0]?.cnt >= 7) {
+      sendVetoCompleteEmbed(Number(matchid)).catch(() => {});
+    }
   }
 }
 

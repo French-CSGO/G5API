@@ -27,6 +27,7 @@ const DEFAULTS: Record<string, string> = {
   "discord.scheduleChannelId": "",
   "discord.guildId": "",
   "discord.eventWebhookUrl": "",
+  "discord.gotvWebhookEnabled": "false",
 
   // Twitch
   "twitch.enabled": "false",
