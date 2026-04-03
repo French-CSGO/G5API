@@ -204,8 +204,8 @@ router.get(
     let sql: string;
     let seasons: RowDataPacket[];
     try {
-      // Check if super admin, if they are use this query.
-      if (req.user && Utils.superAdminCheck(req.user)) {
+      // Check if admin (super or regular), if they are use this query.
+      if (req.user && Utils.adminCheck(req.user)) {
         sql =
           "SELECT s.id, s.user_id, s.name, s.start_date, s.end_date, " +
           "CONCAT('{', GROUP_CONCAT(DISTINCT CONCAT('\"',sc.cvar_name,'\"',': \"',sc.cvar_value,'\"')),'}') as cvars " +
