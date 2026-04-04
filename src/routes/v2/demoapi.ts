@@ -138,15 +138,17 @@ router.post("/", async (req: Request, res: Response) => {
     if (mapInfo.length == 0) {
       return res.status(404).send({ message: "Failed to find map stats object." });
     }
-    let currentDate: Date = new Date();
-    let endTimeMs: Date = new Date(mapInfo[0].end_time);
-    let timeDifference: number = Math.abs(
-      currentDate.getTime() - endTimeMs.getTime()
-    );
-    let minuteDifference = Math.floor(timeDifference / 1000 / 60);
     let updateStmt: object;
-    if (minuteDifference > 30) {
-      return res.status(401).json({ message: "Demo can no longer be uploaded." });
+    // Only reject demos if end_time is known and more than 30 minutes old.
+    // If end_time is null (race condition: demo uploaded before OnMapResult), allow it.
+    if (mapInfo[0].end_time != null) {
+      const currentDate: Date = new Date();
+      const endTimeMs: Date = new Date(mapInfo[0].end_time);
+      const timeDifference: number = Math.abs(currentDate.getTime() - endTimeMs.getTime());
+      const minuteDifference = Math.floor(timeDifference / 1000 / 60);
+      if (minuteDifference > 30) {
+        return res.status(401).json({ message: "Demo can no longer be uploaded." });
+      }
     }
 
     zip.file(demoFilename, req.body, { binary: true });

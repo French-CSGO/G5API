@@ -363,7 +363,7 @@ async function onMatchUpdate(): Promise<void> {
         `Match terminé ! ${m.team1_string} ${m.team1_score}-${m.team2_score} ${m.team2_string}` +
         (mapsStr ? ` | ${mapsStr}` : "");
 
-      sayAll(msg);
+      setTimeout(() => sayAll(msg), 60_000);
     }
 
     // Met à jour le cache des matchs actifs
@@ -404,7 +404,7 @@ async function onMapStatUpdate(): Promise<void> {
         `Map terminée ! ${r.map_name} : ${r.team1_string} ${r.team1_score}-${r.team2_score} ${r.team2_string} ` +
         `| Série : ${r.t1_series}-${r.t2_series}`;
 
-      sayAll(msg);
+      setTimeout(() => sayAll(msg), 60_000);
     }
   } catch (err) {
     console.error("[Twitch] onMapStatUpdate error:", err);
