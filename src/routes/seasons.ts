@@ -943,13 +943,29 @@ router.get("/:season_id/toornament/matches", Utils.ensureAuthenticated, async (r
     }
     const teamByChallongeId = new Map(localTeams.map(t => [String(t.challonge_team_id), t]));
 
-    const enriched = allMatches.map(match => ({
-      ...match,
-      opponents: match.opponents.map(opp => ({
+    // Find existing G5 matches for this season (cross-reference by team pair)
+    const g5Matches: RowDataPacket[] = await db.query(
+      "SELECT id, team1_id, team2_id FROM `match` WHERE season_id = ?",
+      [seasonId]
+    );
+    const g5MatchMap = new Map<string, number>();
+    for (const m of g5Matches) {
+      const key1 = `${m.team1_id}:${m.team2_id}`;
+      const key2 = `${m.team2_id}:${m.team1_id}`;
+      if (!g5MatchMap.has(key1) || g5MatchMap.get(key1)! < m.id) g5MatchMap.set(key1, m.id);
+      if (!g5MatchMap.has(key2) || g5MatchMap.get(key2)! < m.id) g5MatchMap.set(key2, m.id);
+    }
+
+    const enriched = allMatches.map(match => {
+      const enrichedOpponents = match.opponents.map(opp => ({
         ...opp,
         local_team: opp.participant ? (teamByChallongeId.get(String(opp.participant.id)) ?? null) : null
-      }))
-    }));
+      }));
+      const t1 = (enrichedOpponents[0]?.local_team as any)?.id;
+      const t2 = (enrichedOpponents[1]?.local_team as any)?.id;
+      const g5_match_id = (t1 && t2) ? (g5MatchMap.get(`${t1}:${t2}`) ?? null) : null;
+      return { ...match, opponents: enrichedOpponents, g5_match_id };
+    });
 
     res.json({ matches: enriched });
   } catch (err) {
@@ -1137,6 +1153,53 @@ router.get("/:season_id/toornament/rounds", Utils.ensureAuthenticated, async (re
     }));
 
     res.json({ rounds: enriched });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: (err as Error).toString() });
+  }
+});
+
+router.get("/:season_id/toornament/groups", Utils.ensureAuthenticated, async (req, res, _next) => {
+  try {
+    const seasonId = parseInt(req.params.season_id);
+    const tournamentId = await getSeasonToornamentId(seasonId);
+    const token = await getToornamentToken();
+    const apiKey: string = getSetting("toornament.apiKey");
+
+    const stagesResp = await fetch(`https://api.toornament.com/organizer/v2/stages?tournament_ids=${tournamentId}`, {
+      headers: { "Authorization": `Bearer ${token}`, "x-api-key": apiKey, "Range": "stages=0-49" }
+    });
+    if (!stagesResp.ok) throw new Error(`Toornament stages error ${stagesResp.status}`);
+    const stages = await stagesResp.json() as any[];
+    const stageMap = new Map(stages.map((s: any) => [s.id, s.name]));
+
+    let groups: any[] = [];
+    let start = 0;
+    let hasMore = true;
+    while (hasMore) {
+      const resp = await fetch(`https://api.toornament.com/organizer/v2/groups?tournament_ids=${tournamentId}`, {
+        headers: { "Authorization": `Bearer ${token}`, "x-api-key": apiKey, "Range": `groups=${start}-${start + 49}` }
+      });
+      if (!resp.ok) break;
+      const page = await resp.json() as any[];
+      if (!Array.isArray(page) || !page.length) break;
+      groups = groups.concat(page);
+      const cr = resp.headers.get("Content-Range");
+      if (cr) {
+        const total = parseInt(cr.split("/")[1]);
+        hasMore = groups.length < total;
+        start += 50;
+      } else {
+        hasMore = false;
+      }
+    }
+
+    const enriched = groups.map((g: any) => ({
+      ...g,
+      stage_name: stageMap.get(g.stage_id) ?? g.stage_id
+    }));
+
+    res.json({ groups: enriched });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: (err as Error).toString() });
