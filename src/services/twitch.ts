@@ -363,7 +363,7 @@ async function onMatchUpdate(): Promise<void> {
         `Match terminé ! ${m.team1_string} ${m.team1_score}-${m.team2_score} ${m.team2_string}` +
         (mapsStr ? ` | ${mapsStr}` : "");
 
-      setTimeout(() => sayAll(msg), 60_000);
+      setTimeout(() => sayAll(msg), 90_000);
     }
 
     // Met à jour le cache des matchs actifs
