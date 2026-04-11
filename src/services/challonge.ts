@@ -228,9 +228,7 @@ export async function mark_challonge_match_underway(
   console.log(`[Challonge] mark_underway: slugList=${JSON.stringify(slugList)}`);
   if (!slugList.length) { console.log("[Challonge] mark_underway: no slugs, abort"); return; }
 
-  const baseHeaders = challongeHeaders(decryptedKey);
-  // change_state.json attend application/json, pas application/vnd.api+json
-  const headers = { ...baseHeaders, "Content-Type": "application/json" };
+  const headers = challongeHeaders(decryptedKey);
 
   for (const slug of slugList) {
     const url = `${CHALLONGE_V2_BASE}/tournaments/${slug}/matches/${challongeMatchId}/change_state.json`;

@@ -144,7 +144,7 @@ export function buildTournamentStateBody(state: string): object {
 }
 
 /** Build the v2.1 PUT body to change a match state (e.g. mark_as_underway). */
-export function buildMatchStateBody(state: "mark_as_underway" | "unmark_as_underway" | "reopen"): object {
+export function buildMatchStateBody(state: "mark_as_underway" | "underway" | "unmark_as_underway" | "reopen"): object {
   return {
     data: {
       type: "MatchState",
