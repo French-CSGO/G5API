@@ -17,6 +17,7 @@ import {
   challongeHeaders,
   parseV2Match,
   buildMatchPutBody,
+  buildMatchStateBody,
   buildTournamentStateBody
 } from "../../utility/challongeV2.js";
 import { getSetting } from "../../services/settings.js";
@@ -647,6 +648,10 @@ router.post(
         insertSql = "INSERT INTO map_stats SET ?";
         await db.query(insertSql, [insertStmt]);
       }
+      // Mark Challonge match as underway when the first map starts.
+      if (mapNumber === 0 && matchValues[0].season_id) {
+        await mark_challonge_underway(matchID, matchValues[0].season_id, matchValues[0].team1_id, matchValues[0].team2_id);
+      }
       GlobalEmitter.emit("mapStatUpdate");
       res.status(200).send({ message: "Success" });
     } catch (err) {
@@ -752,8 +757,8 @@ router.post(
           updateSql =
             "UPDATE map_stats SET ? WHERE match_id = ? AND map_number = ?";
           await db.query(updateSql, [updateStmt, matchID, mapNumber]);
-          if (matchValues[0].max_maps == 1 && matchValues[0].season_id != null) {
-            // Live update the score.
+          if (matchValues[0].season_id != null) {
+            // Live update the score for all BO formats.
             await update_challonge_match(matchID,
               matchValues[0].season_id,
               matchValues[0].team1_id,
@@ -1325,8 +1330,8 @@ router.post(
           false
         );
       }
-      if (matchValues[0].max_maps != 1 && matchValues[0].season_id != null) {
-        // Live update the score.
+      if (matchValues[0].season_id != null) {
+        // Push per-map scores after map end (no winner yet, series may continue).
         await update_challonge_match(matchID,
           matchValues[0].season_id,
           matchValues[0].team1_id,
@@ -1726,8 +1731,6 @@ async function check_api_key(match_api_key: string, given_api_key: string, match
 async function update_challonge_match(match_id: string | null, season_id: number, team1_id: number, team2_id: number, num_maps: number, winner: string | null = null) {
   // Check if a match has a season ID.
   let sql: string = "SELECT id, challonge_url, user_id FROM season WHERE id = ?";
-  let team1Score: number;
-  let team2Score: number;
   const seasonInfo: RowDataPacket[] = await db.query(sql, [season_id]);
   if (seasonInfo[0].challonge_url) {
     sql = "SELECT challonge_team_id FROM team WHERE id = ?";
@@ -1756,19 +1759,14 @@ async function update_challonge_match(match_id: string | null, season_id: number
     );
 
     if (matchData) {
-      if (num_maps == 1) {
-        sql = "SELECT team1_score, team2_score FROM map_stats WHERE match_id = ?";
-      } else {
-        sql = "SELECT team1_score, team2_score FROM `match` WHERE id = ?";
-      }
-      const mapStats: RowDataPacket[] = await db.query(sql, [match_id]);
-      // Admins may just make a match that has teams swapped.
-      team1Score = matchData.player1_id === t1cid
-        ? mapStats[0].team1_score
-        : mapStats[0].team2_score;
-      team2Score = matchData.player2_id === t2cid
-        ? mapStats[0].team2_score
-        : mapStats[0].team1_score;
+      // Per-map scores from map_stats, ordered by map_number
+      const mapStatsRows: RowDataPacket[] = await db.query(
+        "SELECT team1_score, team2_score FROM map_stats WHERE match_id = ? ORDER BY map_number ASC",
+        [match_id]
+      );
+      const isSwapped = matchData.player1_id !== t1cid;
+      const team1Scores: number[] = mapStatsRows.map(r => isSwapped ? r.team2_score : r.team1_score);
+      const team2Scores: number[] = mapStatsRows.map(r => isSwapped ? r.team1_score : r.team2_score);
 
       // v2.1 — PUT score update
       await fetch(
@@ -1776,7 +1774,7 @@ async function update_challonge_match(match_id: string | null, season_id: number
         {
           method: "PUT",
           headers: cHeaders,
-          body: JSON.stringify(buildMatchPutBody(t1cid, t2cid, team1Score, team2Score, winner))
+          body: JSON.stringify(buildMatchPutBody(t1cid, t2cid, team1Scores, team2Scores, winner))
         }
       );
 
@@ -1803,6 +1801,43 @@ async function update_challonge_match(match_id: string | null, season_id: number
       }
     }
   }
+}
+
+/** Marks a Challonge match as underway (called when the first map starts). */
+async function mark_challonge_underway(match_id: string, season_id: number, team1_id: number, team2_id: number): Promise<void> {
+  const seasonInfo: RowDataPacket[] = await db.query(
+    "SELECT id, challonge_url FROM season WHERE id = ?",
+    [season_id]
+  );
+  if (!seasonInfo.length || !seasonInfo[0].challonge_url) return;
+  if (seasonInfo[0].challonge_url.startsWith("t:")) return; // toornament
+
+  const decryptedKey = getSetting("challonge.apiKey");
+  if (!decryptedKey) return;
+
+  const cHeaders = challongeHeaders(decryptedKey);
+  const slug: string = seasonInfo[0].challonge_url;
+
+  const t1Row: RowDataPacket[] = await db.query("SELECT challonge_team_id FROM team WHERE id = ?", [team1_id]);
+  const t2Row: RowDataPacket[] = await db.query("SELECT challonge_team_id FROM team WHERE id = ?", [team2_id]);
+  const t1cid: number = t1Row[0]?.challonge_team_id;
+  const t2cid: number = t2Row[0]?.challonge_team_id;
+  if (!t1cid || !t2cid) return;
+
+  const resp = await fetch(`${CHALLONGE_V2_BASE}/tournaments/${slug}/matches.json?state=open&per_page=500`, { headers: cHeaders });
+  const body: any = await resp.json();
+  const allMatches: any[] = Array.isArray(body?.data) ? body.data.map(parseV2Match) : [];
+  const matchData = allMatches.find(m =>
+    (m.player1_id === t1cid && m.player2_id === t2cid) ||
+    (m.player2_id === t1cid && m.player1_id === t2cid)
+  );
+  if (!matchData) return;
+
+  await fetch(`${CHALLONGE_V2_BASE}/tournaments/${slug}/matches/${matchData.id}/change_state.json`, {
+    method: "PUT",
+    headers: cHeaders,
+    body: JSON.stringify(buildMatchStateBody("mark_as_underway"))
+  });
 }
 
 export default router;

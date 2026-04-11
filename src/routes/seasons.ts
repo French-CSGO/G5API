@@ -1438,11 +1438,20 @@ async function enrichChallongeMatches(
   );
 
   const challongeIds = rawParts.map((item: any) => parseInt(item.id, 10));
+
+  // Inclure aussi les IDs de participants qui apparaissent directement dans les matchs
+  // (les endpoints participants et matches peuvent retourner des ensembles d'IDs différents)
+  const matchPlayerIds = rawMatches.flatMap((item: any) => {
+    const m = parseV2Match(item);
+    return [m.player1_id, m.player2_id].filter((id): id is number => id !== null);
+  });
+  const allLookupIds = [...new Set([...challongeIds, ...matchPlayerIds])];
+
   let localTeams: RowDataPacket[] = [];
-  if (challongeIds.length > 0) {
+  if (allLookupIds.length > 0) {
     localTeams = await db.query(
-      `SELECT id, name, challonge_team_id FROM team WHERE challonge_team_id IN (${challongeIds.map(() => "?").join(",")})`,
-      challongeIds.map(String)
+      `SELECT id, name, challonge_team_id FROM team WHERE challonge_team_id IN (${allLookupIds.map(() => "?").join(",")})`,
+      allLookupIds.map(String)
     );
   }
   const teamByChallongeId = new Map(localTeams.map(t => [String(t.challonge_team_id), t]));

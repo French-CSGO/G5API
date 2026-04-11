@@ -128,17 +128,16 @@ async function update_challonge_match(
 
     if (!matchData) continue;
 
-    // Récupérer les scores
-    const scoreSql = num_maps === 1
-      ? "SELECT team1_score, team2_score FROM map_stats WHERE match_id = ?"
-      : "SELECT team1_score, team2_score FROM `match` WHERE id = ?";
-    const mapStats: RowDataPacket[] = await db.query(scoreSql, [match_id]);
+    // Récupérer tous les scores par map (live + terminés), triés par map_number
+    const mapStatsRows: RowDataPacket[] = await db.query(
+      "SELECT team1_score, team2_score FROM map_stats WHERE match_id = ? ORDER BY map_number ASC",
+      [match_id]
+    );
 
-    // Ajuster les scores selon la position player1/player2 dans Challonge
-    const team1Score: number = matchData.player1_id === t1cid
-      ? mapStats[0].team1_score : mapStats[0].team2_score;
-    const team2Score: number = matchData.player2_id === t2cid
-      ? mapStats[0].team2_score : mapStats[0].team1_score;
+    // Ajuster selon la position player1/player2 dans Challonge
+    const isSwapped = matchData.player1_id !== t1cid;
+    const team1Scores: number[] = mapStatsRows.map(r => isSwapped ? r.team2_score : r.team1_score);
+    const team2Scores: number[] = mapStatsRows.map(r => isSwapped ? r.team1_score : r.team2_score);
 
     // PUT v2.1 — mise à jour du score
     await fetch(
@@ -146,7 +145,7 @@ async function update_challonge_match(
       {
         method: "PUT",
         headers,
-        body: JSON.stringify(buildMatchPutBody(t1cid, t2cid, team1Score, team2Score, winner))
+        body: JSON.stringify(buildMatchPutBody(t1cid, t2cid, team1Scores, team2Scores, winner))
       }
     );
 

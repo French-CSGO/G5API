@@ -46,7 +46,14 @@ export function parseV2Match(item: any): NormalisedMatch {
 
   const readId = (side: "player1" | "player2"): number | null => {
     const id = rel[side]?.data?.id;
-    return id != null && id !== "" ? parseInt(String(id), 10) : null;
+    if (id != null && id !== "") return parseInt(String(id), 10);
+    // Fallback: points_by_participant (used when relationships.player1/player2 are absent)
+    if (Array.isArray(attr.points_by_participant) && attr.points_by_participant.length >= 2) {
+      const idx = side === "player1" ? 0 : 1;
+      const pid = attr.points_by_participant[idx]?.participant_id;
+      return pid != null ? parseInt(String(pid), 10) : null;
+    }
+    return null;
   };
 
   return {
@@ -75,26 +82,29 @@ export function parseV2Participant(item: any): { id: number; display_name: strin
 
 /**
  * Build the v2.1 PUT body to update a match score.
- * When winner is null, only scores are sent (intermediate update).
- * When winner is "team1" or "team2", rank + advancing are added.
+ *
+ * team1Scores / team2Scores are per-map score arrays (one entry per map played).
+ * Challonge displays them as individual sets on the bracket.
+ * When winner is null, only scores are sent (live/intermediate update).
+ * When winner is "team1" or "team2", rank + advancing are added (series end).
  */
 export function buildMatchPutBody(
   team1ChallongeId: number | string,
   team2ChallongeId: number | string,
-  team1Score: number,
-  team2Score: number,
+  team1Scores: number[],
+  team2Scores: number[],
   winner: string | null
 ): object {
   const team1Wins = winner === "team1";
   const matchArr: any[] = [
     {
       participant_id: String(team1ChallongeId),
-      score_set: String(team1Score),
+      score_set: team1Scores.join(","),
       ...(winner !== null && { rank: team1Wins ? 1 : 2, advancing: team1Wins })
     },
     {
       participant_id: String(team2ChallongeId),
-      score_set: String(team2Score),
+      score_set: team2Scores.join(","),
       ...(winner !== null && { rank: team1Wins ? 2 : 1, advancing: !team1Wins })
     }
   ];
@@ -109,11 +119,21 @@ export function buildMatchPutBody(
   };
 }
 
-/** Build the v2.1 PUT body to change tournament state (e.g. finalize). */
+/** Build the v2.1 PUT body to change tournament state (e.g. finalize, start). */
 export function buildTournamentStateBody(state: string): object {
   return {
     data: {
       type: "TournamentState",
+      attributes: { state }
+    }
+  };
+}
+
+/** Build the v2.1 PUT body to change a match state (e.g. mark_as_underway). */
+export function buildMatchStateBody(state: "mark_as_underway" | "unmark_as_underway" | "reopen"): object {
+  return {
+    data: {
+      type: "MatchState",
       attributes: { state }
     }
   };
