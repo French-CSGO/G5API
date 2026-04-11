@@ -730,10 +730,10 @@ router.post("/challonge", Utils.ensureAuthenticated, async (req, res, next) => {
           const partBody: any = await partResp.json();
           const participants: any[] = Array.isArray(partBody?.data) ? partBody.data : [];
           if (participants.length > 0) {
-            sqlString = "INSERT INTO team (user_id, name, tag, challonge_team_id) VALUES ?";
+            sqlString = "INSERT INTO team (user_id, name, tag, challonge_team_id, public_team) VALUES ?";
             const teamArray: Array<Array<any>> = participants.map((item: any) => {
               const p = parseV2Participant(item);
-              return [req.user!.id, p.name.substring(0, 40), p.name.substring(0, 40), p.id];
+              return [req.user!.id, p.name.substring(0, 40), p.name.substring(0, 40), p.id, 1];
             });
             await db.query(sqlString, [teamArray]);
           }
@@ -1449,8 +1449,20 @@ async function enrichChallongeMatches(
 
   return rawMatches.map((item: any) => {
     const m = parseV2Match(item);
-    const p1 = m.player1_id !== null ? (partMap.get(m.player1_id) ?? null) : null;
-    const p2 = m.player2_id !== null ? (partMap.get(m.player2_id) ?? null) : null;
+
+    // Résolution participant : cherche d'abord dans la map principale.
+    // Pour les matchs de phase de groupes, l'ID Challonge peut être différent de
+    // l'ID participant principal → fallback avec un objet minimal pour que le match reste visible.
+    const resolveParticipant = (pid: number | null) => {
+      if (pid === null) return null;
+      const found = partMap.get(pid);
+      if (found) return found;
+      // Participant non trouvé (phase de groupes avec IDs internes) : retourne un placeholder
+      return { id: pid, display_name: `#${pid}`, name: `#${pid}` };
+    };
+
+    const p1 = resolveParticipant(m.player1_id);
+    const p2 = resolveParticipant(m.player2_id);
     const local1 = p1 ? (teamByChallongeId.get(String(p1.id)) ?? null) : null;
     const local2 = p2 ? (teamByChallongeId.get(String(p2.id)) ?? null) : null;
     const t1id = (local1 as any)?.id;

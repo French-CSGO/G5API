@@ -976,7 +976,7 @@ router.post("/challonge", Utils.ensureAuthenticated, async (req, res) => {
     if (!participants.length) {
       throw new Error("No teams found for the provided tournament.");
     }
-    let sqlString = "INSERT INTO team (user_id, name, tag, challonge_team_id) VALUES ?";
+    let sqlString = "INSERT INTO team (user_id, name, tag, challonge_team_id, public_team) VALUES ?";
     let teamArray: Array<any> = [];
     participants.forEach((item: any) => {
       const p = parseV2Participant(item);
@@ -984,7 +984,8 @@ router.post("/challonge", Utils.ensureAuthenticated, async (req, res) => {
         req.user?.id,
         p.name.substring(0, 40),
         p.name.substring(0, 40),
-        p.id
+        p.id,
+        1
       ]);
     });
     await db.query(sqlString, [teamArray]);

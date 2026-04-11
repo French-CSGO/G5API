@@ -32,15 +32,23 @@ export interface NormalisedMatch {
   winner_id: number | null;
 }
 
-/** Parse a single v2.1 match item (from data[] or data object). */
+/** Parse a single v2.1 match item (from data[] or data object).
+ *
+ * Challonge v2.1 puts `relationships` either:
+ *  - inside `attributes` (non-standard, seen in bracket phase)
+ *  - at the root of the resource object (JSON:API standard, seen in group stage)
+ * We check both locations so both phases resolve correctly.
+ */
 export function parseV2Match(item: any): NormalisedMatch {
   const attr = item.attributes ?? {};
-  const p1id = attr.relationships?.player1?.data?.id
-    ? parseInt(attr.relationships.player1.data.id, 10)
-    : null;
-  const p2id = attr.relationships?.player2?.data?.id
-    ? parseInt(attr.relationships.player2.data.id, 10)
-    : null;
+  // Relationships: prefer root-level (JSON:API standard), fallback to inside attributes
+  const rel = item.relationships ?? attr.relationships ?? {};
+
+  const readId = (side: "player1" | "player2"): number | null => {
+    const id = rel[side]?.data?.id;
+    return id != null && id !== "" ? parseInt(String(id), 10) : null;
+  };
+
   return {
     id: parseInt(item.id, 10),
     state: attr.state ?? "pending",
@@ -49,8 +57,8 @@ export function parseV2Match(item: any): NormalisedMatch {
     // scheduled_time may live under timestamps.scheduled_at in some versions
     scheduled_time: attr.scheduled_time ?? attr.timestamps?.scheduled_at ?? null,
     scores_csv: attr.scores ?? null,
-    player1_id: p1id,
-    player2_id: p2id,
+    player1_id: readId("player1"),
+    player2_id: readId("player2"),
     winner_id: attr.winner_id != null ? parseInt(String(attr.winner_id), 10) : null
   };
 }
