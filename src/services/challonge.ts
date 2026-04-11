@@ -198,22 +198,25 @@ export async function mark_challonge_match_underway(
   match_id: number | string,
   season_id: number
 ): Promise<void> {
+  console.log(`[Challonge] mark_underway match_id=${match_id} season_id=${season_id}`);
+
   const seasonInfo: RowDataPacket[] = await db.query(
     "SELECT challonge_url FROM season WHERE id = ?",
     [season_id]
   );
-  if (!seasonInfo.length) return;
-  if (seasonInfo[0].challonge_url?.startsWith("t:")) return;
+  if (!seasonInfo.length) { console.log("[Challonge] mark_underway: season not found"); return; }
+  if (seasonInfo[0].challonge_url?.startsWith("t:")) { console.log("[Challonge] mark_underway: toornament season, skip"); return; }
 
   const decryptedKey = getSetting("challonge.apiKey");
-  if (!decryptedKey) return;
+  if (!decryptedKey) { console.log("[Challonge] mark_underway: no API key"); return; }
 
   const matchRow: RowDataPacket[] = await db.query(
     "SELECT challonge_id FROM `match` WHERE id = ?",
     [match_id]
   );
   const challongeMatchId: number | null = matchRow[0]?.challonge_id ?? null;
-  if (!challongeMatchId) return;
+  console.log(`[Challonge] mark_underway: challonge_id=${challongeMatchId}`);
+  if (!challongeMatchId) { console.log("[Challonge] mark_underway: no challonge_id on match, abort"); return; }
 
   const tournaments: RowDataPacket[] = await db.query(
     "SELECT challonge_slug FROM season_challonge_tournament WHERE season_id = ? ORDER BY display_order ASC",
@@ -222,20 +225,22 @@ export async function mark_challonge_match_underway(
   const slugList: string[] = tournaments.length > 0
     ? tournaments.map(t => t.challonge_slug as string)
     : (seasonInfo[0].challonge_url ? [seasonInfo[0].challonge_url as string] : []);
-  if (!slugList.length) return;
+  console.log(`[Challonge] mark_underway: slugList=${JSON.stringify(slugList)}`);
+  if (!slugList.length) { console.log("[Challonge] mark_underway: no slugs, abort"); return; }
 
   const headers = challongeHeaders(decryptedKey);
 
   for (const slug of slugList) {
-    const resp = await fetch(
-      `${CHALLONGE_V2_BASE}/tournaments/${slug}/matches/${challongeMatchId}/change_state.json`,
-      {
-        method: "PUT",
-        headers,
-        body: JSON.stringify(buildMatchStateBody("mark_as_underway"))
-      }
-    );
+    const url = `${CHALLONGE_V2_BASE}/tournaments/${slug}/matches/${challongeMatchId}/change_state.json`;
+    console.log(`[Challonge] mark_underway: PUT ${url}`);
+    const resp = await fetch(url, {
+      method: "PUT",
+      headers,
+      body: JSON.stringify(buildMatchStateBody("mark_as_underway"))
+    });
+    console.log(`[Challonge] mark_underway: response status=${resp.status}`);
     if (resp.ok) break;
-    // If this slug doesn't have the match, try the next one
+    const errBody = await resp.text();
+    console.log(`[Challonge] mark_underway: error body=${errBody}`);
   }
 }
