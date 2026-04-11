@@ -17,10 +17,10 @@ import {
   challongeHeaders,
   parseV2Match,
   buildMatchPutBody,
-  buildMatchStateBody,
   buildTournamentStateBody
 } from "../../utility/challongeV2.js";
 import { getSetting } from "../../services/settings.js";
+import { mark_challonge_match_underway } from "../../services/challonge.js";
 
 /** Rate limit includes.
  * @const
@@ -650,7 +650,7 @@ router.post(
       }
       // Mark Challonge match as underway when the first map starts.
       if (mapNumber === 0 && matchValues[0].season_id) {
-        await mark_challonge_underway(matchID, matchValues[0].season_id, matchValues[0].team1_id, matchValues[0].team2_id);
+        await mark_challonge_match_underway(matchID, matchValues[0].season_id);
       }
       GlobalEmitter.emit("mapStatUpdate");
       res.status(200).send({ message: "Success" });
@@ -1800,56 +1800,6 @@ async function update_challonge_match(match_id: string | null, season_id: number
         GlobalEmitter.emit("seasonUpdate");
       }
     }
-  }
-}
-
-/** Marks a Challonge match as underway (called when the first map starts). */
-async function mark_challonge_underway(match_id: string, season_id: number, team1_id: number, team2_id: number): Promise<void> {
-  const seasonInfo: RowDataPacket[] = await db.query(
-    "SELECT id, challonge_url FROM season WHERE id = ?",
-    [season_id]
-  );
-  if (!seasonInfo.length) return;
-  if (seasonInfo[0].challonge_url?.startsWith("t:")) return; // toornament
-
-  const decryptedKey = getSetting("challonge.apiKey");
-  if (!decryptedKey) return;
-
-  const cHeaders = challongeHeaders(decryptedKey);
-
-  // Cherche dans tous les slugs de la saison (brackets multiples inclus)
-  const tournaments: RowDataPacket[] = await db.query(
-    "SELECT challonge_slug FROM season_challonge_tournament WHERE season_id = ? ORDER BY display_order ASC",
-    [season_id]
-  );
-  const slugList: string[] = tournaments.length > 0
-    ? tournaments.map(t => t.challonge_slug as string)
-    : (seasonInfo[0].challonge_url ? [seasonInfo[0].challonge_url as string] : []);
-  if (!slugList.length) return;
-
-  const t1Row: RowDataPacket[] = await db.query("SELECT challonge_team_id FROM team WHERE id = ?", [team1_id]);
-  const t2Row: RowDataPacket[] = await db.query("SELECT challonge_team_id FROM team WHERE id = ?", [team2_id]);
-  const t1cid: number = t1Row[0]?.challonge_team_id;
-  const t2cid: number = t2Row[0]?.challonge_team_id;
-  if (!t1cid || !t2cid) return;
-
-  for (const slug of slugList) {
-    const resp = await fetch(`${CHALLONGE_V2_BASE}/tournaments/${slug}/matches.json?state=open&per_page=500`, { headers: cHeaders });
-    if (!resp.ok) continue;
-    const body: any = await resp.json();
-    const allMatches: any[] = Array.isArray(body?.data) ? body.data.map(parseV2Match) : [];
-    const matchData = allMatches.find(m =>
-      (m.player1_id === t1cid && m.player2_id === t2cid) ||
-      (m.player2_id === t1cid && m.player1_id === t2cid)
-    );
-    if (!matchData) continue;
-
-    await fetch(`${CHALLONGE_V2_BASE}/tournaments/${slug}/matches/${matchData.id}/change_state.json`, {
-      method: "PUT",
-      headers: cHeaders,
-      body: JSON.stringify(buildMatchStateBody("mark_as_underway"))
-    });
-    break;
   }
 }
 

@@ -202,16 +202,11 @@ class MapFlowService {
       // Mark Challonge match as underway when the first map goes live.
       if (event.map_number === 0) {
         const matchSeasonInfo: RowDataPacket[] = await db.query(
-          "SELECT season_id, team1_id, team2_id FROM `match` WHERE id = ?",
+          "SELECT season_id FROM `match` WHERE id = ?",
           [event.matchid]
         );
         if (matchSeasonInfo[0]?.season_id) {
-          await mark_challonge_match_underway(
-            event.matchid,
-            matchSeasonInfo[0].season_id,
-            matchSeasonInfo[0].team1_id,
-            matchSeasonInfo[0].team2_id
-          );
+          await mark_challonge_match_underway(event.matchid, matchSeasonInfo[0].season_id);
         }
       }
 
