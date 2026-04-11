@@ -956,29 +956,35 @@ router.get("/:team_id/result/:match_id", async (req, res) => {
 router.post("/challonge", Utils.ensureAuthenticated, async (req, res) => {
 
   try {
-    let userID: number = req.user!.id;
-    const userInfo: RowDataPacket[] = await db.query("SELECT challonge_api_key FROM user WHERE id = ?", [userID]);
-    let challongeAPIKey: string | undefined | null = Utils.decrypt(userInfo[0].challonge_api_key);
     let tournamentId: string = req.body[0].tournament_id;
     if (!/^[\w\-]+$/.test(tournamentId)) {
       throw new Error("Invalid tournament ID.");
     }
-    let challongeResponse: any = await fetch("https://api.challonge.com/v1/tournaments/" + tournamentId + "/participants.json?api_key=" + challongeAPIKey);
-    let challongeData: any = await challongeResponse.json();
-    if (!challongeData) {
+    // v2.1 — récupération des participants via clé système
+    const { CHALLONGE_V2_BASE, challongeHeaders, parseV2Participant } = await import("../utility/challongeV2.js");
+    const { getSetting } = await import("../services/settings.js");
+    const challongeAPIKey = getSetting("challonge.apiKey");
+    if (!challongeAPIKey) {
+      throw new Error("Clé API Challonge non configurée dans les paramètres administrateur.");
+    }
+    const challongeResponse: any = await fetch(
+      `${CHALLONGE_V2_BASE}/tournaments/${tournamentId}/participants.json?per_page=500`,
+      { headers: challongeHeaders(challongeAPIKey) }
+    );
+    const challongeBody: any = await challongeResponse.json();
+    const participants: any[] = Array.isArray(challongeBody?.data) ? challongeBody.data : [];
+    if (!participants.length) {
       throw new Error("No teams found for the provided tournament.");
     }
     let sqlString = "INSERT INTO team (user_id, name, tag, challonge_team_id) VALUES ?";
-    if (!challongeAPIKey) {
-      throw "No challonge API key provided for user.";
-    }
     let teamArray: Array<any> = [];
-    challongeData.forEach(async (team: { participant: { display_name: string; id: any; }; }) => {
+    participants.forEach((item: any) => {
+      const p = parseV2Participant(item);
       teamArray.push([
         req.user?.id,
-        team.participant.display_name.substring(0, 40),
-        team.participant.display_name.substring(0, 40),
-        team.participant.id
+        p.name.substring(0, 40),
+        p.name.substring(0, 40),
+        p.id
       ]);
     });
     await db.query(sqlString, [teamArray]);

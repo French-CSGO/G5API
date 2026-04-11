@@ -24,6 +24,14 @@ import { ToornamentTokenResponse } from "../types/toornament/ToornamentTokenResp
 import { ToornamentMatch } from "../types/toornament/ToornamentMatch.js";
 
 import { getSetting } from "../services/settings.js";
+import {
+  CHALLONGE_V2_BASE,
+  challongeHeaders,
+  parseV2Match,
+  parseV2Participant,
+  buildMatchPutBody,
+  buildTournamentStateBody
+} from "../utility/challongeV2.js";
 
 /**
  * @swagger
@@ -675,59 +683,67 @@ router.post("/challonge", Utils.ensureAuthenticated, async (req, res, next) => {
     }
 
 
-    const userInfo: RowDataPacket[] = await db.query("SELECT challonge_api_key FROM user WHERE id = ?", [req.user!.id]);
-    let challongeAPIKey: string | undefined | null = Utils.decrypt(userInfo[0].challonge_api_key);
-    if (!challongeAPIKey) {
-      throw "No challonge API key provided for user.";
-    }
+    const challongeAPIKey = getChallongeAPIKey();
 
     let tournamentId: string = req.body[0].tournament_id;
     if (!/^[\w\-]+$/.test(tournamentId)) {
       throw new Error("Invalid tournament ID.");
     }
-    let challongeResponse: any = await fetch(
-      "https://api.challonge.com/v1/tournaments/" +
-      tournamentId +
-      ".json?api_key=" +
-      challongeAPIKey +
-      "&include_participants=1");
-
-    let challongeData = await challongeResponse.json();
-    if (challongeData) {
+    // v2.1 — GET tournament info
+    const cHeaders = challongeHeaders(challongeAPIKey);
+    const tournResp: any = await fetch(
+      `${CHALLONGE_V2_BASE}/tournaments/${tournamentId}.json`,
+      { headers: cHeaders }
+    );
+    if (!tournResp.ok) throw new Error(`Challonge API error: ${tournResp.status}`);
+    const tournBody: any = await tournResp.json();
+    const tournAttrs = tournBody?.data?.attributes;
+    if (tournAttrs) {
       // Insert the season.
       let sqlString: string = "INSERT INTO season SET ?";
       let seasonData: SeasonObject = {
         user_id: req.user?.id,
-        name: challongeData.tournament.name,
-        start_date: new Date(challongeData.tournament.created_at),
+        name: tournAttrs.name,
+        start_date: tournAttrs.starts_at ? new Date(tournAttrs.starts_at) : new Date(),
         is_challonge: true,
-        challonge_svg: challongeData.tournament.live_image_url,
+        challonge_svg: null, // not exposed in v2.1
         challonge_url: tournamentId
       };
       const insertSeason: RowDataPacket[] = await db.query(sqlString, seasonData);
-      // Check if teams were already in the call and add them to the database.
-      if (req.body[0]?.import_teams && challongeData.tournament.participants) {
-        sqlString = "INSERT INTO team (user_id, name, tag, challonge_team_id) VALUES ?";
-        let teamArray: Array<Array<Object>> = [];
-        challongeData.tournament.participants.forEach(async (team: { participant: { display_name: string; id: Object; }; }) => {
-          teamArray.push([
-            req.user!.id,
-            team.participant.display_name.substring(0, 40),
-            team.participant.display_name.substring(0, 40),
-            team.participant.id
-          ]);
-        });
-        await db.query(sqlString, [teamArray]);
+      //@ts-ignore
+      const newSeasonId: number = insertSeason.insertId;
+
+      // Enregistrer le tournoi dans season_challonge_tournament
+      const label: string = req.body[0]?.label || "Main";
+      await db.query(
+        "INSERT INTO season_challonge_tournament (season_id, challonge_slug, label, display_order) VALUES (?, ?, ?, 0)",
+        [newSeasonId, tournamentId, label]
+      );
+
+      // v2.1 — import teams via separate participants call
+      if (req.body[0]?.import_teams) {
+        const partResp: any = await fetch(
+          `${CHALLONGE_V2_BASE}/tournaments/${tournamentId}/participants.json?per_page=500`,
+          { headers: cHeaders }
+        );
+        if (partResp.ok) {
+          const partBody: any = await partResp.json();
+          const participants: any[] = Array.isArray(partBody?.data) ? partBody.data : [];
+          if (participants.length > 0) {
+            sqlString = "INSERT INTO team (user_id, name, tag, challonge_team_id) VALUES ?";
+            const teamArray: Array<Array<any>> = participants.map((item: any) => {
+              const p = parseV2Participant(item);
+              return [req.user!.id, p.name.substring(0, 40), p.name.substring(0, 40), p.id];
+            });
+            await db.query(sqlString, [teamArray]);
+          }
+        }
       }
 
-
-
-      
       res.json({
         message: "Challonge season imported successfully!",
-        chal_res: challongeData.tournament.created_at,
-        //@ts-ignore
-        id: insertSeason.insertId,
+        chal_res: tournAttrs.starts_at ?? null,
+        id: newSeasonId,
       });
     }
 
@@ -943,13 +959,17 @@ router.get("/:season_id/toornament/matches", Utils.ensureAuthenticated, async (r
     }
     const teamByChallongeId = new Map(localTeams.map(t => [String(t.challonge_team_id), t]));
 
-    // Find existing G5 matches for this season (cross-reference by team pair)
+    // Find existing G5 matches for this season by toornament_id (precise) or team pair (fallback)
     const g5Matches: RowDataPacket[] = await db.query(
-      "SELECT id, team1_id, team2_id FROM `match` WHERE season_id = ?",
+      "SELECT id, team1_id, team2_id, toornament_id FROM `match` WHERE season_id = ?",
       [seasonId]
     );
+    const g5ByToornamentId = new Map<string, number>();
     const g5MatchMap = new Map<string, number>();
     for (const m of g5Matches) {
+      if (m.toornament_id) {
+        g5ByToornamentId.set(String(m.toornament_id), m.id);
+      }
       const key1 = `${m.team1_id}:${m.team2_id}`;
       const key2 = `${m.team2_id}:${m.team1_id}`;
       if (!g5MatchMap.has(key1) || g5MatchMap.get(key1)! < m.id) g5MatchMap.set(key1, m.id);
@@ -963,7 +983,10 @@ router.get("/:season_id/toornament/matches", Utils.ensureAuthenticated, async (r
       }));
       const t1 = (enrichedOpponents[0]?.local_team as any)?.id;
       const t2 = (enrichedOpponents[1]?.local_team as any)?.id;
-      const g5_match_id = (t1 && t2) ? (g5MatchMap.get(`${t1}:${t2}`) ?? null) : null;
+      // Prefer match by toornament_id (unique), fallback to team pair for old records
+      const g5_match_id =
+        g5ByToornamentId.get(String(match.id)) ??
+        ((t1 && t2) ? (g5MatchMap.get(`${t1}:${t2}`) ?? null) : null);
       return { ...match, opponents: enrichedOpponents, g5_match_id };
     });
 
@@ -1331,6 +1354,339 @@ router.delete("/:season_id/teams/:team_id", Utils.ensureAuthenticated, async (re
     const teamId = parseInt(req.params.team_id);
     await db.query("DELETE FROM teams_seasons WHERE season_id = ? AND teams_id = ?", [seasonId, teamId]);
     res.json({ message: "Team removed from season successfully!" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: (err as Error).toString() });
+  }
+});
+
+// ─── Challonge match import ──────────────────────────────────────────────────
+
+function getChallongeAPIKey(): string {
+  const key = getSetting("challonge.apiKey");
+  if (!key) throw new Error("Clé API Challonge non configurée dans les paramètres administrateur.");
+  return key;
+}
+
+/** Retourne tous les brackets Challonge d'une saison (depuis season_challonge_tournament) */
+async function getSeasonChallongeTournaments(seasonId: number): Promise<RowDataPacket[]> {
+  const rows: RowDataPacket[] = await db.query(
+    "SELECT id, challonge_slug, label, display_order FROM season_challonge_tournament WHERE season_id = ? ORDER BY display_order ASC, id ASC",
+    [seasonId]
+  );
+  if (!rows.length) throw new Error("Aucun tournoi Challonge trouvé pour cette saison.");
+  return rows;
+}
+
+/** Trouve le slug Challonge qui contient le match donné (via challonge_id sur la table match) */
+async function getSlugForMatch(seasonId: number, challongeMatchId: number, apiKey: string): Promise<string> {
+  // Cherche d'abord via le match G5 existant (challonge_id stocké)
+  const existing: RowDataPacket[] = await db.query(
+    "SELECT sct.challonge_slug FROM `match` m " +
+    "JOIN season_challonge_tournament sct ON sct.season_id = m.season_id " +
+    "WHERE m.challonge_id = ? AND m.season_id = ? LIMIT 1",
+    [challongeMatchId, seasonId]
+  );
+  if (existing.length) return existing[0].challonge_slug as string;
+
+  // Sinon cherche en interrogeant chaque tournoi Challonge (v2.1)
+  const tournaments = await getSeasonChallongeTournaments(seasonId);
+  const cHeaders = challongeHeaders(apiKey);
+  for (const t of tournaments) {
+    const resp = await fetch(
+      `${CHALLONGE_V2_BASE}/tournaments/${t.challonge_slug}/matches/${challongeMatchId}.json`,
+      { headers: cHeaders }
+    );
+    if (resp.ok) return t.challonge_slug as string;
+  }
+  throw new Error(`Match Challonge ${challongeMatchId} introuvable dans les tournois de la saison.`);
+}
+
+/** Helper partagé : enrichit les matchs d'un slug avec local_team + g5_match_id (v2.1) */
+async function enrichChallongeMatches(
+  slug: string,
+  label: string,
+  apiKey: string,
+  state: string | undefined,
+  g5ByChallongeId: Map<number, number>,
+  g5ByTeamPair: Map<string, number>
+): Promise<any[]> {
+  const cHeaders = challongeHeaders(apiKey);
+
+  // v2.1 — liste des matchs
+  let url = `${CHALLONGE_V2_BASE}/tournaments/${slug}/matches.json?per_page=500`;
+  if (state) url += `&state=${state}`;
+  const resp = await fetch(url, { headers: cHeaders });
+  if (!resp.ok) return [];
+  const rawBody: any = await resp.json();
+  // v2.1: { data: [ { id, attributes: { state, round, ..., relationships: { player1, player2 } } } ] }
+  const rawMatches: any[] = Array.isArray(rawBody?.data) ? rawBody.data : [];
+
+  // v2.1 — liste des participants
+  const partResp = await fetch(
+    `${CHALLONGE_V2_BASE}/tournaments/${slug}/participants.json?per_page=500`,
+    { headers: cHeaders }
+  );
+  const partBody: any = partResp.ok ? await partResp.json() : {};
+  const rawParts: any[] = Array.isArray(partBody?.data) ? partBody.data : [];
+  // Map: challongeId (number) → participant { id, display_name, name }
+  const partMap = new Map<number, any>(
+    rawParts.map((item: any) => {
+      const p = parseV2Participant(item);
+      return [p.id, p];
+    })
+  );
+
+  const challongeIds = rawParts.map((item: any) => parseInt(item.id, 10));
+  let localTeams: RowDataPacket[] = [];
+  if (challongeIds.length > 0) {
+    localTeams = await db.query(
+      `SELECT id, name, challonge_team_id FROM team WHERE challonge_team_id IN (${challongeIds.map(() => "?").join(",")})`,
+      challongeIds.map(String)
+    );
+  }
+  const teamByChallongeId = new Map(localTeams.map(t => [String(t.challonge_team_id), t]));
+
+  return rawMatches.map((item: any) => {
+    const m = parseV2Match(item);
+    const p1 = m.player1_id !== null ? (partMap.get(m.player1_id) ?? null) : null;
+    const p2 = m.player2_id !== null ? (partMap.get(m.player2_id) ?? null) : null;
+    const local1 = p1 ? (teamByChallongeId.get(String(p1.id)) ?? null) : null;
+    const local2 = p2 ? (teamByChallongeId.get(String(p2.id)) ?? null) : null;
+    const t1id = (local1 as any)?.id;
+    const t2id = (local2 as any)?.id;
+    const g5_match_id =
+      g5ByChallongeId.get(m.id) ??
+      ((t1id && t2id) ? (g5ByTeamPair.get(`${t1id}:${t2id}`) ?? null) : null);
+    return {
+      id: m.id,
+      slug,
+      tournament_label: label,
+      state: m.state,
+      round: m.round,
+      suggested_play_order: m.suggested_play_order,
+      scheduled_time: m.scheduled_time,
+      scores_csv: m.scores_csv,
+      player1: p1 ? { id: p1.id, name: p1.display_name, local_team: local1 } : null,
+      player2: p2 ? { id: p2.id, name: p2.display_name, local_team: local2 } : null,
+      g5_match_id
+    };
+  });
+}
+
+/** GET /:season_id/challonge/tournaments — liste les brackets de la saison */
+router.get("/:season_id/challonge/tournaments", Utils.ensureAuthenticated, async (req, res) => {
+  try {
+    const seasonId = parseInt(req.params.season_id);
+    const tournaments = await getSeasonChallongeTournaments(seasonId);
+    res.json({ tournaments });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: (err as Error).toString() });
+  }
+});
+
+/** POST /:season_id/challonge/tournaments — ajouter un bracket supplémentaire */
+router.post("/:season_id/challonge/tournaments", Utils.ensureAuthenticated, async (req, res) => {
+  try {
+    const seasonId = parseInt(req.params.season_id);
+    const { challonge_slug, label } = req.body;
+    if (!challonge_slug || !/^[\w\-]+$/.test(challonge_slug)) {
+      res.status(400).json({ message: "Slug Challonge invalide." });
+      return;
+    }
+    // Vérifier que la saison appartient à l'utilisateur ou est admin
+    const seasonRows: RowDataPacket[] = await db.query(
+      "SELECT user_id FROM season WHERE id = ? AND is_challonge = 1",
+      [seasonId]
+    );
+    if (!seasonRows.length) {
+      res.status(404).json({ message: "Saison introuvable ou pas une saison Challonge." });
+      return;
+    }
+    if (seasonRows[0].user_id !== req.user!.id && !Utils.superAdminCheck(req.user!)) {
+      res.status(403).json({ message: "Non autorisé." });
+      return;
+    }
+    // Vérifier que le tournoi Challonge est accessible (v2.1)
+    const apiKey = getChallongeAPIKey();
+    const checkResp = await fetch(
+      `${CHALLONGE_V2_BASE}/tournaments/${challonge_slug}.json`,
+      { headers: challongeHeaders(apiKey) }
+    );
+    if (!checkResp.ok) {
+      res.status(400).json({ message: "Tournoi Challonge introuvable ou inaccessible." });
+      return;
+    }
+    const checkBody: any = await checkResp.json();
+    const tData = checkBody?.data?.attributes ?? {};
+    const existingTournaments: RowDataPacket[] = await db.query(
+      "SELECT COUNT(*) as cnt FROM season_challonge_tournament WHERE season_id = ?",
+      [seasonId]
+    );
+    const displayOrder: number = existingTournaments[0]?.cnt ?? 0;
+    await db.query(
+      "INSERT INTO season_challonge_tournament (season_id, challonge_slug, label, display_order) VALUES (?, ?, ?, ?)",
+      [seasonId, challonge_slug, label || tData.name || challonge_slug, displayOrder]
+      // tData.name comes from v2.1 attributes object
+    );
+    res.json({ message: "Bracket ajouté avec succès.", name: tData.name });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: (err as Error).toString() });
+  }
+});
+
+/** DELETE /:season_id/challonge/tournaments/:tournament_id — supprimer un bracket */
+router.delete("/:season_id/challonge/tournaments/:tournament_id", Utils.ensureAuthenticated, async (req, res) => {
+  try {
+    const seasonId = parseInt(req.params.season_id);
+    const tournamentId = parseInt(req.params.tournament_id);
+    const seasonRows: RowDataPacket[] = await db.query(
+      "SELECT user_id FROM season WHERE id = ?",
+      [seasonId]
+    );
+    if (!seasonRows.length) { res.status(404).json({ message: "Saison introuvable." }); return; }
+    if (seasonRows[0].user_id !== req.user!.id && !Utils.superAdminCheck(req.user!)) {
+      res.status(403).json({ message: "Non autorisé." }); return;
+    }
+    await db.query(
+      "DELETE FROM season_challonge_tournament WHERE id = ? AND season_id = ?",
+      [tournamentId, seasonId]
+    );
+    res.json({ message: "Bracket supprimé." });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: (err as Error).toString() });
+  }
+});
+
+/** GET /:season_id/challonge/matches — tous les matchs de tous les brackets, enrichis */
+router.get("/:season_id/challonge/matches", Utils.ensureAuthenticated, async (req, res) => {
+  try {
+    const seasonId = parseInt(req.params.season_id);
+    const apiKey = getChallongeAPIKey();
+    const tournaments = await getSeasonChallongeTournaments(seasonId);
+    const { state, tournament_id } = req.query;
+
+    // G5 match index (partagé entre tous les tournois)
+    const g5Matches: RowDataPacket[] = await db.query(
+      "SELECT id, team1_id, team2_id, challonge_id FROM `match` WHERE season_id = ?",
+      [seasonId]
+    );
+    const g5ByChallongeId = new Map<number, number>();
+    const g5ByTeamPair = new Map<string, number>();
+    for (const m of g5Matches) {
+      if (m.challonge_id) g5ByChallongeId.set(Number(m.challonge_id), m.id);
+      const k1 = `${m.team1_id}:${m.team2_id}`;
+      const k2 = `${m.team2_id}:${m.team1_id}`;
+      if (!g5ByTeamPair.has(k1) || g5ByTeamPair.get(k1)! < m.id) g5ByTeamPair.set(k1, m.id);
+      if (!g5ByTeamPair.has(k2) || g5ByTeamPair.get(k2)! < m.id) g5ByTeamPair.set(k2, m.id);
+    }
+
+    // Filtrer par tournament_id si précisé
+    const filtered = tournament_id
+      ? tournaments.filter(t => t.id === parseInt(tournament_id as string))
+      : tournaments;
+
+    const results = await Promise.all(
+      filtered.map(t =>
+        enrichChallongeMatches(
+          t.challonge_slug as string,
+          t.label as string,
+          apiKey,
+          state as string | undefined,
+          g5ByChallongeId,
+          g5ByTeamPair
+        )
+      )
+    );
+
+    res.json({ tournaments, matches: results.flat() });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: (err as Error).toString() });
+  }
+});
+
+/** GET /:season_id/challonge/matches/:challonge_match_id/prefill */
+router.get("/:season_id/challonge/matches/:challonge_match_id/prefill", Utils.ensureAuthenticated, async (req, res) => {
+  try {
+    const seasonId = parseInt(req.params.season_id);
+    const challongeMatchId = parseInt(req.params.challonge_match_id);
+    if (isNaN(challongeMatchId)) throw new Error("ID de match Challonge invalide.");
+
+    const apiKey = getChallongeAPIKey();
+    const slug = await getSlugForMatch(seasonId, challongeMatchId, apiKey);
+
+    // v2.1 — récupérer le match
+    const cHeaders = challongeHeaders(apiKey);
+    const mResp = await fetch(
+      `${CHALLONGE_V2_BASE}/tournaments/${slug}/matches/${challongeMatchId}.json`,
+      { headers: cHeaders }
+    );
+    if (!mResp.ok) throw new Error(`Challonge API error: ${mResp.status}`);
+    const mBody: any = await mResp.json();
+    // v2.1: { data: { id, attributes: { state, round, ..., relationships: { player1, player2 } } } }
+    const m = parseV2Match(mBody.data);
+
+    const resolveParticipant = async (playerId: number | null) => {
+      if (!playerId) return null;
+      // v2.1 — récupérer le participant
+      const pResp = await fetch(
+        `${CHALLONGE_V2_BASE}/tournaments/${slug}/participants/${playerId}.json`,
+        { headers: cHeaders }
+      );
+      if (!pResp.ok) return null;
+      const pBody: any = await pResp.json();
+      // v2.1: { data: { id, attributes: { name } } }
+      const p = parseV2Participant(pBody.data);
+      const rows: RowDataPacket[] = await db.query(
+        "SELECT id, name FROM team WHERE challonge_team_id = ?",
+        [String(p.id)]
+      );
+      return { id: p.id, name: p.display_name, local_team: rows[0] ?? null };
+    };
+
+    const [player1, player2] = await Promise.all([
+      resolveParticipant(m.player1_id),
+      resolveParticipant(m.player2_id)
+    ]);
+
+    const seasonRows: RowDataPacket[] = await db.query(
+      "SELECT s.id, s.name, CONCAT('{', GROUP_CONCAT(DISTINCT CONCAT('\"',sc.cvar_name,'\": \"',sc.cvar_value,'\"')),'}') as cvars " +
+      "FROM season s LEFT OUTER JOIN season_cvar sc ON s.id = sc.season_id WHERE s.id = ? GROUP BY s.id",
+      [seasonId]
+    );
+    const season = seasonRows[0];
+    if (season?.cvars) season.cvars = JSON.parse(season.cvars);
+
+    const availableServers: RowDataPacket[] = await db.query(
+      "SELECT gs.id, gs.display_name, gs.ip_string, gs.port, gs.public_server, gs.flag " +
+      "FROM game_server gs WHERE gs.in_use = 0 AND (gs.public_server = 1 OR gs.user_id = ?) ORDER BY gs.display_name",
+      [req.user!.id]
+    );
+
+    res.json({
+      season_id: seasonId,
+      season_name: season?.name ?? null,
+      season_cvars: season?.cvars ?? null,
+      team1: player1?.local_team ?? null,
+      team2: player2?.local_team ?? null,
+      max_maps: 1,
+      challonge_match_id: challongeMatchId,
+      challonge_match: {
+        id: m.id,
+        slug,
+        state: m.state,
+        round: m.round,
+        suggested_play_order: m.suggested_play_order,
+        scheduled_time: m.scheduled_time, // mapped from v2.1 attributes
+        player1,
+        player2
+      },
+      available_servers: availableServers
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: (err as Error).toString() });

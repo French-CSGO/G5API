@@ -12,6 +12,14 @@ const router = Router();
  * @const
  */
 import {db} from "../../services/db.js";
+import {
+  CHALLONGE_V2_BASE,
+  challongeHeaders,
+  parseV2Match,
+  buildMatchPutBody,
+  buildTournamentStateBody
+} from "../../utility/challongeV2.js";
+import { getSetting } from "../../services/settings.js";
 
 /** Rate limit includes.
  * @const
@@ -1726,81 +1734,69 @@ async function update_challonge_match(match_id: string | null, season_id: number
     const team1ChallongeId: RowDataPacket[] = await db.query(sql, [team1_id]);
     const team2ChallongeId: RowDataPacket[] = await db.query(sql, [team2_id]);
 
-    // Grab API key.
-    sql = "SELECT challonge_api_key FROM user WHERE id = ?";
-    const challongeAPIKey: RowDataPacket[] = await db.query(sql, [seasonInfo[0].user_id]);
-    let decryptedKey: string | null | undefined = Utils.decrypt(challongeAPIKey[0].challonge_api_key);
-    // Get info of the current open match with the two IDs.
-    let challongeResponse: Response = await fetch(
-      "https://api.challonge.com/v1/tournaments/" +
-      seasonInfo[0].challonge_url +
-      "/matches.json?api_key=" + decryptedKey +
-      "&state=open&participant_id=" +
-      team1ChallongeId[0].challonge_team_id +
-      "&participant_id=" +
-      team2ChallongeId[0].challonge_team_id);
-    // TODO: Use typings for challonge API calls.
-    let challongeData: any[] = await challongeResponse.json() as any[];
-    if (challongeData) {
+    // Récupérer la clé API Challonge depuis les paramètres système
+    const decryptedKey = getSetting("challonge.apiKey");
+    if (!decryptedKey) return;
+
+    const t1cid: number = team1ChallongeId[0].challonge_team_id;
+    const t2cid: number = team2ChallongeId[0].challonge_team_id;
+    const slug: string = seasonInfo[0].challonge_url;
+    const cHeaders = challongeHeaders(decryptedKey);
+
+    // v2.1 — récupère tous les matchs ouverts et filtre par participants
+    const challongeResponse = await fetch(
+      `${CHALLONGE_V2_BASE}/tournaments/${slug}/matches.json?state=open&per_page=500`,
+      { headers: cHeaders }
+    );
+    const respBody: any = await challongeResponse.json();
+    const allMatches: any[] = Array.isArray(respBody?.data) ? respBody.data.map(parseV2Match) : [];
+    const matchData = allMatches.find(m =>
+      (m.player1_id === t1cid && m.player2_id === t2cid) ||
+      (m.player2_id === t1cid && m.player1_id === t2cid)
+    );
+
+    if (matchData) {
       if (num_maps == 1) {
-        // Submit the map stats scores instead.
         sql = "SELECT team1_score, team2_score FROM map_stats WHERE match_id = ?";
       } else {
         sql = "SELECT team1_score, team2_score FROM `match` WHERE id = ?";
       }
       const mapStats: RowDataPacket[] = await db.query(sql, [match_id]);
-      // Admins may just make a match that has teams swapped. This is okay as we can change what we
-      // report to Challonge.
-      team1Score = challongeData[0].match.player1_id == team1ChallongeId[0].challonge_team_id
+      // Admins may just make a match that has teams swapped.
+      team1Score = matchData.player1_id === t1cid
         ? mapStats[0].team1_score
         : mapStats[0].team2_score;
-      team2Score = challongeData[0].match.player2_id == team2ChallongeId[0].challonge_team_id
+      team2Score = matchData.player2_id === t2cid
         ? mapStats[0].team2_score
         : mapStats[0].team1_score;
-      // Build the PUT body.
-      let putBody = {
-        api_key: decryptedKey,
-        match: {
-          scores_csv: `${team1Score}-${team2Score}`,
-          winner_id: winner === "team1"
-            ? team1ChallongeId[0].challonge_team_id
-            : team2ChallongeId[0].challonge_team_id
-        }
-      };
-      // If we're just updating the score, remove this.
-      if (winner === null) {
-        delete putBody.match.winner_id;
-      }
+
+      // v2.1 — PUT score update
       await fetch(
-        "https://api.challonge.com/v1/tournaments/" +
-        seasonInfo[0].challonge_url +
-        "/matches/" +
-        challongeData[0].match.id +
-        ".json", {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(putBody)
-      });
-      // Check and see if any matches remain, if not, finalize the tournament.
-      challongeResponse = await fetch(
-        "https://api.challonge.com/v1/tournaments/" +
-        seasonInfo[0].challonge_url +
-        "/matches.json?api_key=" + decryptedKey +
-        "&state=open"
+        `${CHALLONGE_V2_BASE}/tournaments/${slug}/matches/${matchData.id}.json`,
+        {
+          method: "PUT",
+          headers: cHeaders,
+          body: JSON.stringify(buildMatchPutBody(t1cid, t2cid, team1Score, team2Score, winner))
+        }
       );
-      challongeData = await challongeResponse.json() as any[];
-      if (!challongeData) {
+
+      // Check and see if any matches remain, if not, finalize the tournament.
+      const openResp = await fetch(
+        `${CHALLONGE_V2_BASE}/tournaments/${slug}/matches.json?state=open&per_page=500`,
+        { headers: cHeaders }
+      );
+      const openBody: any = await openResp.json();
+      const openMatches: any[] = Array.isArray(openBody?.data) ? openBody.data : [];
+      if (openMatches.length === 0) {
+        // v2.1 — finalize via change_state
         await fetch(
-          "https://api.challonge.com/v1/tournaments/" +
-          seasonInfo[0].challonge_url +
-          "finalize.json?api_key=" + decryptedKey,
+          `${CHALLONGE_V2_BASE}/tournaments/${slug}/change_state.json`,
           {
-            method: 'POST'
+            method: "PUT",
+            headers: cHeaders,
+            body: JSON.stringify(buildTournamentStateBody("finalize"))
           }
         );
-        // If we are the last map, let's close off the season as well.
         sql = "UPDATE season SET end_date = ? WHERE id = ?";
         await db.query(sql, [new Date().toISOString().slice(0, 19).replace("T", " "), seasonInfo[0].id]);
         GlobalEmitter.emit("seasonUpdate");
