@@ -134,10 +134,9 @@ async function update_challonge_match(
       [match_id]
     );
 
-    // Ajuster selon la position player1/player2 dans Challonge
-    const isSwapped = matchData.player1_id !== t1cid;
-    const team1Scores: number[] = mapStatsRows.map(r => isSwapped ? r.team2_score : r.team1_score);
-    const team2Scores: number[] = mapStatsRows.map(r => isSwapped ? r.team1_score : r.team2_score);
+    // v2.1 : le PUT utilise participant_id explicite, pas besoin de swapper selon player1/player2
+    const team1Scores: number[] = mapStatsRows.map(r => r.team1_score);
+    const team2Scores: number[] = mapStatsRows.map(r => r.team2_score);
 
     // PUT v2.1 — mise à jour du score
     await fetch(
