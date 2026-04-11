@@ -27,6 +27,8 @@ export interface NormalisedMatch {
   suggested_play_order: number | null;
   scheduled_time: string | null;
   scores_csv: string | null;
+  /** Per-set scores [[p1_set1, p2_set1], [p1_set2, p2_set2], ...] */
+  score_in_sets: number[][] | null;
   player1_id: number | null;
   player2_id: number | null;
   winner_id: number | null;
@@ -64,6 +66,9 @@ export function parseV2Match(item: any): NormalisedMatch {
     // scheduled_time may live under timestamps.scheduled_at in some versions
     scheduled_time: attr.scheduled_time ?? attr.timestamps?.scheduled_at ?? null,
     scores_csv: attr.scores ?? null,
+    score_in_sets: Array.isArray(attr.score_in_sets) && attr.score_in_sets.length > 0
+      ? attr.score_in_sets
+      : null,
     player1_id: readId("player1"),
     player2_id: readId("player2"),
     winner_id: attr.winner_id != null ? parseInt(String(attr.winner_id), 10) : null
@@ -96,15 +101,24 @@ export function buildMatchPutBody(
   winner: string | null
 ): object {
   const team1Wins = winner === "team1";
+
+  // Drop trailing 0-0 sets (unplayed maps that get5 may have created in map_stats)
+  let t1 = [...team1Scores];
+  let t2 = [...team2Scores];
+  while (t1.length > 1 && t1[t1.length - 1] === 0 && t2[t2.length - 1] === 0) {
+    t1.pop();
+    t2.pop();
+  }
+
   const matchArr: any[] = [
     {
       participant_id: String(team1ChallongeId),
-      score_set: team1Scores.join(","),
+      score_set: t1.join(","),
       ...(winner !== null && { rank: team1Wins ? 1 : 2, advancing: team1Wins })
     },
     {
       participant_id: String(team2ChallongeId),
-      score_set: team2Scores.join(","),
+      score_set: t2.join(","),
       ...(winner !== null && { rank: team1Wins ? 2 : 1, advancing: !team1Wins })
     }
   ];

@@ -1488,6 +1488,7 @@ async function enrichChallongeMatches(
       suggested_play_order: m.suggested_play_order,
       scheduled_time: m.scheduled_time,
       scores_csv: m.scores_csv,
+      score_in_sets: m.score_in_sets,
       player1: p1 ? { id: p1.id, name: p1.display_name, local_team: local1 } : null,
       player2: p2 ? { id: p2.id, name: p2.display_name, local_team: local2 } : null,
       g5_match_id
