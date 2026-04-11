@@ -25,7 +25,7 @@ import { Get5_OnPlayerDeath } from "../types/map_flow/Get5_OnPlayerDeath.js";
 import { Get5_OnBombEvent } from "../types/map_flow/Get5_OnBombEvent.js";
 import { Get5_OnRoundEnd } from "../types/map_flow/Get5_OnRoundEnd.js";
 import { Get5_OnRoundStart } from "../types/map_flow/Get5_OnRoundStart.js";
-import update_challonge_match from "./challonge.js";
+import update_challonge_match, { mark_challonge_match_underway } from "./challonge.js";
 import { sendPauseEvent } from "./discord.js";
 import config from "config";
 
@@ -198,6 +198,22 @@ class MapFlowService {
 
       // TS: freeze time starting → FREEZE power
       await MapFlowService.setTsMatchTeams(String(event.matchid), TS_POWER.FREEZE);
+
+      // Mark Challonge match as underway when the first map goes live.
+      if (event.map_number === 0) {
+        const matchSeasonInfo: RowDataPacket[] = await db.query(
+          "SELECT season_id, team1_id, team2_id FROM `match` WHERE id = ?",
+          [event.matchid]
+        );
+        if (matchSeasonInfo[0]?.season_id) {
+          await mark_challonge_match_underway(
+            event.matchid,
+            matchSeasonInfo[0].season_id,
+            matchSeasonInfo[0].team1_id,
+            matchSeasonInfo[0].team2_id
+          );
+        }
+      }
 
       return res.status(200).send({ message: "Success" });
     } catch (error: unknown) {
