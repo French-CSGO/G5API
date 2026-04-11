@@ -1806,10 +1806,10 @@ async function update_challonge_match(match_id: string | null, season_id: number
 /** Marks a Challonge match as underway (called when the first map starts). */
 async function mark_challonge_underway(match_id: string, season_id: number, team1_id: number, team2_id: number): Promise<void> {
   const seasonInfo: RowDataPacket[] = await db.query(
-    "SELECT id, challonge_url, is_challonge FROM season WHERE id = ?",
+    "SELECT id, challonge_url FROM season WHERE id = ?",
     [season_id]
   );
-  if (!seasonInfo.length || !seasonInfo[0].is_challonge) return;
+  if (!seasonInfo.length) return;
   if (seasonInfo[0].challonge_url?.startsWith("t:")) return; // toornament
 
   const decryptedKey = getSetting("challonge.apiKey");
