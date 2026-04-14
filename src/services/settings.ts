@@ -45,6 +45,9 @@ const DEFAULTS: Record<string, string> = {
   "toornament.clientId": "",
   "toornament.clientSecret": "",
   "toornament.apiKey": "",
+
+  // Challonge
+  "challonge.apiKey": "",
 };
 
 // ─── Chargement initial ───────────────────────────────────────────────────────

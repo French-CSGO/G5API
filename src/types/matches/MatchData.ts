@@ -32,4 +32,6 @@ export interface MatchData {
     wingman?: boolean,
     team1_series_score?: number,
     team2_series_score?: number,
+    toornament_id?: string | null,
+    challonge_id?: number | null,
 }

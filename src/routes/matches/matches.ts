@@ -1216,7 +1216,9 @@ router.post("/", Utils.ensureAuthenticated, async (req, res, next) => {
           ? req.body[0].min_spectators_to_ready
           : 0,
       map_sides: req.body[0].map_sides !== null ? req.body[0].map_sides : null,
-      wingman: req.body[0]?.wingman 
+      wingman: req.body[0]?.wingman,
+      toornament_id: req.body[0].toornament_id ?? null,
+      challonge_id: req.body[0].challonge_id ?? null,
     };
     let sql: string = "INSERT INTO `match` SET ?";
     let cvarSql: string =
