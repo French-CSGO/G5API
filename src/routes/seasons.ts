@@ -28,9 +28,7 @@ import {
   CHALLONGE_V2_BASE,
   challongeHeaders,
   parseV2Match,
-  parseV2Participant,
-  buildMatchPutBody,
-  buildTournamentStateBody
+  parseV2Participant
 } from "../utility/challongeV2.js";
 
 /**
