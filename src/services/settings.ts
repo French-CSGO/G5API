@@ -48,6 +48,11 @@ const DEFAULTS: Record<string, string> = {
 
   // Challonge
   "challonge.apiKey": "",
+
+  // VPS relay (demo forwarding)
+  "vpsRelay.enabled": "false",
+  "vpsRelay.url": "",
+  "vpsRelay.apiKey": "",
 };
 
 // ─── Chargement initial ───────────────────────────────────────────────────────

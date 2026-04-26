@@ -93,6 +93,7 @@ router.put("/", Utils.ensureAuthenticated, requireSuperAdmin, async (req: Reques
       "challonge.apiKey",
       "teamspeak.enabled", "teamspeak.host", "teamspeak.queryPort", "teamspeak.username",
       "teamspeak.password", "teamspeak.serverId",
+      "vpsRelay.enabled", "vpsRelay.url", "vpsRelay.apiKey",
     ]);
     const entries: Record<string, string> = Object.create(null);
     for (const [k, v] of Object.entries(body)) {

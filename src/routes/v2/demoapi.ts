@@ -38,6 +38,7 @@ import { RowDataPacket } from "mysql2";
  */
 import GlobalEmitter from "../../utility/emitter.js";
 import { sendDemoReadyEmbed } from "../../services/discord.js";
+import { getSetting } from "../../services/settings.js";
 
 /** Express module
  * @const
@@ -162,6 +163,25 @@ router.post("/", async (req: Request, res: Response) => {
             console.error(err);
           }
         });
+
+        // VPS relay — fire-and-forget
+        if (getSetting("vpsRelay.enabled") === "true") {
+          const relayUrl = getSetting("vpsRelay.url")?.replace(/\/$/, "");
+          const relayApiKey = getSetting("vpsRelay.apiKey");
+          if (relayUrl && relayApiKey) {
+            fetch(`${relayUrl}/api/demos`, {
+              method: "POST",
+              headers: {
+                "Authorization": `Bearer ${relayApiKey}`,
+                "Get5-MatchId": matchId!,
+                "Get5-MapNumber": mapNumber!,
+                "Get5-FileName": safeDemoName,
+                "Content-Type": "application/octet-stream",
+              },
+              body: buf,
+            }).catch((err) => console.error("[VPS Relay] Demo upload failed:", err));
+          }
+        }
       });
     // Update map stats object to include the link to the demo.
     updateStmt = {
