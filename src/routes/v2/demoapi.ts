@@ -165,9 +165,13 @@ router.post("/", async (req: Request, res: Response) => {
         });
 
         // VPS relay — fire-and-forget
-        if (getSetting("vpsRelay.enabled") === "true") {
+        const relayEnabled = getSetting("vpsRelay.enabled");
+        console.log(`[VPS Relay] enabled=${relayEnabled}`);
+        if (relayEnabled === "true") {
           const relayUrl = getSetting("vpsRelay.url")?.replace(/\/$/, "");
           const relayApiKey = getSetting("vpsRelay.apiKey");
+          console.log(`[VPS Relay] url=${relayUrl} apiKey=${relayApiKey ? "set(" + relayApiKey.length + " chars)" : "MISSING"}`);
+          console.log(`[VPS Relay] sending match=${matchId} map=${mapNumber} file=${safeDemoName} size=${buf.length} bytes`);
           if (relayUrl && relayApiKey) {
             fetch(`${relayUrl}/api/demos`, {
               method: "POST",
@@ -179,7 +183,12 @@ router.post("/", async (req: Request, res: Response) => {
                 "Content-Type": "application/octet-stream",
               },
               body: buf,
-            }).catch((err) => console.error("[VPS Relay] Demo upload failed:", err));
+            }).then(async (r) => {
+              const body = await r.text().catch(() => "");
+              console.log(`[VPS Relay] response status=${r.status} body=${body}`);
+            }).catch((err) => console.error("[VPS Relay] fetch error:", err));
+          } else {
+            console.warn(`[VPS Relay] skipped — url or apiKey missing`);
           }
         }
       });
