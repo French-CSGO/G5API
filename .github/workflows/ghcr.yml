@@ -43,7 +43,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
       - uses: docker/build-push-action@v7.1.0
-        if: github.event_name == 'pull_request' && github.ref == 'refs/heads/master'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         with:
           context: .
           file: Dockerfile
