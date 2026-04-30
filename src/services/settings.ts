@@ -22,11 +22,7 @@ const DEFAULTS: Record<string, string> = {
   // Discord
   "discord.enabled": "false",
   "discord.token": "",
-  "discord.announceChannelId": "",
-  "discord.scoreboardChannelId": "",
-  "discord.scheduleChannelId": "",
   "discord.guildId": "",
-  "discord.eventWebhookUrl": "",
   "discord.gotvWebhookEnabled": "false",
 
   // Twitch
@@ -48,6 +44,15 @@ const DEFAULTS: Record<string, string> = {
 
   // Challonge
   "challonge.apiKey": "",
+
+  // Discord notification channels (JSON arrays of channel IDs)
+  "discord.channels.announce":   "[]",
+  "discord.channels.schedule":   "[]",
+  "discord.channels.scoreboard": "[]",
+  "discord.channels.veto":       "[]",
+  "discord.channels.demo":       "[]",
+  "discord.channels.streamer":   "[]",
+  "discord.channels.default":    "[]",
 
   // Discord planning
   "discord.frontendUrl": "",

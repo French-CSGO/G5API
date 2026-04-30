@@ -1,6 +1,6 @@
-import { Client, GatewayIntentBits, TextChannel, REST, Routes, SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from "discord.js";
+import { Client, GatewayIntentBits, TextChannel, REST, Routes, SlashCommandBuilder, EmbedBuilder } from "discord.js";
 import { db } from "./db.js";
-import { getSetting, getSettingBool } from "./settings.js";
+import { getSetting } from "./settings.js";
 import config from "config";
 import fs from "fs";
 import path from "path";
@@ -14,46 +14,64 @@ const MESSAGE_ID_FILE = path.join(__dirname, "../../../public/discord_scoreboard
 const SCHEDULE_MESSAGE_ID_FILE = path.join(__dirname, "../../../public/discord_schedule_id.json");
 
 let client: Client | null = null;
-let announceChannelId = "";
-let scoreboardChannelId = "";
-let scoreboardMessageId = "0";
-let scheduleChannelId = "";
-let scheduleMessageId = "0";
-let serverEventChannelId = "";
+let scoreboardMsgIds: Record<string, string> = {};
+let scheduleMsgIds: Record<string, string> = {};
 
-function loadMessageId() {
+// ─── Channel helpers ──────────────────────────────────────────────────────────
+
+function getChannels(key: string): string[] {
   try {
-    if (fs.existsSync(MESSAGE_ID_FILE)) {
-      const json = JSON.parse(fs.readFileSync(MESSAGE_ID_FILE, "utf-8"));
-      scoreboardMessageId = json.messageId || "0";
+    const val = getSetting(key);
+    if (!val || val === "[]") return [];
+    const parsed = JSON.parse(val);
+    return Array.isArray(parsed) ? parsed.filter(Boolean) : [];
+  } catch {
+    return [];
+  }
+}
+
+// Supporte channel ID (bot) et webhook URL — pour les types one-shot
+async function sendEmbedToTargets(targets: string[], embed: EmbedBuilder): Promise<void> {
+  for (const target of targets) {
+    try {
+      if (target.startsWith("https://discord.com/api/webhooks/")) {
+        await fetch(target, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ embeds: [embed.toJSON()] }),
+        });
+      } else {
+        if (!client?.isReady()) continue;
+        const ch = await client.channels.fetch(target) as TextChannel;
+        await ch.send({ embeds: [embed] });
+      }
+    } catch (err) {
+      console.error(`Discord sendEmbedToTargets [${target.slice(0, 60)}]:`, (err as Error).message);
+    }
+  }
+}
+
+// ─── Message ID persistence (per-channel maps) ────────────────────────────────
+
+function loadMsgIds(file: string): Record<string, string> {
+  try {
+    if (fs.existsSync(file)) {
+      const json = JSON.parse(fs.readFileSync(file, "utf-8"));
+      if ("messageId" in json) return {}; // old single-channel format
+      return json as Record<string, string>;
     }
   } catch {}
+  return {};
 }
 
-function saveMessageId(id: string) {
-  scoreboardMessageId = id;
+function saveMsgIds(file: string, ids: Record<string, string>) {
   try {
-    fs.mkdirSync(path.dirname(MESSAGE_ID_FILE), { recursive: true });
-    fs.writeFileSync(MESSAGE_ID_FILE, JSON.stringify({ messageId: id }));
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, JSON.stringify(ids));
   } catch {}
 }
 
-function loadScheduleMessageId() {
-  try {
-    if (fs.existsSync(SCHEDULE_MESSAGE_ID_FILE)) {
-      const json = JSON.parse(fs.readFileSync(SCHEDULE_MESSAGE_ID_FILE, "utf-8"));
-      scheduleMessageId = json.messageId || "0";
-    }
-  } catch {}
-}
-
-function saveScheduleMessageId(id: string) {
-  scheduleMessageId = id;
-  try {
-    fs.mkdirSync(path.dirname(SCHEDULE_MESSAGE_ID_FILE), { recursive: true });
-    fs.writeFileSync(SCHEDULE_MESSAGE_ID_FILE, JSON.stringify({ messageId: id }));
-  } catch {}
-}
+// ─── Toornament token ─────────────────────────────────────────────────────────
 
 async function getToornamentToken(): Promise<string | null> {
   try {
@@ -79,16 +97,15 @@ async function getToornamentToken(): Promise<string | null> {
   }
 }
 
+// ─── Init ─────────────────────────────────────────────────────────────────────
+
 export async function initDiscord(): Promise<void> {
   try {
     const token: string = getSetting("discord.token");
     if (!token) return;
-    announceChannelId = getSetting("discord.announceChannelId");
-    scoreboardChannelId = getSetting("discord.scoreboardChannelId");
-    scheduleChannelId = getSetting("discord.scheduleChannelId");
-    serverEventChannelId = getSetting("discord.serverEventChannelId");
-    loadMessageId();
-    loadScheduleMessageId();
+
+    scoreboardMsgIds = loadMsgIds(MESSAGE_ID_FILE);
+    scheduleMsgIds   = loadMsgIds(SCHEDULE_MESSAGE_ID_FILE);
 
     client = new Client({ intents: [GatewayIntentBits.Guilds] });
     client.once("clientReady", async (c) => {
@@ -161,8 +178,11 @@ export async function initDiscord(): Promise<void> {
   }
 }
 
+// ─── Match Annonce ────────────────────────────────────────────────────────────
+
 export async function announceNewMatch(matchId: number): Promise<void> {
-  if (!client?.isReady() || !announceChannelId) return;
+  const channelIds = getChannels("discord.channels.announce");
+  if (!client?.isReady() || !channelIds.length) return;
   try {
     const sql =
       "SELECT m.team1_string, m.team2_string, gs.ip_string, gs.port " +
@@ -174,27 +194,33 @@ export async function announceNewMatch(matchId: number): Promise<void> {
     const serverIP = match.ip_string ? `${match.ip_string}:${match.port}` : "N/A";
     const time = new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Paris" });
 
-    const channel = await client.channels.fetch(announceChannelId) as TextChannel;
-    const guild = channel.guild;
-
-    const getRoleMention = (name: string) => {
-      const role = guild.roles.cache.find(r => r.name === name);
-      return role ? `<@&${role.id}>` : `**${name}**`;
-    };
-
-    const t1 = getRoleMention(match.team1_string);
-    const t2 = getRoleMention(match.team2_string);
-
-    await channel.send(
-      `🎮 **Match lancé :** ${t1} vs ${t2}\n🕒 Heure de début : \`${time}\`\n🖥️ IP : \`connect ${serverIP}\``
-    );
+    for (const channelId of channelIds) {
+      try {
+        const channel = await client.channels.fetch(channelId) as TextChannel;
+        const guild = channel.guild;
+        const getRoleMention = (name: string) => {
+          const role = guild.roles.cache.find(r => r.name === name);
+          return role ? `<@&${role.id}>` : `**${name}**`;
+        };
+        const t1 = getRoleMention(match.team1_string);
+        const t2 = getRoleMention(match.team2_string);
+        await channel.send(
+          `🎮 **Match lancé :** ${t1} vs ${t2}\n🕒 Heure de début : \`${time}\`\n🖥️ IP : \`connect ${serverIP}\``
+        );
+      } catch (err) {
+        console.error(`Discord announceNewMatch [${channelId}]:`, (err as Error).message);
+      }
+    }
   } catch (err) {
     console.error("Discord announceNewMatch error:", (err as Error).message);
   }
 }
 
+// ─── Suivi des matchs (Scoreboard) ───────────────────────────────────────────
+
 export async function updateScoreboard(): Promise<void> {
-  if (!client?.isReady() || !scoreboardChannelId) return;
+  const channelIds = getChannels("discord.channels.scoreboard");
+  if (!client?.isReady() || !channelIds.length) return;
   try {
     const matchSql =
       "SELECT m.id, m.team1_string, m.team2_string, m.team1_score, m.team2_score, " +
@@ -203,7 +229,6 @@ export async function updateScoreboard(): Promise<void> {
       "WHERE m.end_time IS NULL AND m.cancelled = 0 ORDER BY m.id ASC";
     const matches: RowDataPacket[] = await db.query(matchSql, []);
 
-    // Matchs terminés dans les 5 dernières minutes
     const recentSql =
       "SELECT m.id, m.team1_string, m.team2_string, m.team1_score, m.team2_score " +
       "FROM `match` m " +
@@ -242,26 +267,44 @@ export async function updateScoreboard(): Promise<void> {
       }
     }
 
-    const channel = await client.channels.fetch(scoreboardChannelId) as TextChannel;
-    if (scoreboardMessageId === "0") {
-      const msg = await channel.send(content);
-      saveMessageId(msg.id);
-    } else {
+    let changed = false;
+    for (const channelId of channelIds) {
       try {
-        const msg = await channel.messages.fetch(scoreboardMessageId);
-        await msg.edit(content);
-      } catch {
-        const msg = await channel.send(content);
-        saveMessageId(msg.id);
+        const ch = await client.channels.fetch(channelId) as TextChannel;
+        const existing = scoreboardMsgIds[channelId] ?? "0";
+        let newId: string;
+        if (existing === "0") {
+          const msg = await ch.send(content);
+          newId = msg.id;
+        } else {
+          try {
+            const msg = await ch.messages.fetch(existing);
+            await msg.edit(content);
+            newId = existing;
+          } catch {
+            const msg = await ch.send(content);
+            newId = msg.id;
+          }
+        }
+        if (newId !== scoreboardMsgIds[channelId]) {
+          scoreboardMsgIds[channelId] = newId;
+          changed = true;
+        }
+      } catch (err) {
+        console.error(`Discord updateScoreboard [${channelId}]:`, (err as Error).message);
       }
     }
+    if (changed) saveMsgIds(MESSAGE_ID_FILE, scoreboardMsgIds);
   } catch (err) {
     console.error("Discord updateScoreboard error:", (err as Error).message);
   }
 }
 
+// ─── Match à Lancer (Schedule) ────────────────────────────────────────────────
+
 export async function updateSchedule(): Promise<void> {
-  if (!client?.isReady() || !scheduleChannelId) return;
+  const channelIds = getChannels("discord.channels.schedule");
+  if (!client?.isReady() || !channelIds.length) return;
   try {
     const token = await getToornamentToken();
     const apiKey: string = getSetting("toornament.apiKey");
@@ -305,7 +348,6 @@ export async function updateSchedule(): Promise<void> {
         }
         if (!matches.length) continue;
 
-        // Resolve local team names
         const challongeIds = matches.flatMap((m: any) =>
           m.opponents.map((o: any) => o.participant?.id).filter(Boolean)
         );
@@ -318,7 +360,6 @@ export async function updateSchedule(): Promise<void> {
           for (const t of localTeams) teamByChallongeId.set(String(t.challonge_team_id), t);
         }
 
-        // Per group, only keep matches from the first pending round (sorted by structure)
         const firstRoundByGroup = new Map<string, string>();
         const toShow: any[] = [];
         for (const match of matches) {
@@ -368,7 +409,6 @@ export async function updateSchedule(): Promise<void> {
         );
         if (!brackets.length) continue;
 
-        // Fetch Challonge match IDs already started/finished in G5API for this season
         const existingChallongeIds: RowDataPacket[] = await db.query(
           "SELECT challonge_id FROM `match` WHERE season_id = ? AND cancelled = 0 AND challonge_id IS NOT NULL",
           [season.id]
@@ -382,7 +422,6 @@ export async function updateSchedule(): Promise<void> {
           const label = (bracket.label as string) || slug;
           const headers = challongeHeaders(challongeApiKey);
 
-          // Fetch open matches
           const mRes = await fetch(
             `${CHALLONGE_V2_BASE}/tournaments/${slug}/matches.json?state=open&per_page=500`,
             { headers }
@@ -392,7 +431,6 @@ export async function updateSchedule(): Promise<void> {
           if (!mData) continue;
           const rawMatches: any[] = Array.isArray(mData.data) ? mData.data : (mData.data ? [mData.data] : []);
 
-          // Fetch participants
           const participantMap = new Map<number, string>();
           const pRes = await fetch(
             `${CHALLONGE_V2_BASE}/tournaments/${slug}/participants.json?per_page=500`,
@@ -407,14 +445,11 @@ export async function updateSchedule(): Promise<void> {
             }
           }
 
-          // Parse and sort all valid matches by round
           const allBracketMatches = rawMatches
             .map(m => parseV2Match(m))
             .filter(m => m.player1_id && m.player2_id)
             .sort((a, b) => (a.round - b.round) || ((a.suggested_play_order ?? 999) - (b.suggested_play_order ?? 999)));
 
-          // Pre-seed seenParticipants with teams from already-created matches
-          // so their next rounds don't appear either
           const seenParticipants = new Set<number>();
           for (const m of allBracketMatches) {
             if (usedChallongeIds.has(m.id)) {
@@ -454,7 +489,7 @@ export async function updateSchedule(): Promise<void> {
             if (frontendUrl) {
               const params = new URLSearchParams({ match: String(m.id) });
               if (bracketTabIndex > 0) params.set("tab", String(bracketTabIndex));
-              content += ` [Create Match](${frontendUrl}/season/${season.id}/challonge?${params.toString()})`;
+              content += ` [creer](${frontendUrl}/season/${season.id}/challonge?${params.toString()})`;
             }
             content += `\n`;
           }
@@ -463,7 +498,7 @@ export async function updateSchedule(): Promise<void> {
       }
     }
 
-    // Fallback: matches from DB with scheduled_datetime (no Toornament needed)
+    // Fallback: scheduled matches from DB
     if (!content.trim()) {
       const dbMatches: RowDataPacket[] = await db.query(
         `SELECT m.id, m.scheduled_datetime,
@@ -503,51 +538,40 @@ export async function updateSchedule(): Promise<void> {
 
     if (!content.trim()) content = "🟡 Aucun match disponible actuellement.";
 
-    const channel = await client.channels.fetch(scheduleChannelId) as TextChannel;
-    if (scheduleMessageId === "0") {
-      const msg = await channel.send(content);
-      saveScheduleMessageId(msg.id);
-    } else {
+    let changed = false;
+    for (const channelId of channelIds) {
       try {
-        const msg = await channel.messages.fetch(scheduleMessageId);
-        await msg.edit(content);
-      } catch {
-        const msg = await channel.send(content);
-        saveScheduleMessageId(msg.id);
+        const ch = await client.channels.fetch(channelId) as TextChannel;
+        const existing = scheduleMsgIds[channelId] ?? "0";
+        let newId: string;
+        if (existing === "0") {
+          const msg = await ch.send(content);
+          newId = msg.id;
+        } else {
+          try {
+            const msg = await ch.messages.fetch(existing);
+            await msg.edit(content);
+            newId = existing;
+          } catch {
+            const msg = await ch.send(content);
+            newId = msg.id;
+          }
+        }
+        if (newId !== scheduleMsgIds[channelId]) {
+          scheduleMsgIds[channelId] = newId;
+          changed = true;
+        }
+      } catch (err) {
+        console.error(`Discord updateSchedule [${channelId}]:`, (err as Error).message);
       }
     }
+    if (changed) saveMsgIds(SCHEDULE_MESSAGE_ID_FILE, scheduleMsgIds);
   } catch (err) {
     console.error("Discord updateSchedule error:", (err as Error).message);
   }
 }
 
-async function sendToServerEventChannel(embed: EmbedBuilder): Promise<void> {
-  if (!client?.isReady() || !serverEventChannelId) return;
-  try {
-    const channel = await client.channels.fetch(serverEventChannelId) as TextChannel;
-    await channel.send({ embeds: [embed] });
-  } catch (err) {
-    console.error("Discord sendServerEvent error:", (err as Error).message);
-  }
-}
-
-/**
- * Envoie un embed via le webhook configuré (discord.eventWebhookUrl) si disponible,
- * sinon fallback sur le channel bot serverEventChannelId.
- */
-async function sendEmbedToEventTarget(embed: EmbedBuilder): Promise<void> {
-  const webhookUrl = getSetting("discord.eventWebhookUrl");
-  if (webhookUrl) {
-    const payload = { embeds: [embed.toJSON()] };
-    await fetch(webhookUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-  } else {
-    await sendToServerEventChannel(embed);
-  }
-}
+// ─── Événements de match (default channel) ───────────────────────────────────
 
 export async function sendPauseEvent(data: {
   matchid: string;
@@ -568,7 +592,7 @@ export async function sendPauseEvent(data: {
       { name: "Type", value: data.pauseType, inline: true }
     )
     .setTimestamp();
-  await sendToServerEventChannel(embed);
+  await sendEmbedToTargets(getChannels("discord.channels.default"), embed);
 }
 
 export async function sendMapResultEvent(data: {
@@ -598,7 +622,7 @@ export async function sendMapResultEvent(data: {
       { name: "Vainqueur", value: data.winnerName ?? "Match nul", inline: true }
     )
     .setTimestamp();
-  await sendToServerEventChannel(embed);
+  await sendEmbedToTargets(getChannels("discord.channels.default"), embed);
 }
 
 export async function sendSeriesResultEvent(data: {
@@ -624,8 +648,10 @@ export async function sendSeriesResultEvent(data: {
       { name: "Vainqueur", value: data.winnerName ?? "Match nul", inline: true }
     )
     .setTimestamp();
-  await sendToServerEventChannel(embed);
+  await sendEmbedToTargets(getChannels("discord.channels.default"), embed);
 }
+
+// ─── Veto Finish ──────────────────────────────────────────────────────────────
 
 export async function sendVetoCompleteEmbed(matchId: number): Promise<void> {
   try {
@@ -662,11 +688,13 @@ export async function sendVetoCompleteEmbed(matchId: number): Promise<void> {
       .setDescription(desc)
       .setTimestamp();
 
-    await sendEmbedToEventTarget(embed);
+    await sendEmbedToTargets(getChannels("discord.channels.veto"), embed);
   } catch (err) {
     console.error("Discord sendVetoCompleteEmbed error:", (err as Error).message);
   }
 }
+
+// ─── Demo Available ───────────────────────────────────────────────────────────
 
 export async function sendDemoReadyEmbed(data: {
   matchId: string;
@@ -689,22 +717,19 @@ export async function sendDemoReadyEmbed(data: {
         { name: "File", value: `\`${data.demoFile}\``, inline: false }
       )
       .setTimestamp();
-    await sendEmbedToEventTarget(embed);
+    await sendEmbedToTargets(getChannels("discord.channels.demo"), embed);
   } catch (err) {
     console.error("Discord sendDemoReadyEmbed error:", (err as Error).message);
   }
 }
 
-/**
- * Calcule le port GOTV depuis l'IP du serveur de jeu.
- * Règle : remplacer le chiffre des centaines du port par (dernier chiffre du dernier octet de l'IP - 1).
- * Ex : IP .243 (dernier digit=3), port 27015 → 3-1=2 → 27215
- */
+// ─── Streamer (GOTV) ──────────────────────────────────────────────────────────
+
 function computeGotvPort(serverIp: string, serverPort: number): number {
   const lastOctet = parseInt(serverIp.split(".").pop() || "0", 10);
   const lastDigit = lastOctet % 10;
   const hundredsDigit = Math.max(0, lastDigit - 1);
-  const portRemainder = serverPort % 100; // garde les unités/dizaines du port d'origine
+  const portRemainder = serverPort % 100;
   return 27000 + hundredsDigit * 100 + portRemainder;
 }
 
@@ -716,9 +741,8 @@ export async function sendGotvMatchEmbed(data: {
   serverPort: number;
   matchUrl: string;
 }): Promise<void> {
-  if (!getSettingBool("discord.gotvWebhookEnabled")) return;
-  const webhookUrl = getSetting("discord.eventWebhookUrl");
-  if (!webhookUrl) return;
+  const channelIds = getChannels("discord.channels.streamer");
+  if (!channelIds.length) return;
   try {
     const gotvPort = computeGotvPort(data.serverIp, data.serverPort);
     const embed = new EmbedBuilder()
@@ -731,11 +755,7 @@ export async function sendGotvMatchEmbed(data: {
         { name: "GOTV", value: `\`connect 54.37.50.33:${gotvPort}\``, inline: false }
       )
       .setTimestamp();
-    await fetch(webhookUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ embeds: [embed.toJSON()] }),
-    });
+    await sendEmbedToTargets(channelIds, embed);
   } catch (err) {
     console.error("Discord sendGotvMatchEmbed error:", (err as Error).message);
   }

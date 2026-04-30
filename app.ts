@@ -36,6 +36,7 @@ import passport, { createSteamStrategy } from "./src/utility/auth.js";
 import {router as v2Router} from "./src/routes/v2/api.js";
 import {router as v2DemoRouter} from "./src/routes/v2/demoapi.js";
 import { router as v2BackupRouter } from "./src/routes/v2/backupapi.js";
+import { router as v2DemoAdminRouter } from "./src/routes/v2/demoadmin.js";
 import settingsRouter from "./src/routes/settings.js";
 import imageRouter from "./src/routes/image/image.js";
 // End Route Files
@@ -179,6 +180,7 @@ app.use("/maps", mapListRouter);
 app.use("/v2", v2Router);
 app.use("/v2/demo", v2DemoRouter);
 app.use("/v2/backup", v2BackupRouter);
+app.use("/v2/demoadmin", v2DemoAdminRouter);
 app.use("/settings", settingsRouter);
 app.use("/image", imageRouter);
 // END ROUTES
