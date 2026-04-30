@@ -1,4 +1,4 @@
-import { Client, GatewayIntentBits, TextChannel, REST, Routes, SlashCommandBuilder, EmbedBuilder } from "discord.js";
+import { Client, GatewayIntentBits, TextChannel, REST, Routes, SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from "discord.js";
 import { db } from "./db.js";
 import { getSetting, getSettingBool } from "./settings.js";
 import config from "config";
@@ -407,14 +407,23 @@ export async function updateSchedule(): Promise<void> {
             }
           }
 
-          // Parse, filter already-created, sort by round
-          const bracketMatches = rawMatches
+          // Parse and sort all valid matches by round
+          const allBracketMatches = rawMatches
             .map(m => parseV2Match(m))
-            .filter(m => m.player1_id && m.player2_id && !usedChallongeIds.has(m.id))
+            .filter(m => m.player1_id && m.player2_id)
             .sort((a, b) => (a.round - b.round) || ((a.suggested_play_order ?? 999) - (b.suggested_play_order ?? 999)));
 
-          // One match per team within this bracket
+          // Pre-seed seenParticipants with teams from already-created matches
+          // so their next rounds don't appear either
           const seenParticipants = new Set<number>();
+          for (const m of allBracketMatches) {
+            if (usedChallongeIds.has(m.id)) {
+              seenParticipants.add(m.player1_id!);
+              seenParticipants.add(m.player2_id!);
+            }
+          }
+
+          const bracketMatches = allBracketMatches.filter(m => !usedChallongeIds.has(m.id));
           const toShow = bracketMatches.filter(m => {
             if (seenParticipants.has(m.player1_id!) || seenParticipants.has(m.player2_id!)) return false;
             seenParticipants.add(m.player1_id!);
