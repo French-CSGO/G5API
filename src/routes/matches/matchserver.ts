@@ -15,7 +15,7 @@ import GameServer from "../../utility/serverrcon.js";
 
 import config from "config";
 
-import { existsSync, readdir } from "fs";
+import { existsSync, readdir, readFile } from "fs";
 import path from "path";
 import { AccessMessage } from "../../types/mapstats/AccessMessage.js";
 import { RowDataPacket } from "mysql2";
@@ -1316,20 +1316,31 @@ router.get(
           res.status(400).json({ message: "Invalid match ID." });
           return;
         }
-        let fileArray: Array<string> = [];
-        readdir(`public/backups/${req.params.match_id}`, function (err, files) {
-          //handling error
+        const backupDir = `public/backups/${req.params.match_id}`;
+        readdir(backupDir, async function (err, files) {
           if (err) {
             console.error(err);
-            return res.status(404).json({ message: "No backups found.", response: [] });;
+            return res.status(404).json({ message: "No backups found.", response: [] });
           }
-          //listing all files using forEach
-          files.forEach(function (file) {
-            console.log(file);
-            // Do whatever you want to do with the file
-            fileArray.push(file)
-          });
-          res.json({ message: "Backups retrieved.", response: fileArray });
+          const results = await Promise.all(
+            files.map(file => new Promise<object>(resolve => {
+              readFile(path.join(backupDir, file), "utf8", (readErr, content) => {
+                const base: any = { file };
+                if (!readErr && content) {
+                  const t1 = content.match(/"team1_score"\s*[:\s]+"?(\d+)/);
+                  const t2 = content.match(/"team2_score"\s*[:\s]+"?(\d+)/);
+                  const mp = content.match(/"map_name"\s*[:\s]+"?([^\s",}]+)/);
+                  const mn = file.match(/_map(\d+)_round(\d+)/);
+                  if (t1) base.team1Score = parseInt(t1[1]);
+                  if (t2) base.team2Score = parseInt(t2[1]);
+                  if (mp) base.mapName = mp[1];
+                  if (mn) { base.mapNum = parseInt(mn[1]); base.round = parseInt(mn[2]); }
+                }
+                resolve(base);
+              });
+            }))
+          );
+          res.json({ message: "Backups retrieved.", response: results });
         });
         return;
       }
