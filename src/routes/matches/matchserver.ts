@@ -1017,9 +1017,15 @@ router.get(
             .join("\n");
           res.json({ message: "Backups retrieved.", response: backupLines });
         } catch (err) {
-          res
-            .status(500)
-            .json({ message: "Error on game server.", response: err });
+          // Server unreachable — fall back to remote backups stored on the API
+          const backupDir = `public/backups/${req.params.match_id}`;
+          readdir(backupDir, (dirErr, files) => {
+            if (dirErr || !files.length) {
+              return res.status(500).json({ message: "Server unreachable and no remote backups found.", response: "" });
+            }
+            const lines = files.join("\n");
+            res.json({ message: "Backups retrieved from remote storage.", response: lines });
+          });
         } finally {
           return;
         }
