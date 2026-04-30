@@ -426,7 +426,7 @@ export async function updateSchedule(): Promise<void> {
             if (frontendUrl) {
               const params = new URLSearchParams({ match: String(m.id) });
               if (bracketTabIndex > 0) params.set("tab", String(bracketTabIndex));
-              content += ` [creer](${frontendUrl}/season/${season.id}/challonge?${params.toString()})`;
+              content += ` [Create Match](${frontendUrl}/season/${season.id}/challonge?${params.toString()})`;
             }
             content += `\n`;
           }
