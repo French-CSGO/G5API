@@ -351,10 +351,10 @@ export async function updateSchedule(): Promise<void> {
 
         // Fetch Challonge match IDs already started/finished in G5API for this season
         const existingChallongeIds: RowDataPacket[] = await db.query(
-          "SELECT challonge_match_id FROM `match` WHERE season_id = ? AND cancelled = 0 AND challonge_match_id IS NOT NULL",
+          "SELECT challonge_id FROM `match` WHERE season_id = ? AND cancelled = 0 AND challonge_id IS NOT NULL",
           [season.id]
         );
-        const usedChallongeIds = new Set<number>(existingChallongeIds.map((r: any) => r.challonge_match_id));
+        const usedChallongeIds = new Set<number>(existingChallongeIds.map((r: any) => r.challonge_id));
 
         let seasonHeader = false;
 
