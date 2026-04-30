@@ -203,6 +203,14 @@ export async function updateScoreboard(): Promise<void> {
       "WHERE m.end_time IS NULL AND m.cancelled = 0 ORDER BY m.id ASC";
     const matches: RowDataPacket[] = await db.query(matchSql, []);
 
+    // Matchs terminés dans les 5 dernières minutes
+    const recentSql =
+      "SELECT m.id, m.team1_string, m.team2_string, m.team1_score, m.team2_score " +
+      "FROM `match` m " +
+      "WHERE m.end_time IS NOT NULL AND m.cancelled = 0 " +
+      "AND m.end_time >= NOW() - INTERVAL 5 MINUTE ORDER BY m.end_time DESC";
+    const recentMatches: RowDataPacket[] = await db.query(recentSql, []);
+
     let content = "";
     if (matches.length === 0) {
       content = "🟡 Aucun match en cours actuellement.";
@@ -220,6 +228,17 @@ export async function updateScoreboard(): Promise<void> {
           ` | Série: **${match.team1_score}-${match.team2_score}**` +
           ` | 🖥️ \`connect ${serverIP}\`` +
           `${mapsFormatted}\n\n`;
+      }
+    }
+
+    if (recentMatches.length > 0) {
+      content += `\n**Terminés récemment**\n`;
+      for (const m of recentMatches) {
+        const winner = m.team1_score > m.team2_score ? m.team1_string
+          : m.team2_score > m.team1_score ? m.team2_string : null;
+        content += `✅ **${m.team1_string}** ${m.team1_score}–${m.team2_score} **${m.team2_string}**`;
+        if (winner) content += ` | Victoire **${winner}**`;
+        content += `\n`;
       }
     }
 
@@ -426,7 +445,7 @@ export async function updateSchedule(): Promise<void> {
             if (frontendUrl) {
               const params = new URLSearchParams({ match: String(m.id) });
               if (bracketTabIndex > 0) params.set("tab", String(bracketTabIndex));
-              content += ` [Create Match](${frontendUrl}/season/${season.id}/challonge?${params.toString()})`;
+              content += ` [creer](${frontendUrl}/season/${season.id}/challonge?${params.toString()})`;
             }
             content += `\n`;
           }
