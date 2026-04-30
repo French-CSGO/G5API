@@ -49,6 +49,9 @@ const DEFAULTS: Record<string, string> = {
   // Challonge
   "challonge.apiKey": "",
 
+  // Discord planning
+  "discord.frontendUrl": "",
+
   // VPS relay (demo forwarding)
   "vpsRelay.enabled": "false",
   "vpsRelay.url": "",

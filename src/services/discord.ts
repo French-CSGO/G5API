@@ -336,6 +336,7 @@ export async function updateSchedule(): Promise<void> {
 
     // Challonge seasons
     const challongeApiKey: string = getSetting("challonge.apiKey");
+    const frontendUrl: string = getSetting("discord.frontendUrl")?.replace(/\/$/, "") ?? "";
     if (challongeApiKey) {
       const challongeSeasons: RowDataPacket[] = await db.query(
         "SELECT s.id, s.name FROM season s WHERE s.is_challonge = 1 AND (s.challonge_url IS NULL OR s.challonge_url NOT LIKE 't:%')",
@@ -343,17 +344,23 @@ export async function updateSchedule(): Promise<void> {
       );
       for (const season of challongeSeasons) {
         const brackets: RowDataPacket[] = await db.query(
-          "SELECT challonge_slug FROM season_challonge_tournament WHERE season_id = ? ORDER BY display_order ASC, id ASC",
+          "SELECT challonge_slug, label FROM season_challonge_tournament WHERE season_id = ? ORDER BY display_order ASC, id ASC",
           [season.id]
         );
         if (!brackets.length) continue;
 
-        // Collect open matches + participants across all brackets
-        const allMatches: any[] = [];
-        const participantMap = new Map<number, string>(); // id → display_name
+        // Fetch Challonge match IDs already started/finished in G5API for this season
+        const existingChallongeIds: RowDataPacket[] = await db.query(
+          "SELECT challonge_match_id FROM `match` WHERE season_id = ? AND cancelled = 0 AND challonge_match_id IS NOT NULL",
+          [season.id]
+        );
+        const usedChallongeIds = new Set<number>(existingChallongeIds.map((r: any) => r.challonge_match_id));
+
+        let seasonHeader = false;
 
         for (const bracket of brackets) {
           const slug = bracket.challonge_slug as string;
+          const label = (bracket.label as string) || slug;
           const headers = challongeHeaders(challongeApiKey);
 
           // Fetch open matches
@@ -365,14 +372,9 @@ export async function updateSchedule(): Promise<void> {
           const mData: any = await mRes.json().catch(() => null);
           if (!mData) continue;
           const rawMatches: any[] = Array.isArray(mData.data) ? mData.data : (mData.data ? [mData.data] : []);
-          for (const m of rawMatches) {
-            const parsed = parseV2Match(m);
-            if (parsed.player1_id && parsed.player2_id) {
-              allMatches.push(parsed);
-            }
-          }
 
           // Fetch participants
+          const participantMap = new Map<number, string>();
           const pRes = await fetch(
             `${CHALLONGE_V2_BASE}/tournaments/${slug}/participants.json?per_page=500`,
             { headers }
@@ -385,41 +387,51 @@ export async function updateSchedule(): Promise<void> {
               participantMap.set(part.id, part.display_name);
             }
           }
-        }
 
-        if (!allMatches.length) continue;
+          // Parse, filter already-created, sort by round
+          const bracketMatches = rawMatches
+            .map(m => parseV2Match(m))
+            .filter(m => m.player1_id && m.player2_id && !usedChallongeIds.has(m.id))
+            .sort((a, b) => (a.round - b.round) || ((a.suggested_play_order ?? 999) - (b.suggested_play_order ?? 999)));
 
-        // Sort by round then suggested_play_order
-        allMatches.sort((a, b) => (a.round - b.round) || ((a.suggested_play_order ?? 999) - (b.suggested_play_order ?? 999)));
+          // One match per team within this bracket
+          const seenParticipants = new Set<number>();
+          const toShow = bracketMatches.filter(m => {
+            if (seenParticipants.has(m.player1_id!) || seenParticipants.has(m.player2_id!)) return false;
+            seenParticipants.add(m.player1_id!);
+            seenParticipants.add(m.player2_id!);
+            return true;
+          });
 
-        // One match per team: skip if either team already has a match in the output
-        const seenParticipants = new Set<number>();
-        const toShow: typeof allMatches = [];
-        for (const m of allMatches) {
-          if (!m.player1_id || !m.player2_id) continue;
-          if (seenParticipants.has(m.player1_id) || seenParticipants.has(m.player2_id)) continue;
-          seenParticipants.add(m.player1_id);
-          seenParticipants.add(m.player2_id);
-          toShow.push(m);
-        }
+          if (!toShow.length) continue;
 
-        if (!toShow.length) continue;
+          const bracketTabIndex = brackets.indexOf(bracket);
 
-        content += `**${season.name}**\n`;
-        for (const m of toShow) {
-          const team1Name = participantMap.get(m.player1_id!) ?? `#${m.player1_id}`;
-          const team2Name = participantMap.get(m.player2_id!) ?? `#${m.player2_id}`;
-          content += `• **${team1Name}** vs **${team2Name}**`;
-          if (m.scheduled_time) {
-            const scheduled = new Date(m.scheduled_time).toLocaleString("fr-FR", {
-              timeZone: "Europe/Paris", hour: "2-digit", minute: "2-digit",
-              day: "2-digit", month: "2-digit"
-            });
-            content += ` — prévu le \`${scheduled}\``;
+          if (!seasonHeader) {
+            content += `**${season.name}**\n`;
+            seasonHeader = true;
+          }
+          content += `__${label}__\n`;
+          for (const m of toShow) {
+            const team1Name = participantMap.get(m.player1_id!) ?? `#${m.player1_id}`;
+            const team2Name = participantMap.get(m.player2_id!) ?? `#${m.player2_id}`;
+            content += `• **${team1Name}** vs **${team2Name}** — Ronde ${m.round}`;
+            if (m.scheduled_time) {
+              const scheduled = new Date(m.scheduled_time).toLocaleString("fr-FR", {
+                timeZone: "Europe/Paris", hour: "2-digit", minute: "2-digit",
+                day: "2-digit", month: "2-digit"
+              });
+              content += ` — \`${scheduled}\``;
+            }
+            if (frontendUrl) {
+              const params = new URLSearchParams({ match: String(m.id) });
+              if (bracketTabIndex > 0) params.set("tab", String(bracketTabIndex));
+              content += ` [➕](${frontendUrl}/season/${season.id}/challonge?${params.toString()})`;
+            }
+            content += `\n`;
           }
           content += `\n`;
         }
-        content += `\n`;
       }
     }
 
