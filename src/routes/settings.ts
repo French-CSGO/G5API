@@ -85,8 +85,10 @@ router.put("/", Utils.ensureAuthenticated, requireSuperAdmin, async (req: Reques
 
     // Whitelist des clés de configuration autorisées
     const ALLOWED_KEYS = new Set([
-      "discord.enabled", "discord.token", "discord.announceChannelId",
-      "discord.scoreboardChannelId", "discord.scheduleChannelId", "discord.guildId",
+      "discord.enabled", "discord.token", "discord.guildId", "discord.frontendUrl",
+      "discord.channels.announce", "discord.channels.schedule", "discord.channels.scoreboard",
+      "discord.channels.veto", "discord.channels.demo", "discord.channels.streamer",
+      "discord.channels.default",
       "twitch.enabled", "twitch.username", "twitch.token", "twitch.channels",
       "pterodactyl.enabled", "pterodactyl.url", "pterodactyl.apiKey", "pterodactyl.shutdownDelay",
       "toornament.clientId", "toornament.clientSecret", "toornament.apiKey",
