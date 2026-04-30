@@ -67,14 +67,26 @@ export async function loadSettings(): Promise<void> {
       "SELECT setting_key, setting_value FROM settings",
       []
     );
+    const existingKeys = new Set<string>();
     for (const row of rows) {
       cache.set(row.setting_key, row.setting_value);
+      existingKeys.add(row.setting_key);
+    }
+    // Seed missing default keys so ON DUPLICATE KEY UPDATE works on first save
+    for (const [key, value] of Object.entries(DEFAULTS)) {
+      if (!existingKeys.has(key)) {
+        await db.query(
+          "INSERT IGNORE INTO settings (setting_key, setting_value) VALUES (?, ?)",
+          [key, value]
+        );
+        cache.set(key, value);
+      }
     }
     loaded = true;
-    console.log(`[Settings] ${rows.length} paramètre(s) chargé(s) depuis la DB.`);
+    console.log(`[Settings] ${rows.length} paramètre(s) chargé(s), ${Object.keys(DEFAULTS).length - existingKeys.size} clé(s) initialisée(s).`);
   } catch (err) {
     console.error("[Settings] Impossible de charger les paramètres depuis la DB :", err);
-    loaded = true; // continue avec les valeurs par défaut
+    loaded = true;
   }
 }
 
