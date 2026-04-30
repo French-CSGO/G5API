@@ -499,44 +499,6 @@ export async function updateSchedule(): Promise<void> {
       }
     }
 
-    // Fallback: scheduled matches from DB
-    if (!content.trim()) {
-      const dbMatches: RowDataPacket[] = await db.query(
-        `SELECT m.id, m.scheduled_datetime,
-                t1.name AS team1_name, t2.name AS team2_name,
-                s.name AS season_name
-         FROM \`match\` m
-         LEFT JOIN team t1 ON t1.id = m.team1_id
-         LEFT JOIN team t2 ON t2.id = m.team2_id
-         LEFT JOIN season s ON s.id = m.season_id
-         WHERE m.cancelled = 0 AND m.end_time IS NULL
-           AND m.start_time IS NULL
-           AND m.scheduled_datetime IS NOT NULL
-           AND m.scheduled_datetime >= NOW() - INTERVAL 1 DAY
-         ORDER BY m.scheduled_datetime ASC`,
-        []
-      );
-      if (dbMatches.length > 0) {
-        const bySeason = new Map<string, typeof dbMatches>();
-        for (const m of dbMatches) {
-          const key = m.season_name || "Sans saison";
-          if (!bySeason.has(key)) bySeason.set(key, []);
-          bySeason.get(key)!.push(m);
-        }
-        for (const [seasonName, matches] of bySeason) {
-          content += `**${seasonName}**\n`;
-          for (const m of matches) {
-            const scheduled = new Date(m.scheduled_datetime).toLocaleString("fr-FR", {
-              timeZone: "Europe/Paris", hour: "2-digit", minute: "2-digit",
-              day: "2-digit", month: "2-digit"
-            });
-            content += `• **${m.team1_name}** vs **${m.team2_name}** — \`${scheduled}\`\n`;
-          }
-          content += "\n";
-        }
-      }
-    }
-
     if (!content.trim()) content = "🟡 Aucun match disponible actuellement.";
 
     let changed = false;
