@@ -100,11 +100,12 @@ router.post(
         const { readFile } = await import("fs/promises");
         const demoBuf = await readFile(file.path);
         zip.file(demoFilename, new Uint8Array(demoBuf), { binary: true });
-        const buf = await zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" });
+        const buf = await zip.generateAsync({ type: "arraybuffer", compression: "DEFLATE" });
+        const bufView = new Uint8Array(buf);
 
         // Save zip
         await new Promise<void>((resolve, reject) => {
-          writeFile(destPath, buf, (err) => err ? reject(err) : resolve());
+          writeFile(destPath, bufView, (err) => err ? reject(err) : resolve());
         });
 
         // Update map_stats
