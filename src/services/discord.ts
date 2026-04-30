@@ -257,7 +257,8 @@ export async function updateScoreboard(): Promise<void> {
     }
 
     if (recentMatches.length > 0) {
-      content += `\n**Terminés récemment**\n`;
+      content = content.trimEnd();
+      content += `\n\n**Terminés récemment**\n`;
       for (const m of recentMatches) {
         const winner = m.team1_score > m.team2_score ? m.team1_string
           : m.team2_score > m.team1_score ? m.team2_string : null;
