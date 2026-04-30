@@ -182,7 +182,7 @@ router.post("/", async (req: Request, res: Response) => {
                 "Get5-FileName": safeDemoName,
                 "Content-Type": "application/octet-stream",
               },
-              body: buf,
+              body: new Uint8Array(buf),
             }).then(async (r) => {
               const body = await r.text().catch(() => "");
               console.log(`[VPS Relay] response status=${r.status} body=${body}`);
