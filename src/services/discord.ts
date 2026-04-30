@@ -7,6 +7,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { RowDataPacket } from "mysql2/typings/mysql";
 import GlobalEmitter from "../utility/emitter.js";
+import { CHALLONGE_V2_BASE, challongeHeaders, parseV2Match, parseV2Participant } from "../utility/challongeV2.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const MESSAGE_ID_FILE = path.join(__dirname, "../../../public/discord_scoreboard_id.json");
@@ -114,7 +115,7 @@ export async function initDiscord(): Promise<void> {
 
       updateScoreboard();
       updateSchedule();
-      setInterval(updateSchedule, 5 * 60 * 1000);
+      setInterval(updateSchedule, 60 * 1000);
     });
 
     client.on("interactionCreate", async (interaction) => {
@@ -330,6 +331,133 @@ export async function updateSchedule(): Promise<void> {
           content += `\n`;
         }
         content += `\n`;
+      }
+    }
+
+    // Challonge seasons
+    const challongeApiKey: string = getSetting("challonge.apiKey");
+    if (challongeApiKey) {
+      const challongeSeasons: RowDataPacket[] = await db.query(
+        "SELECT s.id, s.name FROM season s WHERE s.is_challonge = 1 AND (s.challonge_url IS NULL OR s.challonge_url NOT LIKE 't:%')",
+        []
+      );
+      for (const season of challongeSeasons) {
+        const brackets: RowDataPacket[] = await db.query(
+          "SELECT challonge_slug FROM season_challonge_tournament WHERE season_id = ? ORDER BY display_order ASC, id ASC",
+          [season.id]
+        );
+        if (!brackets.length) continue;
+
+        // Collect open matches + participants across all brackets
+        const allMatches: any[] = [];
+        const participantMap = new Map<number, string>(); // id → display_name
+
+        for (const bracket of brackets) {
+          const slug = bracket.challonge_slug as string;
+          const headers = challongeHeaders(challongeApiKey);
+
+          // Fetch open matches
+          const mRes = await fetch(
+            `${CHALLONGE_V2_BASE}/tournaments/${slug}/matches.json?state=open&per_page=500`,
+            { headers }
+          ).catch(() => null);
+          if (!mRes?.ok) continue;
+          const mData: any = await mRes.json().catch(() => null);
+          if (!mData) continue;
+          const rawMatches: any[] = Array.isArray(mData.data) ? mData.data : (mData.data ? [mData.data] : []);
+          for (const m of rawMatches) {
+            const parsed = parseV2Match(m);
+            if (parsed.player1_id && parsed.player2_id) {
+              allMatches.push(parsed);
+            }
+          }
+
+          // Fetch participants
+          const pRes = await fetch(
+            `${CHALLONGE_V2_BASE}/tournaments/${slug}/participants.json?per_page=500`,
+            { headers }
+          ).catch(() => null);
+          if (pRes?.ok) {
+            const pData: any = await pRes.json().catch(() => null);
+            const rawParts: any[] = Array.isArray(pData?.data) ? pData.data : [];
+            for (const p of rawParts) {
+              const part = parseV2Participant(p);
+              participantMap.set(part.id, part.display_name);
+            }
+          }
+        }
+
+        if (!allMatches.length) continue;
+
+        // Sort by round then suggested_play_order
+        allMatches.sort((a, b) => (a.round - b.round) || ((a.suggested_play_order ?? 999) - (b.suggested_play_order ?? 999)));
+
+        // One match per team: skip if either team already has a match in the output
+        const seenParticipants = new Set<number>();
+        const toShow: typeof allMatches = [];
+        for (const m of allMatches) {
+          if (!m.player1_id || !m.player2_id) continue;
+          if (seenParticipants.has(m.player1_id) || seenParticipants.has(m.player2_id)) continue;
+          seenParticipants.add(m.player1_id);
+          seenParticipants.add(m.player2_id);
+          toShow.push(m);
+        }
+
+        if (!toShow.length) continue;
+
+        content += `**${season.name}**\n`;
+        for (const m of toShow) {
+          const team1Name = participantMap.get(m.player1_id!) ?? `#${m.player1_id}`;
+          const team2Name = participantMap.get(m.player2_id!) ?? `#${m.player2_id}`;
+          content += `• **${team1Name}** vs **${team2Name}**`;
+          if (m.scheduled_time) {
+            const scheduled = new Date(m.scheduled_time).toLocaleString("fr-FR", {
+              timeZone: "Europe/Paris", hour: "2-digit", minute: "2-digit",
+              day: "2-digit", month: "2-digit"
+            });
+            content += ` — prévu le \`${scheduled}\``;
+          }
+          content += `\n`;
+        }
+        content += `\n`;
+      }
+    }
+
+    // Fallback: matches from DB with scheduled_datetime (no Toornament needed)
+    if (!content.trim()) {
+      const dbMatches: RowDataPacket[] = await db.query(
+        `SELECT m.id, m.scheduled_datetime,
+                t1.name AS team1_name, t2.name AS team2_name,
+                s.name AS season_name
+         FROM \`match\` m
+         LEFT JOIN team t1 ON t1.id = m.team1_id
+         LEFT JOIN team t2 ON t2.id = m.team2_id
+         LEFT JOIN season s ON s.id = m.season_id
+         WHERE m.cancelled = 0 AND m.end_time IS NULL
+           AND m.start_time IS NULL
+           AND m.scheduled_datetime IS NOT NULL
+           AND m.scheduled_datetime >= NOW() - INTERVAL 1 DAY
+         ORDER BY m.scheduled_datetime ASC`,
+        []
+      );
+      if (dbMatches.length > 0) {
+        const bySeason = new Map<string, typeof dbMatches>();
+        for (const m of dbMatches) {
+          const key = m.season_name || "Sans saison";
+          if (!bySeason.has(key)) bySeason.set(key, []);
+          bySeason.get(key)!.push(m);
+        }
+        for (const [seasonName, matches] of bySeason) {
+          content += `**${seasonName}**\n`;
+          for (const m of matches) {
+            const scheduled = new Date(m.scheduled_datetime).toLocaleString("fr-FR", {
+              timeZone: "Europe/Paris", hour: "2-digit", minute: "2-digit",
+              day: "2-digit", month: "2-digit"
+            });
+            content += `• **${m.team1_name}** vs **${m.team2_name}** — \`${scheduled}\`\n`;
+          }
+          content += "\n";
+        }
       }
     }
 
