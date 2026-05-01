@@ -21,6 +21,15 @@ function getChannels(key: string): string[] {
   }
 }
 
+function getChannelsOrDefault(key: string): string[] {
+  const channels = getChannels(key);
+  return channels.length ? channels : getChannels("discord.channels.default");
+}
+
+function normalizeRoleName(s: string): string {
+  return s.replace(/[^\p{L}\p{N}\s\-]/gu, "").trim().toLowerCase();
+}
+
 // Supporte channel ID (bot) et webhook URL — pour les types one-shot
 async function sendEmbedToTargets(targets: string[], embed: EmbedBuilder): Promise<void> {
   for (const target of targets) {
@@ -159,7 +168,7 @@ export async function initDiscord(): Promise<void> {
 // ─── Match Annonce ────────────────────────────────────────────────────────────
 
 export async function announceNewMatch(matchId: number): Promise<void> {
-  const channelIds = getChannels("discord.channels.announce");
+  const channelIds = getChannelsOrDefault("discord.channels.announce");
   if (!client?.isReady() || !channelIds.length) return;
   try {
     const sql =
@@ -177,7 +186,8 @@ export async function announceNewMatch(matchId: number): Promise<void> {
         const channel = await client.channels.fetch(channelId) as TextChannel;
         const guild = channel.guild;
         const getRoleMention = (name: string) => {
-          const role = guild.roles.cache.find(r => r.name === name);
+          const norm = normalizeRoleName(name);
+          const role = guild.roles.cache.find(r => normalizeRoleName(r.name) === norm);
           return role ? `<@&${role.id}>` : `**${name}**`;
         };
         const t1 = getRoleMention(match.team1_string);
@@ -631,7 +641,7 @@ export async function sendVetoCompleteEmbed(matchId: number): Promise<void> {
       .setDescription(desc)
       .setTimestamp();
 
-    await sendEmbedToTargets(getChannels("discord.channels.veto"), embed);
+    await sendEmbedToTargets(getChannelsOrDefault("discord.channels.veto"), embed);
   } catch (err) {
     console.error("Discord sendVetoCompleteEmbed error:", (err as Error).message);
   }
@@ -660,7 +670,7 @@ export async function sendDemoReadyEmbed(data: {
         { name: "File", value: `\`${data.demoFile}\``, inline: false }
       )
       .setTimestamp();
-    await sendEmbedToTargets(getChannels("discord.channels.demo"), embed);
+    await sendEmbedToTargets(getChannelsOrDefault("discord.channels.demo"), embed);
   } catch (err) {
     console.error("Discord sendDemoReadyEmbed error:", (err as Error).message);
   }
@@ -684,7 +694,7 @@ export async function sendGotvMatchEmbed(data: {
   serverPort: number;
   matchUrl: string;
 }): Promise<void> {
-  const channelIds = getChannels("discord.channels.streamer");
+  const channelIds = getChannelsOrDefault("discord.channels.streamer");
   if (!channelIds.length) return;
   try {
     const gotvPort = computeGotvPort(data.serverIp, data.serverPort);

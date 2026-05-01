@@ -1253,6 +1253,9 @@ router.post("/", Utils.ensureAuthenticated, async (req, res, next) => {
       }
     }
     if (!req.body[0].ignore_server) {
+      if (req.body[0].server_id != null) {
+        await db.query("UPDATE game_server SET in_use = 1 WHERE id = ?", [req.body[0].server_id]);
+      }
       let ourServerSql: string =
         "SELECT rcon_password, ip_string, port, pterodactyl_id FROM game_server WHERE id=?";
       const serveInfo: RowDataPacket[] = await db.query(ourServerSql, [req.body[0].server_id]);
