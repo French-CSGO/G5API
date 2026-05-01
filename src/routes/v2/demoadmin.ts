@@ -1,5 +1,4 @@
 import multer from "multer";
-import JSZip from "jszip";
 import path from "path";
 import { writeFile, unlink, existsSync, mkdirSync } from "fs";
 import { db } from "../../services/db.js";
@@ -26,14 +25,14 @@ const upload = multer({
   }),
   fileFilter: (req, file, cb) => {
     const name = file.originalname.toLowerCase();
-    if (name.endsWith(".dem") || name.endsWith(".zip")) cb(null, true);
-    else cb(new Error("Only .dem or .zip files are allowed"));
+    if (name.endsWith(".zip")) cb(null, true);
+    else cb(new Error("Only .zip files are allowed (client-side compression required)"));
   },
   limits: { fileSize: 600 * 1024 * 1024 }
 });
 
 // Parse match_id and map_name from get5 filename
-// e.g. 2026-04-25_20-32-28_822_de_overpass_Lambda_vs_23H.dem/.zip
+// e.g. 2026-04-25_20-32-28_822_de_overpass_Lambda_vs_23H.zip
 function parseDemoFilename(filename: string): { matchId: string | null; mapName: string | null } {
   const m = filename.match(/_(\d+)_((?:de|cs|ar)_[a-z0-9]+)(?:_|\.)/i);
   if (!m) return { matchId: null, mapName: null };
@@ -44,7 +43,7 @@ function deleteTempFile(filePath: string) {
   unlink(filePath, () => {});
 }
 
-// Buffer → Uint8Array<ArrayBuffer> (évite les conflits de types stricts TS)
+// Buffer → Uint8Array<ArrayBuffer> (strict TS compliance)
 function toView(buf: Buffer): Uint8Array<ArrayBuffer> {
   return new Uint8Array(buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer) as Uint8Array<ArrayBuffer>;
 }
@@ -63,33 +62,29 @@ router.post(
 
     const files = req.files as Express.Multer.File[];
     if (!files || files.length === 0) {
-      return res.status(400).json({ message: "No .dem or .zip files provided." });
+      return res.status(400).json({ message: "No .zip files provided." });
     }
 
     const { readFile } = await import("fs/promises");
     const results: Array<{ file: string; status: "ok" | "skipped" | "error"; message: string }> = [];
 
     for (const file of files) {
-      const originalName = file.filename;
-      const isDem = originalName.toLowerCase().endsWith(".dem");
-      const zipFilename = isDem
-        ? originalName.replace(/\.dem$/i, ".zip")
-        : originalName;
+      const zipFilename = file.filename;
       const destPath = `public/demos/${zipFilename}`;
 
       try {
         // Already exists → skip
         if (existsSync(destPath)) {
           deleteTempFile(file.path);
-          results.push({ file: originalName, status: "skipped", message: "Zip already exists, skipped." });
+          results.push({ file: zipFilename, status: "skipped", message: "Zip already exists, skipped." });
           continue;
         }
 
         // Parse match and map from filename
-        const { matchId, mapName } = parseDemoFilename(originalName);
+        const { matchId, mapName } = parseDemoFilename(zipFilename);
         if (!matchId || !mapName) {
           deleteTempFile(file.path);
-          results.push({ file: originalName, status: "error", message: "Cannot parse match ID or map name from filename." });
+          results.push({ file: zipFilename, status: "error", message: "Cannot parse match ID or map name from filename." });
           continue;
         }
 
@@ -100,29 +95,15 @@ router.post(
         );
         if (!mapStats.length) {
           deleteTempFile(file.path);
-          results.push({ file: originalName, status: "error", message: `No map_stats found for match ${matchId} / ${mapName}.` });
+          results.push({ file: zipFilename, status: "error", message: `No map_stats found for match ${matchId} / ${mapName}.` });
           continue;
         }
 
-        let relayContent: Buffer;
-
-        if (isDem) {
-          // Zip the .dem
-          const zip = new JSZip();
-          const demoBuf = await readFile(file.path);
-          zip.file(originalName, new Uint8Array(demoBuf), { binary: true });
-          const buf = await zip.generateAsync({ type: "arraybuffer", compression: "DEFLATE" });
-          relayContent = Buffer.from(buf);
-          await new Promise<void>((resolve, reject) => {
-            writeFile(destPath, toView(relayContent), (err) => err ? reject(err) : resolve());
-          });
-        } else {
-          // Already a zip — save directly to dest
-          relayContent = await readFile(file.path);
-          await new Promise<void>((resolve, reject) => {
-            writeFile(destPath, toView(relayContent), (err) => err ? reject(err) : resolve());
-          });
-        }
+        // Move zip to final destination
+        const content = await readFile(file.path);
+        await new Promise<void>((resolve, reject) => {
+          writeFile(destPath, toView(content), (err) => err ? reject(err) : resolve());
+        });
 
         // Update map_stats
         await db.query("UPDATE map_stats SET demoFile = ? WHERE id = ?", [zipFilename, mapStats[0].id]);
@@ -154,14 +135,14 @@ router.post(
                 "Get5-FileName": zipFilename,
                 "Content-Type": "application/octet-stream",
               },
-              body: new Blob([toView(relayContent)]),
+              body: new Blob([toView(content)]),
             }).catch(() => {});
           }
         }
 
-        results.push({ file: originalName, status: "ok", message: `Processed → ${zipFilename}` });
+        results.push({ file: zipFilename, status: "ok", message: `Saved → ${zipFilename}` });
       } catch (err: any) {
-        results.push({ file: originalName, status: "error", message: err.message ?? "Unknown error" });
+        results.push({ file: zipFilename, status: "error", message: err.message ?? "Unknown error" });
       } finally {
         deleteTempFile(file.path);
       }
