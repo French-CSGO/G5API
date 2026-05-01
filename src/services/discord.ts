@@ -1,21 +1,12 @@
 import { Client, GatewayIntentBits, TextChannel, REST, Routes, SlashCommandBuilder, EmbedBuilder } from "discord.js";
 import { db } from "./db.js";
-import { getSetting } from "./settings.js";
+import { getSetting, setSetting } from "./settings.js";
 import config from "config";
-import fs from "fs";
-import path from "path";
-import { fileURLToPath } from "url";
 import { RowDataPacket } from "mysql2/typings/mysql";
 import GlobalEmitter from "../utility/emitter.js";
 import { CHALLONGE_V2_BASE, challongeHeaders, parseV2Match, parseV2Participant } from "../utility/challongeV2.js";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const MESSAGE_ID_FILE = path.join(__dirname, "../../../public/discord_scoreboard_id.json");
-const SCHEDULE_MESSAGE_ID_FILE = path.join(__dirname, "../../../public/discord_schedule_id.json");
-
 let client: Client | null = null;
-let scoreboardMsgIds: Record<string, string> = {};
-let scheduleMsgIds: Record<string, string> = {};
 
 // ─── Channel helpers ──────────────────────────────────────────────────────────
 
@@ -51,24 +42,14 @@ async function sendEmbedToTargets(targets: string[], embed: EmbedBuilder): Promi
   }
 }
 
-// ─── Message ID persistence (per-channel maps) ────────────────────────────────
+// ─── Message ID persistence (DB) ─────────────────────────────────────────────
 
-function loadMsgIds(file: string): Record<string, string> {
-  try {
-    if (fs.existsSync(file)) {
-      const json = JSON.parse(fs.readFileSync(file, "utf-8"));
-      if ("messageId" in json) return {}; // old single-channel format
-      return json as Record<string, string>;
-    }
-  } catch {}
-  return {};
+function getMsgId(type: "scoreboard" | "schedule", channelId: string): string {
+  return getSetting(`discord.msgid.${type}.${channelId}`) || "0";
 }
 
-function saveMsgIds(file: string, ids: Record<string, string>) {
-  try {
-    fs.mkdirSync(path.dirname(file), { recursive: true });
-    fs.writeFileSync(file, JSON.stringify(ids));
-  } catch {}
+async function saveMsgId(type: "scoreboard" | "schedule", channelId: string, msgId: string): Promise<void> {
+  await setSetting(`discord.msgid.${type}.${channelId}`, msgId);
 }
 
 // ─── Toornament token ─────────────────────────────────────────────────────────
@@ -103,9 +84,6 @@ export async function initDiscord(): Promise<void> {
   try {
     const token: string = getSetting("discord.token");
     if (!token) return;
-
-    scoreboardMsgIds = loadMsgIds(MESSAGE_ID_FILE);
-    scheduleMsgIds   = loadMsgIds(SCHEDULE_MESSAGE_ID_FILE);
 
     client = new Client({ intents: [GatewayIntentBits.Guilds] });
     client.once("clientReady", async (c) => {
@@ -268,11 +246,10 @@ export async function updateScoreboard(): Promise<void> {
       }
     }
 
-    let changed = false;
     for (const channelId of channelIds) {
       try {
         const ch = await client.channels.fetch(channelId) as TextChannel;
-        const existing = scoreboardMsgIds[channelId] ?? "0";
+        const existing = getMsgId("scoreboard", channelId);
         let newId: string;
         if (existing === "0") {
           const msg = await ch.send(content);
@@ -287,15 +264,11 @@ export async function updateScoreboard(): Promise<void> {
             newId = msg.id;
           }
         }
-        if (newId !== scoreboardMsgIds[channelId]) {
-          scoreboardMsgIds[channelId] = newId;
-          changed = true;
-        }
+        if (newId !== existing) await saveMsgId("scoreboard", channelId, newId);
       } catch (err) {
         console.error(`Discord updateScoreboard [${channelId}]:`, (err as Error).message);
       }
     }
-    if (changed) saveMsgIds(MESSAGE_ID_FILE, scoreboardMsgIds);
   } catch (err) {
     console.error("Discord updateScoreboard error:", (err as Error).message);
   }
@@ -501,11 +474,10 @@ export async function updateSchedule(): Promise<void> {
 
     if (!content.trim()) content = "🟡 Aucun match disponible actuellement.";
 
-    let changed = false;
     for (const channelId of channelIds) {
       try {
         const ch = await client.channels.fetch(channelId) as TextChannel;
-        const existing = scheduleMsgIds[channelId] ?? "0";
+        const existing = getMsgId("schedule", channelId);
         let newId: string;
         if (existing === "0") {
           const msg = await ch.send(content);
@@ -520,15 +492,11 @@ export async function updateSchedule(): Promise<void> {
             newId = msg.id;
           }
         }
-        if (newId !== scheduleMsgIds[channelId]) {
-          scheduleMsgIds[channelId] = newId;
-          changed = true;
-        }
+        if (newId !== existing) await saveMsgId("schedule", channelId, newId);
       } catch (err) {
         console.error(`Discord updateSchedule [${channelId}]:`, (err as Error).message);
       }
     }
-    if (changed) saveMsgIds(SCHEDULE_MESSAGE_ID_FILE, scheduleMsgIds);
   } catch (err) {
     console.error("Discord updateSchedule error:", (err as Error).message);
   }
