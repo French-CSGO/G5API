@@ -792,6 +792,7 @@ router.delete("/", Utils.ensureAuthenticated, async (req, res) => {
 router.get("/:team_id/recent/", async (req, res) => {
   try {
     let teamId: number = parseInt(req.params.team_id);
+    if (isNaN(teamId)) return res.json({ matches: [] });
     let recentLimit: number = 
       req.query.limit == null ? 5 : Number(req.query.limit);
     let sql: string =
