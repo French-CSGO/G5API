@@ -259,9 +259,15 @@ export async function updateScoreboard(): Promise<void> {
             const msg = await ch.messages.fetch(existing);
             await msg.edit(content);
             newId = existing;
-          } catch {
-            const msg = await ch.send(content);
-            newId = msg.id;
+          } catch (fetchErr: any) {
+            if (fetchErr?.code === 10008) {
+              // Message deleted — send a new one
+              const msg = await ch.send(content);
+              newId = msg.id;
+            } else {
+              // Transient error (network, DNS...) — keep existing ID, skip update
+              newId = existing;
+            }
           }
         }
         if (newId !== existing) await saveMsgId("scoreboard", channelId, newId);
@@ -487,9 +493,15 @@ export async function updateSchedule(): Promise<void> {
             const msg = await ch.messages.fetch(existing);
             await msg.edit(content);
             newId = existing;
-          } catch {
-            const msg = await ch.send(content);
-            newId = msg.id;
+          } catch (fetchErr: any) {
+            if (fetchErr?.code === 10008) {
+              // Message deleted — send a new one
+              const msg = await ch.send(content);
+              newId = msg.id;
+            } else {
+              // Transient error (network, DNS...) — keep existing ID, skip update
+              newId = existing;
+            }
           }
         }
         if (newId !== existing) await saveMsgId("schedule", channelId, newId);
