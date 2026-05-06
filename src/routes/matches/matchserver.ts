@@ -15,7 +15,7 @@ import GameServer from "../../utility/serverrcon.js";
 
 import config from "config";
 
-import { existsSync, readdir, readFile } from "fs";
+import { existsSync, readdir, readFile, stat } from "fs";
 import path from "path";
 import { AccessMessage } from "../../types/mapstats/AccessMessage.js";
 import { RowDataPacket } from "mysql2";
@@ -1330,23 +1330,31 @@ router.get(
           }
           const results = await Promise.all(
             files.map(file => new Promise<object>(resolve => {
-              readFile(path.join(backupDir, file), "utf8", (readErr, content) => {
-                const base: any = { file };
-                if (!readErr && content) {
-                  const t1 = content.match(/"team1_score"\s*[:\s]+"?(\d+)/);
-                  const t2 = content.match(/"team2_score"\s*[:\s]+"?(\d+)/);
-                  const mp = content.match(/"map_name"\s*[:\s]+"?([^\s",}]+)/);
-                  const mn = file.match(/_map(\d+)_round(\d+)/);
-                  if (t1) base.team1Score = parseInt(t1[1]);
-                  if (t2) base.team2Score = parseInt(t2[1]);
-                  if (mp) base.mapName = mp[1];
-                  if (mn) { base.mapNum = parseInt(mn[1]); base.round = parseInt(mn[2]); }
-                }
-                resolve(base);
+              const filePath = path.join(backupDir, file);
+              stat(filePath, (statErr, fileStat) => {
+                const mtimeMs = !statErr ? fileStat.mtimeMs : null;
+                readFile(filePath, "utf8", (readErr, content) => {
+                  const base: any = { file, mtimeMs };
+                  if (!readErr && content) {
+                    const t1 = content.match(/"team1_score"\s*[:\s]+"?(\d+)/);
+                    const t2 = content.match(/"team2_score"\s*[:\s]+"?(\d+)/);
+                    const mp = content.match(/"map_name"\s*[:\s]+"?([^\s",}]+)/);
+                    const mn = file.match(/_map(\d+)_round(\d+)/);
+                    if (t1) base.team1Score = parseInt(t1[1]);
+                    if (t2) base.team2Score = parseInt(t2[1]);
+                    if (mp) base.mapName = mp[1];
+                    if (mn) { base.mapNum = parseInt(mn[1]); base.round = parseInt(mn[2]); }
+                  }
+                  resolve(base);
+                });
               });
             }))
           );
-          res.json({ message: "Backups retrieved.", response: results });
+          const sorted = (results as any[]).sort((a, b) => {
+            if (a.mapNum !== b.mapNum) return (a.mapNum ?? 0) - (b.mapNum ?? 0);
+            return (a.round ?? 0) - (b.round ?? 0);
+          });
+          res.json({ message: "Backups retrieved.", response: sorted });
         });
         return;
       }
