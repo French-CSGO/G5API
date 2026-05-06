@@ -18,7 +18,7 @@ exports.up = function (db) {
       round_number SMALLINT     NOT NULL,
       winner_team  VARCHAR(10)  NOT NULL,
       winner_side  VARCHAR(5)   NOT NULL,
-      reason       TINYINT      NOT NULL,
+      reason       VARCHAR(30)  NOT NULL,
       t1_score     SMALLINT     NOT NULL DEFAULT 0,
       t2_score     SMALLINT     NOT NULL DEFAULT 0,
       team1_side   VARCHAR(5)   NOT NULL,

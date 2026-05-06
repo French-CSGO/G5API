@@ -374,7 +374,7 @@ class MapFlowService {
       // Query current map_stats INCLUDING scores BEFORE this round's update.
       // The pre-update scores are needed as the OT baseline.
       let sqlString: string =
-        "SELECT id, team1_score_ct, team1_score_t, team2_score_ct, team2_score_t " +
+        "SELECT id, team1_score_ct, team1_score_t, team2_score_ct, team2_score_t, team1_first_side " +
         "FROM map_stats WHERE match_id = ? AND map_number = ?";
       let mapStatInfo: RowDataPacket[];
       let matchSeasonInfo: RowDataPacket[];
@@ -476,6 +476,55 @@ class MapFlowService {
 
       // ── Round history ────────────────────────────────────────────────────
       if (event.winner?.team && event.winner?.side) {
+        // Normalize winner_side: Matchzy may send raw CsTeam int ("2"=T, "3"=CT)
+        // until the fixed plugin build is deployed.
+        const rawSide = String(event.winner.side);
+        const winnerSide = rawSide === "3" ? "CT"
+                         : rawSide === "2" ? "T"
+                         : rawSide.toUpperCase() === "COUNTERTERRORIST" ? "CT"
+                         : rawSide.toUpperCase() === "TERRORIST" ? "T"
+                         : rawSide;
+
+        // Translate CS2 RoundEndReason int to a human-readable string.
+        const ROUND_END_REASONS: Record<number, string> = {
+          1:  "target_bombed",
+          2:  "vip_escaped",
+          3:  "vip_killed",
+          4:  "terrorists_escaped",
+          5:  "ct_stopped_escape",
+          6:  "terrorists_stopped",
+          7:  "bomb_defused",
+          8:  "ct_win",
+          9:  "t_win",
+          10: "draw",
+          11: "hostages_rescued",
+          12: "target_saved",
+          13: "hostages_not_rescued",
+          14: "terrorists_not_escaped",
+          15: "vip_not_escaped",
+          16: "game_start",
+          17: "t_surrender",
+          18: "ct_surrender",
+        };
+        const reasonStr = ROUND_END_REASONS[event.reason] ?? String(event.reason);
+
+        // team1_side: prefer value sent by Matchzy, fallback to computation
+        // from team1_first_side + round_number if starting_side is missing.
+        let team1Side: string | null = event.team1.starting_side ?? null;
+        if (!team1Side) {
+          const firstSide = (mapStatInfo[0].team1_first_side ?? "CT").toUpperCase();
+          const rn = event.round_number;
+          if (rn <= 12) {
+            team1Side = firstSide;
+          } else if (rn <= 24) {
+            team1Side = firstSide === "CT" ? "T" : "CT";
+          } else {
+            const otHalf = Math.floor((rn - 25) / 3) % 2;
+            const otStart = firstSide === "CT" ? "T" : "CT";
+            team1Side = otHalf === 0 ? otStart : (otStart === "CT" ? "T" : "CT");
+          }
+        }
+
         await db.query(
           `INSERT INTO map_round
              (map_stats_id, round_number, winner_team, winner_side, reason, t1_score, t2_score, team1_side)
@@ -491,11 +540,11 @@ class MapFlowService {
             mapStatInfo[0].id,
             event.round_number,
             event.winner.team,
-            event.winner.side,
-            event.reason,
+            winnerSide,
+            reasonStr,
             event.team1.score,
             event.team2.score,
-            event.team1.starting_side ?? null
+            team1Side
           ]
         );
       }
