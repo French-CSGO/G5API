@@ -486,13 +486,13 @@ class MapFlowService {
                          : rawSide;
 
         // Translate CS2 RoundEndReason int to a human-readable string.
+        // Values from CounterStrikeSharp RoundEndReason enum.
         const ROUND_END_REASONS: Record<number, string> = {
+          0:  "unknown",
           1:  "target_bombed",
-          2:  "vip_escaped",
-          3:  "vip_killed",
           4:  "terrorists_escaped",
-          5:  "ct_stopped_escape",
-          6:  "terrorists_stopped",
+          5:  "cts_prevent_escape",
+          6:  "terrorists_neutralized",
           7:  "bomb_defused",
           8:  "ct_win",
           9:  "t_win",
@@ -501,10 +501,13 @@ class MapFlowService {
           12: "target_saved",
           13: "hostages_not_rescued",
           14: "terrorists_not_escaped",
-          15: "vip_not_escaped",
-          16: "game_start",
+          16: "game_commencing",
           17: "t_surrender",
           18: "ct_surrender",
+          19: "t_planted",
+          20: "cts_reached_hostage",
+          21: "survival_win",
+          22: "survival_draw",
         };
         const reasonStr = ROUND_END_REASONS[event.reason] ?? String(event.reason);
 
