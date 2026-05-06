@@ -474,6 +474,32 @@ class MapFlowService {
         }
       }
 
+      // ── Round history ────────────────────────────────────────────────────
+      if (event.winner?.team && event.winner?.side) {
+        await db.query(
+          `INSERT INTO map_round
+             (map_stats_id, round_number, winner_team, winner_side, reason, t1_score, t2_score, team1_side)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+           ON DUPLICATE KEY UPDATE
+             winner_team = VALUES(winner_team),
+             winner_side = VALUES(winner_side),
+             reason      = VALUES(reason),
+             t1_score    = VALUES(t1_score),
+             t2_score    = VALUES(t2_score),
+             team1_side  = VALUES(team1_side)`,
+          [
+            mapStatInfo[0].id,
+            event.round_number,
+            event.winner.team,
+            event.winner.side,
+            event.reason,
+            event.team1.score,
+            event.team2.score,
+            event.team1.starting_side ?? null
+          ]
+        );
+      }
+
       // ── Map stats update ─────────────────────────────────────────────────
       sqlString = "UPDATE map_stats SET ? WHERE id = ?";
       const insUpdStatement = {
