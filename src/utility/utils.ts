@@ -606,11 +606,15 @@ class Utils {
       v3: player.stats?.["1v3"],
       v4: player.stats?.["1v4"],
       v5: player.stats?.["1v5"],
-      k1: player.stats?.["1k"],
       k2: player.stats?.["2k"],
       k3: player.stats?.["3k"],
       k4: player.stats?.["4k"],
       k5: player.stats?.["5k"],
+      k1: Math.max(0, (player.stats?.rounds_played ?? 0)
+            - (player.stats?.["2k"] ?? 0)
+            - (player.stats?.["3k"] ?? 0)
+            - (player.stats?.["4k"] ?? 0)
+            - (player.stats?.["5k"] ?? 0)),
       firstdeath_ct: player.stats?.first_deaths_ct,
       firstdeath_t: player.stats?.first_deaths_t,
       firstkill_ct: player.stats?.first_kills_ct,
