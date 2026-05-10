@@ -34,16 +34,7 @@ class SeriesFlowService {
       if (event.winner?.team === "team1") winnerId = matchInfo[0]?.team1_id;
       else if (event.winner?.team === "team2")
         winnerId = matchInfo[0]?.team2_id;
-      // BO2 situation.
-      else if (
-        event.winner?.team === "none" &&
-        matchInfo[0].max_maps != 2 &&
-        event.team1_series_score == 0 &&
-        event.team2_series_score == 0
-      ) {
-        winnerId = null;
-        cancelled = 1;
-      }
+      // Draw — winner stays null, match is not cancelled.
 
       updateObject = {
         winner: winnerId,
