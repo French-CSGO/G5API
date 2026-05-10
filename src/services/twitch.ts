@@ -106,16 +106,25 @@ export async function initTwitch(): Promise<void> {
       console.log(`[Twitch] Connecté en tant que ${username} sur ${channels.join(", ")}`);
     });
     client.on("disconnected", (reason) => {
-      console.warn(`[Twitch] Déconnecté : ${reason} — tentative de reconnexion dans 30s`);
-      setTimeout(async () => {
-        if (!client) return;
-        try { await client.connect(); } catch (e) {
-          console.error("[Twitch] Reconnexion échouée :", e);
-        }
-      }, 30_000);
+      const isAuthError = typeof reason === "string" && (
+        reason.includes("Login unsuccessful") ||
+        reason.includes("Login authentication failed") ||
+        reason.includes("improperly formatted auth")
+      );
+      if (isAuthError) {
+        console.error(`[Twitch] Erreur d'authentification — vérifie le token OAuth : ${reason}`);
+      } else {
+        console.warn(`[Twitch] Déconnecté (${reason}) — reconnexion dans 30s`);
+        setTimeout(async () => {
+          if (!client) return;
+          try { await client.connect(); } catch (e) {
+            console.error("[Twitch] Reconnexion échouée :", e);
+          }
+        }, 30_000);
+      }
     });
     (client as unknown as NodeJS.EventEmitter).on("error", (err) => {
-      console.warn("[Twitch] Erreur réseau (ignorée) :", err);
+      console.error("[Twitch] Erreur :", err);
     });
 
     await client.connect();
