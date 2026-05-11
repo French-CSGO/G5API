@@ -29,12 +29,6 @@
   "engines": {
     "node": ">=16.17.0"
   },
-  "directories": {
-    "docs": "./docs/",
-    "bin": "./bin/",
-    "routes": "./routes/",
-    "config": "./config"
-  },
   "scripts": {
     "build": "tsc",
     "clean": "rm -rf ./dist",
