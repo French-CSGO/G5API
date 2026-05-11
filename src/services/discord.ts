@@ -8,6 +8,10 @@ import { CHALLONGE_V2_BASE, challongeHeaders, parseV2Match, parseV2Participant }
 
 let client: Client | null = null;
 
+function isDiscordEnabled(): boolean {
+  return getSetting("discord.enabled") === "true" || getSetting("discord.enabled") === "1";
+}
+
 // ─── Channel helpers ──────────────────────────────────────────────────────────
 
 function getChannels(key: string): string[] {
@@ -168,6 +172,7 @@ export async function initDiscord(): Promise<void> {
 // ─── Match Annonce ────────────────────────────────────────────────────────────
 
 export async function announceNewMatch(matchId: number): Promise<void> {
+  if (!isDiscordEnabled()) return;
   const channelIds = getChannelsOrDefault("discord.channels.announce");
   if (!client?.isReady() || !channelIds.length) return;
   try {
@@ -534,6 +539,7 @@ export async function sendPauseEvent(data: {
   side: string;
   pauseType: string;
 }): Promise<void> {
+  if (!isDiscordEnabled()) return;
   const embed = new EmbedBuilder()
     .setColor(data.isPaused ? 0xe74c3c : 0x2ecc71)
     .setTitle(data.isPaused ? "🔴 PAUSE" : "🟢 REPRISE")
@@ -561,6 +567,7 @@ export async function sendMapResultEvent(data: {
   team2SeriesScore: number;
   winnerName: string | null;
 }): Promise<void> {
+  if (!isDiscordEnabled()) return;
   const embed = new EmbedBuilder()
     .setColor(0x3498db)
     .setTitle(`🗺️ Fin de map — ${data.mapName} (Map ${data.mapNumber + 1})`)
@@ -587,6 +594,7 @@ export async function sendSeriesResultEvent(data: {
   team2SeriesScore: number;
   winnerName: string | null;
 }): Promise<void> {
+  if (!isDiscordEnabled()) return;
   const embed = new EmbedBuilder()
     .setColor(0xf1c40f)
     .setTitle("🏆 Match terminé !")
@@ -607,6 +615,7 @@ export async function sendSeriesResultEvent(data: {
 // ─── Veto Finish ──────────────────────────────────────────────────────────────
 
 export async function sendVetoCompleteEmbed(matchId: number): Promise<void> {
+  if (!isDiscordEnabled()) return;
   try {
     const hostname: string = config.get("server.hostname");
     const matchUrl = `${hostname.replace(/\/$/, "")}/match/${matchId}`;
@@ -657,6 +666,7 @@ export async function sendDemoReadyEmbed(data: {
   matchUrl: string;
   downloadUrl: string;
 }): Promise<void> {
+  if (!isDiscordEnabled()) return;
   try {
     const mapLabel = data.mapName ?? `Map ${data.mapNumber + 1}`;
     const embed = new EmbedBuilder()
@@ -694,6 +704,7 @@ export async function sendGotvMatchEmbed(data: {
   serverPort: number;
   matchUrl: string;
 }): Promise<void> {
+  if (!isDiscordEnabled()) return;
   const channelIds = getChannelsOrDefault("discord.channels.streamer");
   if (!channelIds.length) return;
   try {
