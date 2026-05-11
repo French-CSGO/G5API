@@ -34,6 +34,7 @@ COPY --from=builder /Get5API/node_modules ./node_modules
 COPY --from=builder /Get5API/migrations  ./migrations
 COPY --from=builder /Get5API/config      ./config
 COPY --from=builder /Get5API/package.json ./package.json
+COPY --from=builder /Get5API/prodrun.json ./prodrun.json
 
 EXPOSE 3301
 
