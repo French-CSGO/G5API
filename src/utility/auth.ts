@@ -56,6 +56,7 @@ async function returnStrategy(identifier: any, profile: any, done: any) {
       let defaultMaps = [];
       let isAdmin = 0;
       let isSuperAdmin = 0;
+      let isCast = 0;
       let sql = "SELECT * FROM user WHERE steam_id = ?";
       let curUser = await db.query(sql, profile.id);
       if (curUser.length < 1) {
@@ -92,6 +93,7 @@ async function returnStrategy(identifier: any, profile: any, done: any) {
       } else {
         isAdmin = curUser[0].admin;
         isSuperAdmin = curUser[0].super_admin;
+        isCast = curUser[0].cast || 0;
         let updateUser = {
           small_image: profile.photos[0].value,
           medium_image: profile.photos[1].value,
@@ -122,6 +124,7 @@ async function returnStrategy(identifier: any, profile: any, done: any) {
         name: profile.displayName,
         super_admin: isSuperAdmin,
         admin: isAdmin,
+        cast: isCast,
         id: curUser[0].id,
         small_image: profile.photos[0].value,
         medium_image: profile.photos[1].value,
@@ -158,6 +161,7 @@ passport.use('local-login', new LocalStrategy(async (username, password, done) =
           name: curUser[0].name,
           admin: curUser[0].admin,
           super_admin: curUser[0].super_admin,
+          cast: curUser[0].cast || 0,
           id: curUser[0].id,
           small_image: curUser[0].small_image,
           medium_image: curUser[0].medium_image,
@@ -231,6 +235,7 @@ passport.use('local-register',
           name: curUser[0].name,
           admin: curUser[0].admin,
           super_admin: curUser[0].super_admin,
+          cast: 0,
           id: curUser[0].id,
           small_image: curUser[0].small_image,
           medium_image: curUser[0].medium_image,

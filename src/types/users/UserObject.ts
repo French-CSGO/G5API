@@ -1,8 +1,9 @@
-export interface UserObject { 
+export interface UserObject {
     steam_id?: string,
     name?: string,
     admin?: number,
     super_admin?: number,
+    cast?: number,
     small_image?: string,
     medium_image?: string,
     large_image?: string,

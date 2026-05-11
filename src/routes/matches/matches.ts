@@ -608,6 +608,161 @@ router.get("/:match_id", async (req, res, next) => {
  *       500:
  *         $ref: '#/components/responses/Error'
  */
+router.get("/cast/stream", Utils.ensureAuthenticated, async (req, res) => {
+  try {
+    if (!req.user || (!Utils.castCheck(req.user) && !Utils.adminCheck(req.user))) {
+      res.status(403).json({ message: "Accès réservé aux utilisateurs avec le rôle cast." });
+      return;
+    }
+
+    res.set({
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+      "Content-Type": "text/event-stream",
+      "X-Accel-Buffering": "no"
+    });
+    res.flushHeaders();
+
+    const sendCastData = async () => {
+      try {
+        const eventSql = `
+          SELECT * FROM (
+            SELECT 'match_created' as event_type, m.id as match_id,
+              COALESCE(m.start_time, NOW()) as event_time,
+              t1.name as team1, t2.name as team2,
+              NULL as map_name, NULL as team1_score, NULL as team2_score,
+              NULL as team1_series, NULL as team2_series
+            FROM \`match\` m
+            JOIN team t1 ON m.team1_id = t1.id
+            JOIN team t2 ON m.team2_id = t2.id
+            WHERE m.cancelled = 0 OR m.cancelled IS NULL
+
+            UNION ALL
+
+            SELECT 'map_end' as event_type, m.id as match_id,
+              ms.end_time as event_time,
+              t1.name as team1, t2.name as team2,
+              ms.map as map_name, ms.team1_score, ms.team2_score,
+              NULL as team1_series, NULL as team2_series
+            FROM map_stats ms
+            JOIN \`match\` m ON ms.match_id = m.id
+            JOIN team t1 ON m.team1_id = t1.id
+            JOIN team t2 ON m.team2_id = t2.id
+            WHERE ms.end_time IS NOT NULL
+
+            UNION ALL
+
+            SELECT 'match_end' as event_type, m.id as match_id,
+              m.end_time as event_time,
+              t1.name as team1, t2.name as team2,
+              NULL as map_name, NULL as team1_score, NULL as team2_score,
+              m.team1_series_score as team1_series, m.team2_series_score as team2_series
+            FROM \`match\` m
+            JOIN team t1 ON m.team1_id = t1.id
+            JOIN team t2 ON m.team2_id = t2.id
+            WHERE m.end_time IS NOT NULL AND (m.cancelled = 0 OR m.cancelled IS NULL)
+          ) ev
+          ORDER BY ev.event_time ASC, ev.match_id ASC
+          LIMIT 200`;
+
+        const activeMatchSql = `
+          SELECT m.id, m.team1_string, m.team2_string, m.team1_series_score, m.team2_series_score,
+            m.max_maps, m.start_time,
+            gs.ip_string, gs.ip_cast, gs.port, gs.gotv_port,
+            ms.map, ms.team1_score, ms.team2_score, ms.map_number
+          FROM \`match\` m
+          LEFT JOIN game_server gs ON m.server_id = gs.id
+          LEFT JOIN map_stats ms ON ms.match_id = m.id
+          WHERE m.end_time IS NULL AND (m.cancelled = 0 OR m.cancelled IS NULL)
+          ORDER BY m.id ASC, ms.map_number ASC`;
+
+        const finishedMatchSql = `
+          SELECT m.id, m.team1_string, m.team2_string, m.team1_series_score, m.team2_series_score,
+            m.max_maps, m.end_time,
+            ms.map, ms.team1_score, ms.team2_score, ms.map_number
+          FROM \`match\` m
+          LEFT JOIN map_stats ms ON ms.match_id = m.id
+          WHERE m.end_time IS NOT NULL AND (m.cancelled = 0 OR m.cancelled IS NULL)
+          ORDER BY m.id DESC, ms.map_number ASC
+          LIMIT 50`;
+
+        const [events, activeRows, finishedRows]: [RowDataPacket[], RowDataPacket[], RowDataPacket[]] =
+          await Promise.all([
+            db.query(eventSql),
+            db.query(activeMatchSql),
+            db.query(finishedMatchSql)
+          ]);
+
+        const groupMatchMaps = (rows: RowDataPacket[]) => {
+          const matchMap: { [key: number]: any } = {};
+          for (const row of rows) {
+            if (!matchMap[row.id]) {
+              matchMap[row.id] = {
+                id: row.id,
+                team1_string: row.team1_string,
+                team2_string: row.team2_string,
+                team1_series_score: row.team1_series_score,
+                team2_series_score: row.team2_series_score,
+                max_maps: row.max_maps,
+                start_time: row.start_time,
+                end_time: row.end_time,
+                ip_string: row.ip_string,
+                ip_cast: row.ip_cast,
+                port: row.port,
+                gotv_port: row.gotv_port,
+                maps: []
+              };
+            }
+            if (row.map) {
+              matchMap[row.id].maps.push({
+                map: row.map,
+                team1_score: row.team1_score,
+                team2_score: row.team2_score,
+                map_number: row.map_number
+              });
+            }
+          }
+          return Object.values(matchMap);
+        };
+
+        const data = {
+          events: events.map((e) => Object.assign({}, e)),
+          activeMatches: groupMatchMaps(activeRows.map((r) => Object.assign({}, r))),
+          finishedMatches: groupMatchMaps(finishedRows.map((r) => Object.assign({}, r)))
+        };
+
+        res.write(`event: castData\ndata: ${JSON.stringify(data)}\n\n`);
+      } catch (err) {
+        console.error("cast/stream sendCastData error:", err);
+      }
+    };
+
+    await sendCastData();
+
+    const onUpdate = async () => { await sendCastData(); };
+    GlobalEmitter.on("matchUpdate", onUpdate);
+    GlobalEmitter.on("mapStatUpdate", onUpdate);
+    GlobalEmitter.on("vetoUpdate", onUpdate);
+
+    req.on("close", () => {
+      GlobalEmitter.removeListener("matchUpdate", onUpdate);
+      GlobalEmitter.removeListener("mapStatUpdate", onUpdate);
+      GlobalEmitter.removeListener("vetoUpdate", onUpdate);
+      res.end();
+    });
+    req.on("disconnect", () => {
+      GlobalEmitter.removeListener("matchUpdate", onUpdate);
+      GlobalEmitter.removeListener("mapStatUpdate", onUpdate);
+      GlobalEmitter.removeListener("vetoUpdate", onUpdate);
+      res.end();
+    });
+  } catch (err) {
+    console.error((err as Error).toString());
+    res.status(500).write(`event: error\ndata: ${(err as Error).toString()}\n\n`);
+    res.end();
+  }
+});
+
 router.get("/:match_id/stream", async (req, res, next) => {
   try {
     let matchUserId: string = "SELECT user_id FROM `match` WHERE id = ?";
@@ -1310,6 +1465,7 @@ router.post("/", Utils.ensureAuthenticated, async (req, res, next) => {
     }
     announceNewMatch(insertMatch.insertId);
     updateScoreboard();
+    GlobalEmitter.emit("matchUpdate");
     // GOTV webhook
     if (req.body[0].server_id != null) {
       try {

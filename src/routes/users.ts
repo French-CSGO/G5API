@@ -104,7 +104,7 @@ router.get("/", async (req, res) => {
   try {
     const search = req.query.search as string | undefined;
     let sql: string =
-      "SELECT id, name, steam_id, small_image, medium_image, large_image, admin, super_admin FROM user";
+      "SELECT id, name, steam_id, small_image, medium_image, large_image, admin, super_admin, cast FROM user";
     let params: any[] = [];
     if (search) {
       sql += " WHERE name LIKE ? OR steam_id LIKE ?";
@@ -158,7 +158,7 @@ router.get("/:user_id", async (req, res, next) => {
       sql = "SELECT * FROM user WHERE id = ? OR steam_id = ?";
     } else {
       sql =
-        "SELECT id, name, steam_id, small_image, medium_image, large_image, admin, super_admin FROM user where id = ? OR steam_id = ?";
+        "SELECT id, name, steam_id, small_image, medium_image, large_image, admin, super_admin, cast FROM user where id = ? OR steam_id = ?";
     }
 
     let user: any = await db.query(sql, [userOrSteamID, userOrSteamID]);
@@ -297,7 +297,7 @@ router.post("/", Utils.ensureAuthenticated, async (req, res, next) => {
 router.put("/", Utils.ensureAuthenticated, async (req, res, next) => {
   try {
     let userToBeUpdated: RowDataPacket[] = await db.query(
-      "SELECT id, name, admin, super_admin, username, password FROM user WHERE id = ? OR steam_id = ?",
+      "SELECT id, name, admin, super_admin, cast, username, password FROM user WHERE id = ? OR steam_id = ?",
       [req.body[0].id, req.body[0].steam_id]
     );
     let isAdmin: number =
@@ -306,6 +306,8 @@ router.put("/", Utils.ensureAuthenticated, async (req, res, next) => {
       req.body[0].super_admin == null
         ? userToBeUpdated[0].super_admin
         : req.body[0].super_admin;
+    let isCast: number =
+      req.body[0].cast == null ? userToBeUpdated[0].cast : req.body[0].cast;
     let displayName: string =
       req.body[0].name === null ? userToBeUpdated[0].name : req.body[0].name;
     let smallImage: string = req.body[0].small_image;
@@ -333,6 +335,7 @@ router.put("/", Utils.ensureAuthenticated, async (req, res, next) => {
       updateUser = {
         admin: isAdmin,
         super_admin: isSuperAdmin,
+        cast: isCast,
         name: displayName,
         small_image: smallImage,
         medium_image: mediumImage,

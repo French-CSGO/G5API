@@ -153,6 +153,7 @@ class Utils {
             name: ourUser[0].name,
             super_admin: ourUser[0].super_admin,
             admin: ourUser[0].admin,
+            cast: ourUser[0].cast,
             id: ourUser[0].id,
             small_image: ourUser[0].small_image,
             medium_image: ourUser[0].medium_image,
@@ -191,6 +192,18 @@ class Utils {
    */
   static superAdminCheck(user: User) {
     if (user) return user.super_admin === 0 ? false : true;
+    else return false;
+  }
+
+  /** Checks if a user has the cast role in the system during their session.
+   * @function
+   * @memberof module:utils
+   * @inner
+   * @name castCheck
+   * @param {user} user - the users session object.
+   */
+  static castCheck(user: User) {
+    if (user) return user.cast === 1 || user.cast === true ? true : false;
     else return false;
   }
 

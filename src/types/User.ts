@@ -3,6 +3,7 @@ export interface User {
   name: string
   admin: boolean | number
   super_admin: boolean | number
+  cast?: boolean | number
   id: number
   small_image: string
   medium_image: string
