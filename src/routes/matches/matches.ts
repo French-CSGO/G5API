@@ -642,7 +642,7 @@ router.get("/cast/stream", Utils.ensureAuthenticated, async (req, res) => {
             SELECT 'map_end' as event_type, m.id as match_id,
               ms.end_time as event_time,
               t1.name as team1, t2.name as team2,
-              ms.map as map_name, ms.team1_score, ms.team2_score,
+              ms.map_name, ms.team1_score, ms.team2_score,
               NULL as team1_series, NULL as team2_series
             FROM map_stats ms
             JOIN \`match\` m ON ms.match_id = m.id
@@ -669,7 +669,7 @@ router.get("/cast/stream", Utils.ensureAuthenticated, async (req, res) => {
           SELECT m.id, m.team1_string, m.team2_string, m.team1_series_score, m.team2_series_score,
             m.max_maps, m.start_time,
             gs.ip_string, gs.ip_cast, gs.port, gs.gotv_port,
-            ms.map, ms.team1_score, ms.team2_score, ms.map_number
+            ms.map_name, ms.team1_score, ms.team2_score, ms.map_number
           FROM \`match\` m
           LEFT JOIN game_server gs ON m.server_id = gs.id
           LEFT JOIN map_stats ms ON ms.match_id = m.id
@@ -679,7 +679,7 @@ router.get("/cast/stream", Utils.ensureAuthenticated, async (req, res) => {
         const finishedMatchSql = `
           SELECT m.id, m.team1_string, m.team2_string, m.team1_series_score, m.team2_series_score,
             m.max_maps, m.end_time,
-            ms.map, ms.team1_score, ms.team2_score, ms.map_number
+            ms.map_name, ms.team1_score, ms.team2_score, ms.map_number
           FROM \`match\` m
           LEFT JOIN map_stats ms ON ms.match_id = m.id
           WHERE m.end_time IS NOT NULL AND (m.cancelled = 0 OR m.cancelled IS NULL)
@@ -713,9 +713,9 @@ router.get("/cast/stream", Utils.ensureAuthenticated, async (req, res) => {
                 maps: []
               };
             }
-            if (row.map) {
+            if (row.map_name) {
               matchMap[row.id].maps.push({
-                map: row.map,
+                map: row.map_name,
                 team1_score: row.team1_score,
                 team2_score: row.team2_score,
                 map_number: row.map_number
