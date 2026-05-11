@@ -656,13 +656,14 @@ router.get("/cast/stream", Utils.ensureAuthenticated, async (req, res) => {
               m.end_time as event_time,
               t1.name as team1, t2.name as team2,
               NULL as map_name, NULL as team1_score, NULL as team2_score,
-              m.team1_series_score as team1_series, m.team2_series_score as team2_series
+              COALESCE(m.team1_series_score, m.team1_score, 0) as team1_series,
+              COALESCE(m.team2_series_score, m.team2_score, 0) as team2_series
             FROM \`match\` m
             JOIN team t1 ON m.team1_id = t1.id
             JOIN team t2 ON m.team2_id = t2.id
             WHERE m.end_time IS NOT NULL AND (m.cancelled = 0 OR m.cancelled IS NULL)
           ) ev
-          ORDER BY ev.event_time ASC, ev.match_id ASC
+          ORDER BY ev.event_time ASC, ev.match_id ASC, ev.event_type ASC
           LIMIT 200`;
 
         const activeMatchSql = `
@@ -722,7 +723,7 @@ router.get("/cast/stream", Utils.ensureAuthenticated, async (req, res) => {
               });
             }
           }
-          return Object.values(matchMap);
+          return Object.values(matchMap).sort((a: any, b: any) => b.id - a.id);
         };
 
         const data = {
