@@ -677,6 +677,14 @@ router.get("/cast/stream", Utils.ensureAuthenticated, async (req, res) => {
           WHERE m.end_time IS NULL AND (m.cancelled = 0 OR m.cancelled IS NULL)
           ORDER BY m.id ASC, ms.map_number ASC`;
 
+        const activeVetoSql = `
+          SELECT v.match_id, v.map as map_name, v.id as veto_id
+          FROM veto v
+          JOIN \`match\` m ON m.id = v.match_id
+          WHERE m.end_time IS NULL AND (m.cancelled = 0 OR m.cancelled IS NULL)
+            AND v.pick_or_veto IN ('pick', 'decider')
+          ORDER BY v.match_id ASC, v.id ASC`;
+
         const finishedMatchSql = `
           SELECT m.id, m.team1_string, m.team2_string, m.team1_series_score, m.team2_series_score,
             m.max_maps, m.end_time,
@@ -687,14 +695,22 @@ router.get("/cast/stream", Utils.ensureAuthenticated, async (req, res) => {
           ORDER BY m.id DESC, ms.map_number ASC
           LIMIT 50`;
 
-        const [events, activeRows, finishedRows]: [RowDataPacket[], RowDataPacket[], RowDataPacket[]] =
+        const [events, activeRows, vetoRows, finishedRows]: [RowDataPacket[], RowDataPacket[], RowDataPacket[], RowDataPacket[]] =
           await Promise.all([
             db.query(eventSql),
             db.query(activeMatchSql),
+            db.query(activeVetoSql),
             db.query(finishedMatchSql)
           ]);
 
-        const groupMatchMaps = (rows: RowDataPacket[]) => {
+        // Build veto map list per match (ordered picks/deciders)
+        const vetoByMatch: { [key: number]: string[] } = {};
+        for (const vrow of vetoRows) {
+          if (!vetoByMatch[vrow.match_id]) vetoByMatch[vrow.match_id] = [];
+          vetoByMatch[vrow.match_id].push(vrow.map_name);
+        }
+
+        const groupMatchMaps = (rows: RowDataPacket[], withVeto = false) => {
           const matchMap: { [key: number]: any } = {};
           for (const row of rows) {
             if (!matchMap[row.id]) {
@@ -719,8 +735,28 @@ router.get("/cast/stream", Utils.ensureAuthenticated, async (req, res) => {
                 map: row.map_name,
                 team1_score: row.team1_score,
                 team2_score: row.team2_score,
-                map_number: row.map_number
+                map_number: row.map_number,
+                started: true
               });
+            }
+          }
+          if (withVeto) {
+            for (const [matchIdStr, mapNames] of Object.entries(vetoByMatch)) {
+              const matchId = Number(matchIdStr);
+              if (!matchMap[matchId]) continue;
+              mapNames.forEach((mapName, idx) => {
+                const inStats = matchMap[matchId].maps.some((m: any) => m.map_number === idx);
+                if (!inStats) {
+                  matchMap[matchId].maps.push({
+                    map: mapName,
+                    team1_score: null,
+                    team2_score: null,
+                    map_number: idx,
+                    started: false
+                  });
+                }
+              });
+              matchMap[matchId].maps.sort((a: any, b: any) => a.map_number - b.map_number);
             }
           }
           return Object.values(matchMap).sort((a: any, b: any) => b.id - a.id);
@@ -728,7 +764,7 @@ router.get("/cast/stream", Utils.ensureAuthenticated, async (req, res) => {
 
         const data = {
           events: events.map((e) => Object.assign({}, e)),
-          activeMatches: groupMatchMaps(activeRows.map((r) => Object.assign({}, r))),
+          activeMatches: groupMatchMaps(activeRows.map((r) => Object.assign({}, r)), true),
           finishedMatches: groupMatchMaps(finishedRows.map((r) => Object.assign({}, r)))
         };
 
