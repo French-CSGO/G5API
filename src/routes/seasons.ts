@@ -1412,20 +1412,18 @@ async function enrichChallongeMatches(
 ): Promise<any[]> {
   const cHeaders = challongeHeaders(apiKey);
 
-  // v2.1 — liste des matchs
-  let url = `${CHALLONGE_V2_BASE}/tournaments/${slug}/matches.json?per_page=500`;
-  if (state) url += `&state=${state}`;
-  const resp = await challongeFetch(url, { headers: cHeaders });
+  // v2.1 — matches + participants en parallèle (économise 1 RTT par bracket)
+  let matchUrl = `${CHALLONGE_V2_BASE}/tournaments/${slug}/matches.json?per_page=500`;
+  if (state) matchUrl += `&state=${state}`;
+  const [resp, partResp] = await Promise.all([
+    challongeFetch(matchUrl, { headers: cHeaders }),
+    challongeFetch(`${CHALLONGE_V2_BASE}/tournaments/${slug}/participants.json?per_page=500`, { headers: cHeaders })
+  ]);
   if (!resp.ok) return [];
   const rawBody: any = await resp.json();
   // v2.1: { data: [ { id, attributes: { state, round, ..., relationships: { player1, player2 } } } ] }
   const rawMatches: any[] = Array.isArray(rawBody?.data) ? rawBody.data : [];
 
-  // v2.1 — liste des participants
-  const partResp = await challongeFetch(
-    `${CHALLONGE_V2_BASE}/tournaments/${slug}/participants.json?per_page=500`,
-    { headers: cHeaders }
-  );
   const partBody: any = partResp.ok ? await partResp.json() : {};
   const rawParts: any[] = Array.isArray(partBody?.data) ? partBody.data : [];
   // Map: challongeId (number) → participant { id, display_name, name }

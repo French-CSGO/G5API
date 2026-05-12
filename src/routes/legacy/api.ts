@@ -1765,7 +1765,6 @@ async function update_challonge_match(match_id: string | null, season_id: number
         "SELECT team1_score, team2_score FROM map_stats WHERE match_id = ? ORDER BY map_number ASC",
         [match_id]
       );
-      // v2.1 : le PUT utilise participant_id explicite, pas besoin de swapper selon player1/player2
       const team1Scores: number[] = mapStatsRows.map(r => r.team1_score);
       const team2Scores: number[] = mapStatsRows.map(r => r.team2_score);
 
@@ -1779,15 +1778,10 @@ async function update_challonge_match(match_id: string | null, season_id: number
         }
       );
 
-      // Check and see if any matches remain, if not, finalize the tournament.
-      const openResp = await challongeFetch(
-        `${CHALLONGE_V2_BASE}/tournaments/${slug}/matches.json?state=open&per_page=500`,
-        { headers: cHeaders }
-      );
-      const openBody: any = await openResp.json();
-      const openMatches: any[] = Array.isArray(openBody?.data) ? openBody.data : [];
-      if (openMatches.length === 0) {
-        // v2.1 — finalize via change_state
+      // Le match qu'on vient de mettre à jour passe de "open" à "complete".
+      // Si c'était le seul match ouvert restant, on finalise le tournoi sans
+      // faire un 2ème GET open matches (économise 1 requête).
+      if (allMatches.length === 1) {
         await challongeFetch(
           `${CHALLONGE_V2_BASE}/tournaments/${slug}/change_state.json`,
           {
