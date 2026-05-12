@@ -65,98 +65,86 @@ async function update_challonge_match(
 
   const headers = challongeHeaders(decryptedKey);
 
-  // Trouver le challonge_id stocké sur le match G5
-  const matchRow: RowDataPacket[] = await db.query(
-    "SELECT challonge_id FROM `match` WHERE id = ?",
-    [match_id]
-  );
+  // Toutes les données DB nécessaires lues en parallèle
+  const [matchRow, tournamentsRow, team1Row, team2Row, mapStatsRows] = await Promise.all([
+    db.query("SELECT challonge_id FROM `match` WHERE id = ?", [match_id]) as Promise<RowDataPacket[]>,
+    db.query("SELECT challonge_slug FROM season_challonge_tournament WHERE season_id = ? ORDER BY display_order ASC", [season_id]) as Promise<RowDataPacket[]>,
+    db.query("SELECT challonge_team_id FROM team WHERE id = ?", [team1_id]) as Promise<RowDataPacket[]>,
+    db.query("SELECT challonge_team_id FROM team WHERE id = ?", [team2_id]) as Promise<RowDataPacket[]>,
+    db.query("SELECT team1_score, team2_score FROM map_stats WHERE match_id = ? ORDER BY map_number ASC", [match_id]) as Promise<RowDataPacket[]>
+  ]);
+
   const challongeMatchId: number | null = matchRow[0]?.challonge_id ?? null;
-
-  // Récupérer tous les brackets de la saison
-  const tournaments: RowDataPacket[] = await db.query(
-    "SELECT challonge_slug FROM season_challonge_tournament WHERE season_id = ? ORDER BY display_order ASC",
-    [season_id]
-  );
-
-  // Fallback sur challonge_url si pas de brackets dans la nouvelle table
-  const slugList: string[] = tournaments.length > 0
-    ? tournaments.map(t => t.challonge_slug as string)
+  const slugList: string[] = tournamentsRow.length > 0
+    ? tournamentsRow.map(t => t.challonge_slug as string)
     : (seasonInfo[0].challonge_url ? [seasonInfo[0].challonge_url as string] : []);
 
   if (!slugList.length) return;
 
-  const team1ChallongeId: RowDataPacket[] = await db.query(
-    "SELECT challonge_team_id FROM team WHERE id = ?",
-    [team1_id]
-  );
-  const team2ChallongeId: RowDataPacket[] = await db.query(
-    "SELECT challonge_team_id FROM team WHERE id = ?",
-    [team2_id]
-  );
+  const t1cid: number = team1Row[0].challonge_team_id;
+  const t2cid: number = team2Row[0].challonge_team_id;
+  const team1Scores: number[] = mapStatsRows.map(r => r.team1_score);
+  const team2Scores: number[] = mapStatsRows.map(r => r.team2_score);
 
-  const t1cid: number = team1ChallongeId[0].challonge_team_id;
-  const t2cid: number = team2ChallongeId[0].challonge_team_id;
+  let updatedSlug: string | null = null;
 
-  for (const slug of slugList) {
-    let matchData: any | null = null;
-
-    if (challongeMatchId) {
-      // Cherche directement par ID de match Challonge (v2.1)
+  if (challongeMatchId) {
+    // challonge_id connu : PUT direct sur chaque slug jusqu'à ce que ça marche
+    // (pas de GET préalable pour trouver le bon bracket)
+    for (const slug of slugList) {
       const resp = await fetch(
         `${CHALLONGE_V2_BASE}/tournaments/${slug}/matches/${challongeMatchId}.json`,
-        { headers }
+        {
+          method: "PUT",
+          headers,
+          body: JSON.stringify(buildMatchPutBody(t1cid, t2cid, team1Scores, team2Scores, winner))
+        }
       );
-      if (!resp.ok) continue;
-      const body: any = await resp.json();
-      // v2.1 single match response: { data: { id, attributes: { ... } } }
-      if (body?.data) matchData = parseV2Match(body.data);
-    } else {
-      // Fallback : récupère tous les matchs ouverts et filtre par participants
+      if (resp.ok) { updatedSlug = slug; break; }
+    }
+  } else {
+    // Fallback : GET open matches pour trouver par participants
+    for (const slug of slugList) {
       const resp = await fetch(
         `${CHALLONGE_V2_BASE}/tournaments/${slug}/matches.json?state=open&per_page=500`,
         { headers }
       );
       if (!resp.ok) continue;
       const body: any = await resp.json();
-      // v2.1 list response: { data: [ { id, attributes: { ... } } ] }
       const allMatches: any[] = Array.isArray(body?.data) ? body.data.map(parseV2Match) : [];
-      matchData = allMatches.find(m =>
+      const found = allMatches.find(m =>
         (m.player1_id === t1cid && m.player2_id === t2cid) ||
         (m.player2_id === t1cid && m.player1_id === t2cid)
-      ) ?? null;
+      );
+      if (!found) continue;
+      await fetch(
+        `${CHALLONGE_V2_BASE}/tournaments/${slug}/matches/${found.id}.json`,
+        {
+          method: "PUT",
+          headers,
+          body: JSON.stringify(buildMatchPutBody(t1cid, t2cid, team1Scores, team2Scores, winner))
+        }
+      );
+      updatedSlug = slug;
+      break;
     }
+  }
 
-    if (!matchData) continue;
+  if (!updatedSlug || winner === null) return;
 
-    // Récupérer tous les scores par map (live + terminés), triés par map_number
-    const mapStatsRows: RowDataPacket[] = await db.query(
-      "SELECT team1_score, team2_score FROM map_stats WHERE match_id = ? ORDER BY map_number ASC",
-      [match_id]
-    );
+  // Vérification de finalisation uniquement à la fin de la série (winner != null)
+  // Vérifier tous les brackets en parallèle
+  const openChecks = await Promise.all(
+    slugList.map(slug =>
+      fetch(`${CHALLONGE_V2_BASE}/tournaments/${slug}/matches.json?state=open&per_page=500`, { headers })
+        .then(r => r.json())
+        .then((body: any) => ({ slug, open: Array.isArray(body?.data) ? body.data.length : 1 }))
+    )
+  );
 
-    // v2.1 : le PUT utilise participant_id explicite, pas besoin de swapper selon player1/player2
-    const team1Scores: number[] = mapStatsRows.map(r => r.team1_score);
-    const team2Scores: number[] = mapStatsRows.map(r => r.team2_score);
-
-    // PUT v2.1 — mise à jour du score
-    await fetch(
-      `${CHALLONGE_V2_BASE}/tournaments/${slug}/matches/${matchData.id}.json`,
-      {
-        method: "PUT",
-        headers,
-        body: JSON.stringify(buildMatchPutBody(t1cid, t2cid, team1Scores, team2Scores, winner))
-      }
-    );
-
-    // Vérifier s'il reste des matchs ouverts dans CE bracket
-    const openResp = await fetch(
-      `${CHALLONGE_V2_BASE}/tournaments/${slug}/matches.json?state=open&per_page=500`,
-      { headers }
-    );
-    const openBody: any = await openResp.json();
-    const openMatches: any[] = Array.isArray(openBody?.data) ? openBody.data : [];
-    if (openMatches.length === 0) {
-      // Finaliser ce bracket via change_state
+  // Finaliser chaque bracket qui vient de se terminer
+  for (const { slug, open } of openChecks) {
+    if (open === 0) {
       await fetch(
         `${CHALLONGE_V2_BASE}/tournaments/${slug}/change_state.json`,
         {
@@ -166,22 +154,10 @@ async function update_challonge_match(
         }
       );
     }
-
-    break; // match trouvé et mis à jour
   }
 
-  // Vérifier si TOUS les brackets de la saison sont terminés pour clore la saison
-  let allFinished = true;
-  for (const slug of slugList) {
-    const openResp = await fetch(
-      `${CHALLONGE_V2_BASE}/tournaments/${slug}/matches.json?state=open&per_page=500`,
-      { headers }
-    );
-    const openBody: any = await openResp.json();
-    const openMatches: any[] = Array.isArray(openBody?.data) ? openBody.data : [];
-    if (openMatches.length > 0) { allFinished = false; break; }
-  }
-  if (allFinished && slugList.length > 0) {
+  // Clore la saison si tous les brackets sont terminés
+  if (openChecks.every(c => c.open === 0)) {
     await db.query(
       "UPDATE season SET end_date = ? WHERE id = ?",
       [new Date().toISOString().slice(0, 19).replace("T", " "), seasonInfo[0].id]
