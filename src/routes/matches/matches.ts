@@ -663,7 +663,7 @@ router.get("/cast/stream", Utils.ensureAuthenticated, async (req, res) => {
             JOIN team t2 ON m.team2_id = t2.id
             WHERE m.end_time IS NOT NULL AND (m.cancelled = 0 OR m.cancelled IS NULL)
           ) ev
-          ORDER BY ev.event_time ASC, ev.match_id ASC, ev.event_type ASC
+          ORDER BY ev.event_time DESC, ev.match_id DESC, ev.event_type ASC
           LIMIT 200`;
 
         const activeMatchSql = `
