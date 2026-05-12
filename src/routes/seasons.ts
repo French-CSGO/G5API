@@ -1628,6 +1628,36 @@ router.get("/:season_id/challonge/matches", Utils.ensureAuthenticated, async (re
   }
 });
 
+/** GET /:season_id/challonge/bulk-prefill — données partagées pour la création en masse */
+router.get("/:season_id/challonge/bulk-prefill", Utils.ensureAuthenticated, async (req, res) => {
+  try {
+    const seasonId = parseInt(req.params.season_id);
+    const [seasonRows, availableServers] = await Promise.all([
+      db.query(
+        "SELECT s.id, s.name, CONCAT('{', GROUP_CONCAT(DISTINCT CONCAT('\"',sc.cvar_name,'\": \"',sc.cvar_value,'\"')),'}') as cvars " +
+        "FROM season s LEFT OUTER JOIN season_cvar sc ON s.id = sc.season_id WHERE s.id = ? GROUP BY s.id",
+        [seasonId]
+      ) as Promise<RowDataPacket[]>,
+      db.query(
+        "SELECT gs.id, gs.display_name, gs.ip_string, gs.port, gs.public_server, gs.flag " +
+        "FROM game_server gs WHERE gs.in_use = 0 AND (gs.public_server = 1 OR gs.user_id = ?) ORDER BY gs.display_name",
+        [req.user!.id]
+      ) as Promise<RowDataPacket[]>
+    ]);
+    const season = seasonRows[0];
+    if (season?.cvars) season.cvars = JSON.parse(season.cvars);
+    res.json({
+      season_id: seasonId,
+      season_name: season?.name ?? null,
+      season_cvars: season?.cvars ?? null,
+      available_servers: availableServers
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: (err as Error).toString() });
+  }
+});
+
 /** GET /:season_id/challonge/matches/:challonge_match_id/prefill */
 router.get("/:season_id/challonge/matches/:challonge_match_id/prefill", Utils.ensureAuthenticated, async (req, res) => {
   try {
