@@ -6,6 +6,13 @@
 
 export const CHALLONGE_V2_BASE = "https://api.challonge.com/v2.1";
 
+import { getSettingInt, setSettingCached } from "../services/settings.js";
+
+export async function challongeFetch(url: string, options?: RequestInit): Promise<Response> {
+  setSettingCached("challonge.requestCount", String(getSettingInt("challonge.requestCount") + 1));
+  return fetch(url, options);
+}
+
 /** Returns the required headers for every Challonge v2.1 request (API key auth). */
 export function challongeHeaders(apiKey: string): Record<string, string> {
   return {

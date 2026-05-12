@@ -1,11 +1,10 @@
 /** Fetch for Challonge API v2.1 integration.
  * @const
  */
-import fetch from "node-fetch";
-
 import {
   CHALLONGE_V2_BASE,
   challongeHeaders,
+  challongeFetch as fetch,
   parseV2Match,
   buildMatchPutBody,
   buildMatchStateBody,

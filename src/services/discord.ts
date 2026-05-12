@@ -4,7 +4,7 @@ import { getSetting, setSetting } from "./settings.js";
 import config from "config";
 import { RowDataPacket } from "mysql2/typings/mysql";
 import GlobalEmitter from "../utility/emitter.js";
-import { CHALLONGE_V2_BASE, challongeHeaders, parseV2Match, parseV2Participant } from "../utility/challongeV2.js";
+import { CHALLONGE_V2_BASE, challongeHeaders, challongeFetch, parseV2Match, parseV2Participant } from "../utility/challongeV2.js";
 
 let client: Client | null = null;
 
@@ -94,6 +94,7 @@ async function getToornamentToken(): Promise<string | null> {
 // ─── Init ─────────────────────────────────────────────────────────────────────
 
 export async function initDiscord(): Promise<void> {
+  if (!isDiscordEnabled()) return;
   try {
     const token: string = getSetting("discord.token");
     if (!token) return;
@@ -417,7 +418,7 @@ export async function updateSchedule(): Promise<void> {
           const label = (bracket.label as string) || slug;
           const headers = challongeHeaders(challongeApiKey);
 
-          const mRes = await fetch(
+          const mRes = await challongeFetch(
             `${CHALLONGE_V2_BASE}/tournaments/${slug}/matches.json?state=open&per_page=500`,
             { headers }
           ).catch(() => null);
@@ -427,7 +428,7 @@ export async function updateSchedule(): Promise<void> {
           const rawMatches: any[] = Array.isArray(mData.data) ? mData.data : (mData.data ? [mData.data] : []);
 
           const participantMap = new Map<number, string>();
-          const pRes = await fetch(
+          const pRes = await challongeFetch(
             `${CHALLONGE_V2_BASE}/tournaments/${slug}/participants.json?per_page=500`,
             { headers }
           ).catch(() => null);

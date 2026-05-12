@@ -44,6 +44,7 @@ const DEFAULTS: Record<string, string> = {
 
   // Challonge
   "challonge.apiKey": "",
+  "challonge.requestCount": "0",
 
   // Discord notification channels (JSON arrays of channel IDs)
   "discord.channels.announce":   "[]",
@@ -130,6 +131,19 @@ export function getAllSettings(): Record<string, string> {
 }
 
 // ─── Setters ─────────────────────────────────────────────────────────────────
+
+/**
+ * Met à jour le cache immédiatement, puis persiste en DB de façon asynchrone.
+ * Utiliser pour les clés fréquemment écrites (ex: compteurs).
+ */
+export function setSettingCached(key: string, value: string): void {
+  cache.set(key, value);
+  db.query(
+    "INSERT INTO settings (setting_key, setting_value) VALUES (?, ?) " +
+    "ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value), updated_at = NOW()",
+    [key, value]
+  ).catch((err: unknown) => console.error("[Settings] setSettingCached DB error:", err));
+}
 
 /**
  * Met à jour une clé en DB et dans le cache.

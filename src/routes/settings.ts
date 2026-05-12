@@ -92,7 +92,7 @@ router.put("/", Utils.ensureAuthenticated, requireSuperAdmin, async (req: Reques
       "twitch.enabled", "twitch.username", "twitch.token", "twitch.channels",
       "pterodactyl.enabled", "pterodactyl.url", "pterodactyl.apiKey", "pterodactyl.shutdownDelay",
       "toornament.clientId", "toornament.clientSecret", "toornament.apiKey",
-      "challonge.apiKey",
+      "challonge.apiKey", "challonge.requestCount",
       "teamspeak.enabled", "teamspeak.host", "teamspeak.queryPort", "teamspeak.username",
       "teamspeak.password", "teamspeak.serverId",
       "vpsRelay.enabled", "vpsRelay.url", "vpsRelay.apiKey",
