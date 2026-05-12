@@ -193,9 +193,13 @@ class ServerRcon {
         );
       }
 
-      if (loadMatchResponse.includes("Failed")) return false;
-      else if (loadMatchResponse.includes("another match already loaded"))
+      if (loadMatchResponse.includes("Failed")) {
+        console.error(`[prepareGet5Match] RCON load failed: ${loadMatchResponse}`);
         return false;
+      } else if (loadMatchResponse.includes("another match already loaded")) {
+        console.error(`[prepareGet5Match] Another match already loaded on server: ${loadMatchResponse}`);
+        return false;
+      }
 
       if (compare(get5Version, "0.13.1", "<")) {
         await this.execute(`get5_web_api_key ${get5APIKeyString}`);

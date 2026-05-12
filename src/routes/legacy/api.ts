@@ -15,6 +15,7 @@ import {db} from "../../services/db.js";
 import {
   CHALLONGE_V2_BASE,
   challongeHeaders,
+  challongeFetch,
   parseV2Match,
   buildMatchPutBody,
   buildTournamentStateBody
@@ -1747,7 +1748,7 @@ async function update_challonge_match(match_id: string | null, season_id: number
     const cHeaders = challongeHeaders(decryptedKey);
 
     // v2.1 — récupère tous les matchs ouverts et filtre par participants
-    const challongeResponse = await fetch(
+    const challongeResponse = await challongeFetch(
       `${CHALLONGE_V2_BASE}/tournaments/${slug}/matches.json?state=open&per_page=500`,
       { headers: cHeaders }
     );
@@ -1769,7 +1770,7 @@ async function update_challonge_match(match_id: string | null, season_id: number
       const team2Scores: number[] = mapStatsRows.map(r => r.team2_score);
 
       // v2.1 — PUT score update
-      await fetch(
+      await challongeFetch(
         `${CHALLONGE_V2_BASE}/tournaments/${slug}/matches/${matchData.id}.json`,
         {
           method: "PUT",
@@ -1779,7 +1780,7 @@ async function update_challonge_match(match_id: string | null, season_id: number
       );
 
       // Check and see if any matches remain, if not, finalize the tournament.
-      const openResp = await fetch(
+      const openResp = await challongeFetch(
         `${CHALLONGE_V2_BASE}/tournaments/${slug}/matches.json?state=open&per_page=500`,
         { headers: cHeaders }
       );
@@ -1787,7 +1788,7 @@ async function update_challonge_match(match_id: string | null, season_id: number
       const openMatches: any[] = Array.isArray(openBody?.data) ? openBody.data : [];
       if (openMatches.length === 0) {
         // v2.1 — finalize via change_state
-        await fetch(
+        await challongeFetch(
           `${CHALLONGE_V2_BASE}/tournaments/${slug}/change_state.json`,
           {
             method: "PUT",

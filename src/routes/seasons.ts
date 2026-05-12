@@ -27,6 +27,7 @@ import { getSetting } from "../services/settings.js";
 import {
   CHALLONGE_V2_BASE,
   challongeHeaders,
+  challongeFetch,
   parseV2Match,
   parseV2Participant
 } from "../utility/challongeV2.js";
@@ -689,7 +690,7 @@ router.post("/challonge", Utils.ensureAuthenticated, async (req, res, next) => {
     }
     // v2.1 — GET tournament info
     const cHeaders = challongeHeaders(challongeAPIKey);
-    const tournResp: any = await fetch(
+    const tournResp: any = await challongeFetch(
       `${CHALLONGE_V2_BASE}/tournaments/${tournamentId}.json`,
       { headers: cHeaders }
     );
@@ -720,7 +721,7 @@ router.post("/challonge", Utils.ensureAuthenticated, async (req, res, next) => {
 
       // v2.1 — import teams via separate participants call
       if (req.body[0]?.import_teams) {
-        const partResp: any = await fetch(
+        const partResp: any = await challongeFetch(
           `${CHALLONGE_V2_BASE}/tournaments/${tournamentId}/participants.json?per_page=500`,
           { headers: cHeaders }
         );
@@ -1391,7 +1392,7 @@ async function getSlugForMatch(seasonId: number, challongeMatchId: number, apiKe
   const tournaments = await getSeasonChallongeTournaments(seasonId);
   const cHeaders = challongeHeaders(apiKey);
   for (const t of tournaments) {
-    const resp = await fetch(
+    const resp = await challongeFetch(
       `${CHALLONGE_V2_BASE}/tournaments/${t.challonge_slug}/matches/${challongeMatchId}.json`,
       { headers: cHeaders }
     );
@@ -1414,14 +1415,14 @@ async function enrichChallongeMatches(
   // v2.1 — liste des matchs
   let url = `${CHALLONGE_V2_BASE}/tournaments/${slug}/matches.json?per_page=500`;
   if (state) url += `&state=${state}`;
-  const resp = await fetch(url, { headers: cHeaders });
+  const resp = await challongeFetch(url, { headers: cHeaders });
   if (!resp.ok) return [];
   const rawBody: any = await resp.json();
   // v2.1: { data: [ { id, attributes: { state, round, ..., relationships: { player1, player2 } } } ] }
   const rawMatches: any[] = Array.isArray(rawBody?.data) ? rawBody.data : [];
 
   // v2.1 — liste des participants
-  const partResp = await fetch(
+  const partResp = await challongeFetch(
     `${CHALLONGE_V2_BASE}/tournaments/${slug}/participants.json?per_page=500`,
     { headers: cHeaders }
   );
@@ -1530,7 +1531,7 @@ router.post("/:season_id/challonge/tournaments", Utils.ensureAuthenticated, asyn
     }
     // Vérifier que le tournoi Challonge est accessible (v2.1)
     const apiKey = getChallongeAPIKey();
-    const checkResp = await fetch(
+    const checkResp = await challongeFetch(
       `${CHALLONGE_V2_BASE}/tournaments/${challonge_slug}.json`,
       { headers: challongeHeaders(apiKey) }
     );
@@ -1641,7 +1642,7 @@ router.get("/:season_id/challonge/matches/:challonge_match_id/prefill", Utils.en
 
     // v2.1 — récupérer le match
     const cHeaders = challongeHeaders(apiKey);
-    const mResp = await fetch(
+    const mResp = await challongeFetch(
       `${CHALLONGE_V2_BASE}/tournaments/${slug}/matches/${challongeMatchId}.json`,
       { headers: cHeaders }
     );
@@ -1653,7 +1654,7 @@ router.get("/:season_id/challonge/matches/:challonge_match_id/prefill", Utils.en
     const resolveParticipant = async (playerId: number | null) => {
       if (!playerId) return null;
       // v2.1 — récupérer le participant
-      const pResp = await fetch(
+      const pResp = await challongeFetch(
         `${CHALLONGE_V2_BASE}/tournaments/${slug}/participants/${playerId}.json`,
         { headers: cHeaders }
       );

@@ -962,13 +962,13 @@ router.post("/challonge", Utils.ensureAuthenticated, async (req, res) => {
       throw new Error("Invalid tournament ID.");
     }
     // v2.1 — récupération des participants via clé système
-    const { CHALLONGE_V2_BASE, challongeHeaders, parseV2Participant } = await import("../utility/challongeV2.js");
+    const { CHALLONGE_V2_BASE, challongeHeaders, parseV2Participant, challongeFetch } = await import("../utility/challongeV2.js");
     const { getSetting } = await import("../services/settings.js");
     const challongeAPIKey = getSetting("challonge.apiKey");
     if (!challongeAPIKey) {
       throw new Error("Clé API Challonge non configurée dans les paramètres administrateur.");
     }
-    const challongeResponse: any = await fetch(
+    const challongeResponse: any = await challongeFetch(
       `${CHALLONGE_V2_BASE}/tournaments/${tournamentId}/participants.json?per_page=500`,
       { headers: challongeHeaders(challongeAPIKey) }
     );
