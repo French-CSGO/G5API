@@ -507,7 +507,7 @@ router.get("/teams/:team_id/:season_id", async (req, res) => {
     */
    let playerStatSql =
      `SELECT  steam_id, name, sum(kills) as kills,
-     sum(deaths) as deaths, sum(assists) as assists, sum(k1) as k1,
+     sum(deaths) as deaths, sum(assists) as assists, GREATEST(0, sum(roundsplayed) - sum(k2) - sum(k3) - sum(k4) - sum(k5)) as k1,
      sum(k2) as k2, sum(k3) as k3,
      sum(k4) as k4, sum(k5) as k5, sum(v1) as v1,
      sum(v2) as v2, sum(v3) as v3, sum(v4) as v4,
@@ -527,7 +527,7 @@ router.get("/teams/:team_id/:season_id", async (req, res) => {
      GROUP BY steam_id, name`;
    let playerStatSqlSeasons =
      `SELECT  steam_id, name, sum(kills) as kills,
-     sum(deaths) as deaths, sum(assists) as assists, sum(k1) as k1,
+     sum(deaths) as deaths, sum(assists) as assists, GREATEST(0, sum(roundsplayed) - sum(k2) - sum(k3) - sum(k4) - sum(k5)) as k1,
      sum(k2) as k2, sum(k3) as k3,
      sum(k4) as k4, sum(k5) as k5, sum(v1) as v1,
      sum(v2) as v2, sum(v3) as v3, sum(v4) as v4,
@@ -692,7 +692,7 @@ router.get("/teams/:team_id/:season_id", async (req, res) => {
    */
   let playerStatSql =
     `SELECT  steam_id, name, sum(kills) as kills,
-    sum(deaths) as deaths, sum(assists) as assists, sum(k1) as k1,
+    sum(deaths) as deaths, sum(assists) as assists, GREATEST(0, sum(roundsplayed) - sum(k2) - sum(k3) - sum(k4) - sum(k5)) as k1,
     sum(k2) as k2, sum(k3) as k3,
     sum(k4) as k4, sum(k5) as k5, sum(v1) as v1,
     sum(v2) as v2, sum(v3) as v3, sum(v4) as v4,
@@ -713,7 +713,7 @@ router.get("/teams/:team_id/:season_id", async (req, res) => {
     GROUP BY steam_id, name`;
   let playerStatSqlSeasons =
     `SELECT  steam_id, name, sum(kills) as kills,
-    sum(deaths) as deaths, sum(assists) as assists, sum(k1) as k1,
+    sum(deaths) as deaths, sum(assists) as assists, GREATEST(0, sum(roundsplayed) - sum(k2) - sum(k3) - sum(k4) - sum(k5)) as k1,
     sum(k2) as k2, sum(k3) as k3,
     sum(k4) as k4, sum(k5) as k5, sum(v1) as v1,
     sum(v2) as v2, sum(v3) as v3, sum(v4) as v4,

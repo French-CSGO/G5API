@@ -976,7 +976,7 @@ router.delete("/", async (req, res, next) => {
 const getPlayerStats: any = async (steamId: string, seasonId: number | null = null, pug: boolean = false) => {
   let playerStatSql =
     `SELECT  steam_id, name, sum(kills) as kills,
-    sum(deaths) as deaths, sum(assists) as assists, sum(k1) as k1,
+    sum(deaths) as deaths, sum(assists) as assists, GREATEST(0, sum(roundsplayed) - sum(k2) - sum(k3) - sum(k4) - sum(k5)) as k1,
     sum(k2) as k2, sum(k3) as k3,
     sum(k4) as k4, sum(k5) as k5, sum(v1) as v1,
     sum(v2) as v2, sum(v3) as v3, sum(v4) as v4,
@@ -994,7 +994,7 @@ const getPlayerStats: any = async (steamId: string, seasonId: number | null = nu
     )`;
   let playerStatSqlSeasons =
     `SELECT  steam_id, name, sum(kills) as kills,
-    sum(deaths) as deaths, sum(assists) as assists, sum(k1) as k1,
+    sum(deaths) as deaths, sum(assists) as assists, GREATEST(0, sum(roundsplayed) - sum(k2) - sum(k3) - sum(k4) - sum(k5)) as k1,
     sum(k2) as k2, sum(k3) as k3,
     sum(k4) as k4, sum(k5) as k5, sum(v1) as v1,
     sum(v2) as v2, sum(v3) as v3, sum(v4) as v4,
