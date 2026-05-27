@@ -1,6 +1,6 @@
 import path from "path";
 import fs from "fs";
-import type { FC, FX, ImageSettings } from "./types.js";
+import type { FC, FX, LogoConfig, ImageSettings } from "./types.js";
 
 export const SETTINGS_PATH = path.join(process.cwd(), "public", "image-settings.json");
 
@@ -9,6 +9,9 @@ export const fc = (enabled: boolean, font: string, color: string, size: number, 
 
 export const fx = (enabled: boolean, font: string, color: string, size: number, bold: boolean, x: number): FX =>
   ({ enabled, font, color, size, bold, x });
+
+export const logo = (enabled: boolean, x: number, y: number, size: number): LogoConfig =>
+  ({ enabled, x, y, size });
 
 export const DEFAULT_SETTINGS: ImageSettings = {
   canvas: { width: 1920, height: 1080 },
@@ -32,6 +35,8 @@ export const DEFAULT_SETTINGS: ImageSettings = {
     assists_r:     fx(true, "Arial", "#1a1a2e", 20, false, 1105),
     deaths_r:      fx(true, "Arial", "#1a1a2e", 20, false, 1195),
     rating_r:      fx(true, "Arial", "#1a1a2e", 20, false, 1280),
+    team1_logo: logo(true,  310, 302, 60),
+    team2_logo: logo(true, 1610, 302, 60),
     column_headers: {
       enabled: false, y: 400,
       font: "Arial", color: "#1a1a2e", size: 20, bold: true,
@@ -77,6 +82,49 @@ export const DEFAULT_SETTINGS: ImageSettings = {
         odd_alpha:  0.08,
         even_fill:  "#ffffff",
         even_alpha: 0.05,
+      },
+    },
+  },
+
+  mvp: {
+    background:   "marble.png",
+    fontFile:     "",
+    map_name:     fc(true, "Arial", "#ffffff", 22, false, 960, 80),
+    team1_name:   fc(true, "Arial", "#ffffff", 32, true, 450, 200),
+    team1_score:  fc(true, "Arial", "#ffffff", 32, true, 800, 200),
+    team2_score:  fc(true, "Arial", "#ffffff", 32, true, 1120, 200),
+    team2_name:   fc(true, "Arial", "#ffffff", 32, true, 1470, 200),
+    mvp_label:    fc(true, "Arial", "#f4d03f", 28, true, 960, 310),
+    player_name:  fc(true, "Arial", "#ffffff", 52, true, 960, 390),
+    player_team:  fc(true, "Arial", "#cccccc", 22, false, 960, 450),
+    kills:        fc(true, "Arial", "#ffffff", 28, false, 500,  620),
+    assists:      fc(true, "Arial", "#ffffff", 28, false, 700,  620),
+    deaths:       fc(true, "Arial", "#ffffff", 28, false, 900,  620),
+    rating:       fc(true, "Arial", "#ffffff", 28, false, 1100, 620),
+    hs:           fc(true, "Arial", "#ffffff", 28, false, 1310, 620),
+    clutches:     fc(true, "Arial", "#ffffff", 28, false, 1500, 620),
+    team1_logo:   logo(true,  310, 200, 70),
+    team2_logo:   logo(true, 1610, 200, 70),
+    column_headers: {
+      enabled: false, y: 550, y2: 550,
+      font: "Arial", color: "#cccccc", size: 18, bold: true,
+      kills_label: "K", assists_label: "A", deaths_label: "D",
+      rating_label: "RTG", hs_label: "HS%", clutches_label: "CL",
+    },
+    map_image: { enabled: true },
+    shapes: {
+      enabled: false,
+      team_pill: {
+        enabled: true, fill: "#000000", alpha: 0.4, radius: 50,
+        width: 420, height: 65, border: "#ffffff", border_alpha: 0.25, border_width: 2,
+      },
+      player_pill: {
+        enabled: true, fill: "#000000", alpha: 0.4, radius: 50,
+        width: 680, height: 75, border: "#ffffff", border_alpha: 0.2, border_width: 2,
+      },
+      stats_bar: {
+        enabled: true, fill: "#000000", alpha: 0.3, radius: 22,
+        x: 420, y: 0, width: 1140, height: 70, border: "#ffffff", border_alpha: 0.1, border_width: 1,
       },
     },
   },
@@ -240,9 +288,11 @@ export function loadSettings(): ImageSettings {
     const dm  = DEFAULT_SETTINGS.match;
     const dp  = DEFAULT_SETTINGS.player;
     const dt  = DEFAULT_SETTINGS.team_season;
+    const dv  = DEFAULT_SETTINGS.mvp;
     const sm  = p.match       ?? {};
     const sp  = p.player      ?? {};
     const st  = p.team_season ?? {};
+    const sv  = p.mvp         ?? {};
     return {
       canvas: { ...DEFAULT_SETTINGS.canvas, ...(p.canvas ?? {}) },
       match: {
@@ -264,6 +314,8 @@ export function loadSettings(): ImageSettings {
         assists_r:      mergeFX(dm.assists_r,      sm.assists_r),
         deaths_r:       mergeFX(dm.deaths_r,       sm.deaths_r),
         rating_r:       mergeFX(dm.rating_r,       sm.rating_r),
+        team1_logo:     { ...dm.team1_logo, ...(sm.team1_logo ?? {}) },
+        team2_logo:     { ...dm.team2_logo, ...(sm.team2_logo ?? {}) },
         column_headers: { ...dm.column_headers, ...(sm.column_headers ?? {}) },
         shapes: {
           ...dm.shapes,
@@ -293,6 +345,35 @@ export function loadSettings(): ImageSettings {
           team_pill:   { ...dp.shapes.team_pill,   ...(sp.shapes?.team_pill   ?? {}) },
           player_pill: { ...dp.shapes.player_pill, ...(sp.shapes?.player_pill ?? {}) },
           stats_bar:   { ...dp.shapes.stats_bar,   ...(sp.shapes?.stats_bar   ?? {}) },
+        },
+      },
+      mvp: {
+        background:   sv.background ?? dv.background,
+        fontFile:     sv.fontFile   ?? dv.fontFile,
+        map_name:     mergeFC(dv.map_name,    sv.map_name),
+        team1_name:   mergeFC(dv.team1_name,  sv.team1_name),
+        team1_score:  mergeFC(dv.team1_score, sv.team1_score),
+        team2_score:  mergeFC(dv.team2_score, sv.team2_score),
+        team2_name:   mergeFC(dv.team2_name,  sv.team2_name),
+        mvp_label:    mergeFC(dv.mvp_label,   sv.mvp_label),
+        player_name:  mergeFC(dv.player_name, sv.player_name),
+        player_team:  mergeFC(dv.player_team, sv.player_team),
+        kills:        mergeFC(dv.kills,       sv.kills),
+        assists:      mergeFC(dv.assists,     sv.assists),
+        deaths:       mergeFC(dv.deaths,      sv.deaths),
+        rating:       mergeFC(dv.rating,      sv.rating),
+        hs:           mergeFC(dv.hs,          sv.hs),
+        clutches:     mergeFC(dv.clutches,    sv.clutches),
+        team1_logo:   { ...dv.team1_logo, ...(sv.team1_logo ?? {}) },
+        team2_logo:   { ...dv.team2_logo, ...(sv.team2_logo ?? {}) },
+        column_headers: { ...dv.column_headers, ...(sv.column_headers ?? {}) },
+        map_image:    { ...dv.map_image,    ...(sv.map_image    ?? {}) },
+        shapes: {
+          ...dv.shapes,
+          ...(sv.shapes ?? {}),
+          team_pill:   { ...dv.shapes.team_pill,   ...(sv.shapes?.team_pill   ?? {}) },
+          player_pill: { ...dv.shapes.player_pill, ...(sv.shapes?.player_pill ?? {}) },
+          stats_bar:   { ...dv.shapes.stats_bar,   ...(sv.shapes?.stats_bar   ?? {}) },
         },
       },
       team_season: {

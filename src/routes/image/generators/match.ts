@@ -1,8 +1,33 @@
 import { createCanvas, loadImage } from "canvas";
 import path from "path";
+import fs from "fs";
 import Utils from "../../../utility/utils.js";
 import { drawText, drawMultilineText, drawRoundRect, fieldFont, tryRegisterFont } from "../helpers.js";
-import type { ImageSettings, MatchRow, MapStatRow, PlayerStatRow, PlayerWithRating } from "../types.js";
+import type { ImageSettings, LogoConfig, MatchRow, MapStatRow, PlayerStatRow, PlayerWithRating } from "../types.js";
+
+/** Charge un logo depuis public/img/logos/ — retourne null si introuvable */
+async function tryLoadLogo(logoName: string | null | undefined) {
+  if (!logoName) return null;
+  const logosDir = path.join(process.cwd(), "public", "img", "logos");
+  const exts = [".png", ".svg", ".jpg", ".jpeg", ".webp"];
+  const candidates = [
+    ...exts.map(e => path.join(logosDir, logoName + e)),
+    path.join(logosDir, logoName),  // nom avec extension incluse
+  ];
+  for (const p of candidates) {
+    if (fs.existsSync(p)) {
+      try { return await loadImage(p); } catch { /* skip */ }
+    }
+  }
+  return null;
+}
+
+/** Dessine un logo centré sur (cx, cy) avec une taille size×size */
+function drawLogoCentered(ctx: ReturnType<typeof createCanvas>["getContext"], img: any, cfg: LogoConfig) {
+  if (!img) return;
+  const half = cfg.size / 2;
+  ctx.drawImage(img, cfg.x - half, cfg.y - half, cfg.size, cfg.size);
+}
 
 export async function generateMatchImage(
   match: MatchRow,
@@ -11,6 +36,11 @@ export async function generateMatchImage(
   players: PlayerStatRow[],
   s: ImageSettings
 ): Promise<Buffer> {
+  // Précharger les logos d'équipes
+  const [logo1, logo2] = await Promise.all([
+    tryLoadLogo(match.team1_logo),
+    tryLoadLogo(match.team2_logo),
+  ]);
   const m  = s.match;
   const W  = s.canvas.width;
   const H  = s.canvas.height;
@@ -124,6 +154,10 @@ export async function generateMatchImage(
       });
     }
   }
+
+  // ── Logos d'équipes ────────────────────────────────────────────────────────
+  if (m.team1_logo?.enabled) drawLogoCentered(ctx as any, logo1, m.team1_logo);
+  if (m.team2_logo?.enabled) drawLogoCentered(ctx as any, logo2, m.team2_logo);
 
   // ── Team names + series scores ──────────────────────────────────────────────
   if (m.team1_name.enabled)  drawText(ctx, team1Name,       m.team1_name.x,  m.team1_name.y,  fieldFont(m.team1_name),  m.team1_name.color);
