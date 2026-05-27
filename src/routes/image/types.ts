@@ -206,7 +206,9 @@ export interface ImageSettings {
       enabled: boolean;
       x:       number;   // centre X
       y:       number;   // centre Y
-      size:    number;
+      size:    number;   // fallback if width/height not set
+      width:   number;   // largeur (rectangle)
+      height:  number;   // hauteur (rectangle)
       circle:  boolean;  // découpe circulaire
     };
     shapes: {
@@ -347,6 +349,7 @@ export interface MatchRow extends RowDataPacket {
   team1_string: string | null; team2_string: string | null;
   team1_name: string | null;   team2_name: string | null;
   team1_logo: string | null;   team2_logo: string | null;
+  team1_flag: string | null;   team2_flag: string | null;
 }
 export interface MapStatRow extends RowDataPacket {
   id: number; map_name: string;

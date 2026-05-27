@@ -209,7 +209,8 @@ async function renderMatchImage(req: Request, res: Response, mapParam: number | 
     const matchRows = await db.query(
       `SELECT m.team1_id, m.team2_id, m.team1_string, m.team2_string,
               t1.name AS team1_name, t2.name AS team2_name,
-              t1.logo AS team1_logo, t2.logo AS team2_logo
+              t1.logo AS team1_logo, t2.logo AS team2_logo,
+              t1.flag AS team1_flag, t2.flag AS team2_flag
        FROM \`match\` m
        LEFT JOIN team t1 ON t1.id = m.team1_id
        LEFT JOIN team t2 ON t2.id = m.team2_id
@@ -301,7 +302,8 @@ async function renderMvpImage(req: Request, res: Response) {
     const matchRows = await db.query(
       `SELECT m.team1_id, m.team2_id, m.team1_string, m.team2_string,
               t1.name AS team1_name, t2.name AS team2_name,
-              t1.logo AS team1_logo, t2.logo AS team2_logo
+              t1.logo AS team1_logo, t2.logo AS team2_logo,
+              t1.flag AS team1_flag, t2.flag AS team2_flag
        FROM \`match\` m
        LEFT JOIN team t1 ON t1.id = m.team1_id
        LEFT JOIN team t2 ON t2.id = m.team2_id
@@ -381,7 +383,8 @@ async function renderPlayerImage(req: Request, res: Response, mapNumber: number 
     const matchRows = await db.query(
       `SELECT m.team1_id, m.team2_id, m.team1_string, m.team2_string,
               t1.name AS team1_name, t2.name AS team2_name,
-              t1.logo AS team1_logo, t2.logo AS team2_logo
+              t1.logo AS team1_logo, t2.logo AS team2_logo,
+              t1.flag AS team1_flag, t2.flag AS team2_flag
        FROM \`match\` m
        LEFT JOIN team t1 ON t1.id = m.team1_id
        LEFT JOIN team t2 ON t2.id = m.team2_id

@@ -22,6 +22,27 @@ async function tryLoadLogo(logoName: string | null | undefined) {
   return null;
 }
 
+/** Charge un drapeau : local public/img/flags/ en priorité, sinon flagcdn.com */
+async function tryLoadFlag(flag: string | null | undefined) {
+  if (!flag) return null;
+  const code = flag.toLowerCase();
+  const flagsDir = path.join(process.cwd(), "public", "img", "flags");
+  const exts = [".png", ".svg", ".jpg"];
+  for (const ext of exts) {
+    const p = path.join(flagsDir, code + ext);
+    if (fs.existsSync(p)) {
+      try { return await loadImage(p); } catch { /* skip */ }
+    }
+  }
+  try { return await loadImage(`https://flagcdn.com/w160/${code}.png`); } catch { /* skip */ }
+  return null;
+}
+
+/** Charge un logo, avec fallback sur le drapeau de l'équipe */
+async function tryLoadLogoOrFlag(logo: string | null | undefined, flag: string | null | undefined) {
+  return (await tryLoadLogo(logo)) ?? (await tryLoadFlag(flag));
+}
+
 /** Charge une image de map depuis public/img/maps/ */
 async function tryLoadMapImage(mapName: string) {
   if (!mapName) return null;
@@ -104,8 +125,8 @@ export async function generateMapMvpImage(
 
   // ── Logos d'équipes + photo joueur ───────────────────────────────────────
   const [logo1, logo2, playerImg] = await Promise.all([
-    tryLoadLogo(match.team1_logo),
-    tryLoadLogo(match.team2_logo),
+    tryLoadLogoOrFlag(match.team1_logo, match.team1_flag),
+    tryLoadLogoOrFlag(match.team2_logo, match.team2_flag),
     cfg.player_image?.enabled ? tryLoadPlayerImage(player.steam_id) : Promise.resolve(null),
   ]);
   if (cfg.team1_logo?.enabled) drawLogoCentered(ctx, logo1, cfg.team1_logo);
@@ -114,17 +135,21 @@ export async function generateMapMvpImage(
   // ── Photo joueur ──────────────────────────────────────────────────────────
   const pi = cfg.player_image;
   if (pi?.enabled && playerImg) {
-    const half = pi.size / 2;
+    const pw = (pi.width  ?? pi.size) || pi.size;
+    const ph = (pi.height ?? pi.size) || pi.size;
+    const halfW = pw / 2;
+    const halfH = ph / 2;
     if (pi.circle) {
+      const halfR = Math.min(pw, ph) / 2;
       ctx.save();
       ctx.beginPath();
-      ctx.arc(pi.x, pi.y, half, 0, Math.PI * 2);
+      ctx.arc(pi.x, pi.y, halfR, 0, Math.PI * 2);
       ctx.closePath();
       ctx.clip();
-      (ctx as any).drawImage(playerImg, pi.x - half, pi.y - half, pi.size, pi.size);
+      (ctx as any).drawImage(playerImg, pi.x - halfW, pi.y - halfH, pw, ph);
       ctx.restore();
     } else {
-      (ctx as any).drawImage(playerImg, pi.x - half, pi.y - half, pi.size, pi.size);
+      (ctx as any).drawImage(playerImg, pi.x - halfW, pi.y - halfH, pw, ph);
     }
   }
 
@@ -166,7 +191,7 @@ export async function generateMapMvpImage(
   if (cfg.team2_name.enabled)  drawText(ctx, team2Name,                    cfg.team2_name.x,  cfg.team2_name.y,  fieldFont(cfg.team2_name),  cfg.team2_name.color);
 
   // Label MVP
-  if (cfg.mvp_label.enabled)   drawText(ctx, "★ MVP", cfg.mvp_label.x, cfg.mvp_label.y, fieldFont(cfg.mvp_label), cfg.mvp_label.color);
+  if (cfg.mvp_label.enabled)   drawText(ctx, "MVP", cfg.mvp_label.x, cfg.mvp_label.y, fieldFont(cfg.mvp_label), cfg.mvp_label.color);
 
   // Nom du joueur
   if (cfg.player_name.enabled) drawText(ctx, player.name, cfg.player_name.x, cfg.player_name.y, fieldFont(cfg.player_name), cfg.player_name.color);

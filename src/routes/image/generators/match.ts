@@ -12,7 +12,7 @@ async function tryLoadLogo(logoName: string | null | undefined) {
   const exts = [".png", ".svg", ".jpg", ".jpeg", ".webp"];
   const candidates = [
     ...exts.map(e => path.join(logosDir, logoName + e)),
-    path.join(logosDir, logoName),  // nom avec extension incluse
+    path.join(logosDir, logoName),
   ];
   for (const p of candidates) {
     if (fs.existsSync(p)) {
@@ -20,6 +20,28 @@ async function tryLoadLogo(logoName: string | null | undefined) {
     }
   }
   return null;
+}
+
+/** Charge un drapeau : local public/img/flags/ en priorité, sinon flagcdn.com */
+async function tryLoadFlag(flag: string | null | undefined) {
+  if (!flag) return null;
+  const code = flag.toLowerCase();
+  const flagsDir = path.join(process.cwd(), "public", "img", "flags");
+  const exts = [".png", ".svg", ".jpg"];
+  for (const ext of exts) {
+    const p = path.join(flagsDir, code + ext);
+    if (fs.existsSync(p)) {
+      try { return await loadImage(p); } catch { /* skip */ }
+    }
+  }
+  // Fallback CDN
+  try { return await loadImage(`https://flagcdn.com/w160/${code}.png`); } catch { /* skip */ }
+  return null;
+}
+
+/** Charge un logo, avec fallback sur le drapeau de l'équipe */
+async function tryLoadLogoOrFlag(logo: string | null | undefined, flag: string | null | undefined) {
+  return (await tryLoadLogo(logo)) ?? (await tryLoadFlag(flag));
 }
 
 /** Dessine un logo centré sur (cx, cy) avec une taille size×size */
@@ -39,8 +61,8 @@ export async function generateMatchImage(
 ): Promise<Buffer> {
   // Précharger les logos d'équipes
   const [logo1, logo2] = await Promise.all([
-    tryLoadLogo(match.team1_logo),
-    tryLoadLogo(match.team2_logo),
+    tryLoadLogoOrFlag(match.team1_logo, match.team1_flag),
+    tryLoadLogoOrFlag(match.team2_logo, match.team2_flag),
   ]);
   const m  = s.match;
   const W  = s.canvas.width;
