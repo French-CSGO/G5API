@@ -115,6 +115,38 @@ router.post(
   }
 );
 
+/** GET /image/players — liste les images de joueurs dans public/img/players/ */
+router.get("/players", (_req: Request, res: Response) => {
+  const playersDir = path.join(process.cwd(), "public", "img", "players");
+  try {
+    const files = fs.existsSync(playersDir)
+      ? fs.readdirSync(playersDir).filter(f => /\.(png|jpg|jpeg|webp)$/i.test(f))
+      : [];
+    res.json(files);
+  } catch {
+    res.json([]);
+  }
+});
+
+/** POST /image/upload/player — upload d'une image joueur dans public/img/players/{steamid}.png */
+router.post(
+  "/upload/player",
+  upload.single("file") as any,
+  (req: MReq, res: Response) => {
+    if (!req.file) { res.status(400).json({ error: "No file received." }); return; }
+    const steamId = (req as any).body?.steam_id as string | undefined;
+    if (!steamId || !/^\d{17}$/.test(steamId)) {
+      res.status(400).json({ error: "Invalid or missing steam_id (must be 17 digits)." });
+      return;
+    }
+    const playersDir = path.join(process.cwd(), "public", "img", "players");
+    if (!fs.existsSync(playersDir)) fs.mkdirSync(playersDir, { recursive: true });
+    const dest = path.join(playersDir, `${steamId}.png`);
+    writeFileSafe(dest, req.file.buffer);
+    res.json({ filename: `${steamId}.png` });
+  }
+);
+
 /** POST /image/upload/font — sauvegarde un fichier dans public/fonts/ */
 router.post(
   "/upload/font",
