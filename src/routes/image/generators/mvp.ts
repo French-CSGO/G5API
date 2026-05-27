@@ -38,7 +38,8 @@ async function tryLoadMapImage(mapName: string) {
 }
 
 /** Dessine un logo centré sur (cx, cy) avec une taille size×size */
-function drawLogoCentered(ctx: ReturnType<typeof createCanvas>["getContext"], img: any, cfg: LogoConfig) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function drawLogoCentered(ctx: any, img: any, cfg: LogoConfig) {
   if (!img) return;
   const half = cfg.size / 2;
   ctx.drawImage(img, cfg.x - half, cfg.y - half, cfg.size, cfg.size);
@@ -92,8 +93,8 @@ export async function generateMapMvpImage(
     tryLoadLogo(match.team1_logo),
     tryLoadLogo(match.team2_logo),
   ]);
-  if (cfg.team1_logo?.enabled) drawLogoCentered(ctx as any, logo1, cfg.team1_logo);
-  if (cfg.team2_logo?.enabled) drawLogoCentered(ctx as any, logo2, cfg.team2_logo);
+  if (cfg.team1_logo?.enabled) drawLogoCentered(ctx, logo1, cfg.team1_logo);
+  if (cfg.team2_logo?.enabled) drawLogoCentered(ctx, logo2, cfg.team2_logo);
 
   // ── Graphical shapes ──────────────────────────────────────────────────────
   const sh = cfg.shapes;

@@ -23,7 +23,8 @@ async function tryLoadLogo(logoName: string | null | undefined) {
 }
 
 /** Dessine un logo centré sur (cx, cy) avec une taille size×size */
-function drawLogoCentered(ctx: ReturnType<typeof createCanvas>["getContext"], img: any, cfg: LogoConfig) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function drawLogoCentered(ctx: any, img: any, cfg: LogoConfig) {
   if (!img) return;
   const half = cfg.size / 2;
   ctx.drawImage(img, cfg.x - half, cfg.y - half, cfg.size, cfg.size);
@@ -156,8 +157,8 @@ export async function generateMatchImage(
   }
 
   // ── Logos d'équipes ────────────────────────────────────────────────────────
-  if (m.team1_logo?.enabled) drawLogoCentered(ctx as any, logo1, m.team1_logo);
-  if (m.team2_logo?.enabled) drawLogoCentered(ctx as any, logo2, m.team2_logo);
+  if (m.team1_logo?.enabled) drawLogoCentered(ctx, logo1, m.team1_logo);
+  if (m.team2_logo?.enabled) drawLogoCentered(ctx, logo2, m.team2_logo);
 
   // ── Team names + series scores ──────────────────────────────────────────────
   if (m.team1_name.enabled)  drawText(ctx, team1Name,       m.team1_name.x,  m.team1_name.y,  fieldFont(m.team1_name),  m.team1_name.color);
