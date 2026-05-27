@@ -285,12 +285,98 @@ async function renderMatchImage(req: Request, res: Response, mapParam: number | 
   }
 }
 
-// ─── MVP image route ──────────────────────────────────────────────────────────
+// ─── MVP image routes ─────────────────────────────────────────────────────────
+
+/** GET /image/match/:match_id/mvp — image MVP du match complet (stats agrégées toutes maps) */
+router.get("/match/:match_id/mvp", async (req: Request, res: Response) => {
+  await renderFullMatchMvpImage(req, res);
+});
 
 /** GET /image/match/:match_id/map/:map_number/mvp — image MVP de la map */
 router.get("/match/:match_id/map/:map_number/mvp", async (req: Request, res: Response) => {
   await renderMvpImage(req, res);
 });
+
+async function renderFullMatchMvpImage(req: Request, res: Response) {
+  try {
+    const matchId = parseInt(req.params.match_id);
+    if (isNaN(matchId)) { res.status(400).json({ error: "Invalid match ID" }); return; }
+
+    const matchRows = await db.query(
+      `SELECT m.team1_id, m.team2_id, m.team1_string, m.team2_string,
+              t1.name AS team1_name, t2.name AS team2_name,
+              t1.logo AS team1_logo, t2.logo AS team2_logo,
+              t1.flag AS team1_flag, t2.flag AS team2_flag
+       FROM \`match\` m
+       LEFT JOIN team t1 ON t1.id = m.team1_id
+       LEFT JOIN team t2 ON t2.id = m.team2_id
+       WHERE m.id = ?`,
+      [matchId]
+    ) as MatchRow[];
+    if (!matchRows?.length) { res.status(404).json({ error: "Match not found" }); return; }
+
+    // All maps for series score
+    const allMaps = await db.query(
+      `SELECT id, map_name, team1_score, team2_score FROM map_stats WHERE match_id = ? ORDER BY map_number ASC`,
+      [matchId]
+    ) as MapStatRow[];
+    if (!allMaps?.length) { res.status(404).json({ error: "No maps found for this match" }); return; }
+
+    // Series score (maps won)
+    const t1Score = allMaps.filter(r => r.team1_score > r.team2_score).length;
+    const t2Score = allMaps.filter(r => r.team2_score > r.team1_score).length;
+
+    // Synthesize a "mapRow" representing the full match
+    const syntheticMap: MapStatRow = {
+      id:          0,
+      map_name:    "match",
+      team1_score: t1Score,
+      team2_score: t2Score,
+    } as MapStatRow;
+
+    // Aggregate player stats across all maps
+    const players = await db.query(
+      `SELECT steam_id, name, team_id,
+         SUM(kills)          AS kills,
+         SUM(deaths)         AS deaths,
+         SUM(assists)        AS assists,
+         SUM(roundsplayed)   AS roundsplayed,
+         SUM(headshot_kills) AS headshot_kills,
+         SUM(k1) AS k1, SUM(k2) AS k2, SUM(k3) AS k3, SUM(k4) AS k4, SUM(k5) AS k5,
+         SUM(v1) AS v1, SUM(v2) AS v2, SUM(v3) AS v3, SUM(v4) AS v4, SUM(v5) AS v5
+       FROM player_stats
+       WHERE match_id = ?
+       GROUP BY steam_id, team_id`,
+      [matchId]
+    ) as PlayerStatExtended[];
+    if (!players?.length) { res.status(404).json({ error: "No player stats found for this match" }); return; }
+
+    // MVP = player with highest HLTV 2.0 rating (aggregated)
+    const mvpPlayer = players.reduce((best, p) => {
+      const r = Utils.getRating(
+        Number(p.kills), Number(p.roundsplayed), Number(p.deaths),
+        Number(p.k1), Number(p.k2), Number(p.k3), Number(p.k4), Number(p.k5)
+      );
+      const rBest = Utils.getRating(
+        Number(best.kills), Number(best.roundsplayed), Number(best.deaths),
+        Number(best.k1), Number(best.k2), Number(best.k3), Number(best.k4), Number(best.k5)
+      );
+      return r > rBest ? p : best;
+    });
+
+    // Disable map image for full-match MVP (no single map background)
+    const settings = loadSettings();
+    settings.mvp.map_image = { enabled: false };
+
+    const png = await generateMapMvpImage(matchRows[0], syntheticMap, mvpPlayer, settings);
+    res.setHeader("Content-Type", "image/png");
+    res.setHeader("Cache-Control", "no-cache, no-store");
+    res.send(png);
+  } catch (err) {
+    console.error("[image/mvp-match] Error:", err);
+    res.status(500).json({ error: "Failed to generate full match MVP image" });
+  }
+}
 
 async function renderMvpImage(req: Request, res: Response) {
   try {
