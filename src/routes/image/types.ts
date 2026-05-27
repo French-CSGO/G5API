@@ -202,6 +202,13 @@ export interface ImageSettings {
     team2_logo:   LogoConfig;
     column_headers: PlayerColumnHeaders;
     map_image:    { enabled: boolean; };
+    player_image: {
+      enabled: boolean;
+      x:       number;   // centre X
+      y:       number;   // centre Y
+      size:    number;
+      circle:  boolean;  // découpe circulaire
+    };
     shapes: {
       enabled:     boolean;
       team_pill: {

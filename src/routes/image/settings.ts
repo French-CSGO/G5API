@@ -111,7 +111,8 @@ export const DEFAULT_SETTINGS: ImageSettings = {
       kills_label: "K", assists_label: "A", deaths_label: "D",
       rating_label: "RTG", hs_label: "HS%", clutches_label: "CL",
     },
-    map_image: { enabled: true },
+    map_image:    { enabled: true },
+    player_image: { enabled: true, x: 960, y: 480, size: 120, circle: true },
     shapes: {
       enabled: false,
       team_pill: {
@@ -368,6 +369,7 @@ export function loadSettings(): ImageSettings {
         team2_logo:   { ...dv.team2_logo, ...(sv.team2_logo ?? {}) },
         column_headers: { ...dv.column_headers, ...(sv.column_headers ?? {}) },
         map_image:    { ...dv.map_image,    ...(sv.map_image    ?? {}) },
+        player_image: { ...dv.player_image, ...(sv.player_image ?? {}) },
         shapes: {
           ...dv.shapes,
           ...(sv.shapes ?? {}),

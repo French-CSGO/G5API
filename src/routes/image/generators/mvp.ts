@@ -37,6 +37,20 @@ async function tryLoadMapImage(mapName: string) {
   return null;
 }
 
+/** Charge l'image d'un joueur depuis public/img/players/{steamId}.{ext} */
+async function tryLoadPlayerImage(steamId: string) {
+  if (!steamId) return null;
+  const playersDir = path.join(process.cwd(), "public", "img", "players");
+  const exts = [".png", ".jpg", ".jpeg", ".webp"];
+  for (const ext of exts) {
+    const p = path.join(playersDir, steamId + ext);
+    if (fs.existsSync(p)) {
+      try { return await loadImage(p); } catch { /* skip */ }
+    }
+  }
+  return null;
+}
+
 /** Dessine un logo centré sur (cx, cy) avec une taille size×size */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function drawLogoCentered(ctx: any, img: any, cfg: LogoConfig) {
@@ -88,13 +102,31 @@ export async function generateMapMvpImage(
     }
   }
 
-  // ── Logos d'équipes ───────────────────────────────────────────────────────
-  const [logo1, logo2] = await Promise.all([
+  // ── Logos d'équipes + photo joueur ───────────────────────────────────────
+  const [logo1, logo2, playerImg] = await Promise.all([
     tryLoadLogo(match.team1_logo),
     tryLoadLogo(match.team2_logo),
+    cfg.player_image?.enabled ? tryLoadPlayerImage(player.steam_id) : Promise.resolve(null),
   ]);
   if (cfg.team1_logo?.enabled) drawLogoCentered(ctx, logo1, cfg.team1_logo);
   if (cfg.team2_logo?.enabled) drawLogoCentered(ctx, logo2, cfg.team2_logo);
+
+  // ── Photo joueur ──────────────────────────────────────────────────────────
+  const pi = cfg.player_image;
+  if (pi?.enabled && playerImg) {
+    const half = pi.size / 2;
+    if (pi.circle) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(pi.x, pi.y, half, 0, Math.PI * 2);
+      ctx.closePath();
+      ctx.clip();
+      (ctx as any).drawImage(playerImg, pi.x - half, pi.y - half, pi.size, pi.size);
+      ctx.restore();
+    } else {
+      (ctx as any).drawImage(playerImg, pi.x - half, pi.y - half, pi.size, pi.size);
+    }
+  }
 
   // ── Graphical shapes ──────────────────────────────────────────────────────
   const sh = cfg.shapes;

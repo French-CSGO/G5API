@@ -19,7 +19,8 @@ import Utils from "../utility/utils.js";
 
 import { generate } from "randomstring";
 
-import { writeFile, unlink } from "fs";
+import { writeFile, unlink, mkdirSync } from "fs";
+import path from "path";
 
 import fetch from "node-fetch";
 import { RowDataPacket } from "mysql2";
@@ -416,10 +417,12 @@ router.post("/", Utils.ensureAuthenticated, async (req, res) => {
       length: 5,
       charset: "alphanumeric",
     });
+    const logosDir = path.join(process.cwd(), "public", "img", "logos");
+    mkdirSync(logosDir, { recursive: true });
     if (logo.includes("data:image/png;base64")) {
       let base64Data: string = logo.replace(/^data:image\/png;base64,/, "");
       writeFile(
-        "public/img/logos/" + logoName + ".png",
+        path.join(logosDir, logoName + ".png"),
         base64Data,
         "base64",
         err => {
@@ -430,15 +433,15 @@ router.post("/", Utils.ensureAuthenticated, async (req, res) => {
       let base64Data: string = Buffer.from(logo).toString('base64').replace(/^data:image\/([\w+]+);base64,([\s\S]+)/, "");
       let baseImg: any = img(Buffer.from(base64Data, 'base64').toString());
       writeFile(
-        "public/img/logos/" + logoName + ".svg",
+        path.join(logosDir, logoName + ".svg"),
         baseImg.base64,
-        { encoding: 'base64' }, 
+        { encoding: 'base64' },
         err => {
           if (err) console.error(err);
         }
       );
     }
-    
+
   }
   let newTeam: Array<TeamData> = [
     {
@@ -585,10 +588,12 @@ router.put("/", Utils.ensureAuthenticated, async (req, res) => {
       res.status(413).json({ message: "Logo image too large (max 2MB)." });
       return;
     }
+    const logosDir = path.join(process.cwd(), "public", "img", "logos");
+    mkdirSync(logosDir, { recursive: true });
     if (teamLogo.includes("data:image/png;base64")) {
       let base64Data: string = teamLogo.replace(/^data:image\/png;base64,/, "");
       writeFile(
-        "public/img/logos/" + logoName + ".png",
+        path.join(logosDir, logoName + ".png"),
         base64Data,
         "base64",
         err => {
@@ -599,9 +604,9 @@ router.put("/", Utils.ensureAuthenticated, async (req, res) => {
       let base64Data: string = Buffer.from(teamLogo).toString('base64').replace(/^data:image\/([\w+]+);base64,([\s\S]+)/, "");
       let baseImg: any = img(Buffer.from(base64Data, 'base64').toString());
       writeFile(
-        "public/img/logos/" + logoName + ".svg",
+        path.join(logosDir, logoName + ".svg"),
         baseImg.base64,
-        { encoding: 'base64' }, 
+        { encoding: 'base64' },
         err => {
           if (err) console.error(err);
         }
