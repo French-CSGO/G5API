@@ -184,7 +184,9 @@ export interface ImageSettings {
   mvp: {
     background:   string;
     fontFile:     string;
-    map_name:     FC;
+    map1:         FC;
+    map2:         FC;
+    map3:         FC;
     team1_name:   FC;
     team1_score:  FC;
     team2_score:  FC;

@@ -436,7 +436,13 @@ async function renderMvpImage(req: Request, res: Response) {
       return r > rBest ? p : best;
     });
 
-    const png = await generateMapMvpImage(matchRows[0], mapRow, mvpPlayer, loadSettings());
+    // Fetch all maps for the series so map slots are always populated
+    const allMaps = await db.query(
+      `SELECT id, map_name, team1_score, team2_score FROM map_stats WHERE match_id = ? ORDER BY map_number ASC`,
+      [matchId]
+    ) as MapStatRow[];
+
+    const png = await generateMapMvpImage(matchRows[0], mapRow, mvpPlayer, loadSettings(), allMaps);
     res.setHeader("Content-Type", "image/png");
     res.setHeader("Cache-Control", "no-cache, no-store");
     res.send(png);
