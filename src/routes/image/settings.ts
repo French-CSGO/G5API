@@ -89,7 +89,9 @@ export const DEFAULT_SETTINGS: ImageSettings = {
   mvp: {
     background:   "marble.png",
     fontFile:     "",
-    map_name:     fc(true, "Arial", "#ffffff", 22, false, 960, 80),
+    map1:         fc(true, "Arial", "#ffffff", 20, false,  480, 130),
+    map2:         fc(true, "Arial", "#ffffff", 20, false,  960, 130),
+    map3:         fc(true, "Arial", "#ffffff", 20, false, 1440, 130),
     team1_name:   fc(true, "Arial", "#ffffff", 32, true, 450, 200),
     team1_score:  fc(true, "Arial", "#ffffff", 32, true, 800, 200),
     team2_score:  fc(true, "Arial", "#ffffff", 32, true, 1120, 200),
@@ -111,7 +113,7 @@ export const DEFAULT_SETTINGS: ImageSettings = {
       kills_label: "K", assists_label: "A", deaths_label: "D",
       rating_label: "RTG", hs_label: "HS%", clutches_label: "CL",
     },
-    map_image:    { enabled: true },
+    map_image:    { enabled: false },
     player_image: { enabled: true, x: 960, y: 480, size: 120, width: 120, height: 200, circle: false },
     shapes: {
       enabled: false,
@@ -351,7 +353,9 @@ export function loadSettings(): ImageSettings {
       mvp: {
         background:   sv.background ?? dv.background,
         fontFile:     sv.fontFile   ?? dv.fontFile,
-        map_name:     mergeFC(dv.map_name,    sv.map_name),
+        map1:         mergeFC(dv.map1,         sv.map1),
+        map2:         mergeFC(dv.map2,         sv.map2),
+        map3:         mergeFC(dv.map3,         sv.map3),
         team1_name:   mergeFC(dv.team1_name,  sv.team1_name),
         team1_score:  mergeFC(dv.team1_score, sv.team1_score),
         team2_score:  mergeFC(dv.team2_score, sv.team2_score),

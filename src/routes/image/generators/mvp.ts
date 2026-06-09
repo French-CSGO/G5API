@@ -93,7 +93,8 @@ export async function generateMapMvpImage(
   match: MatchRow,
   mapRow: MapStatRow,
   player: PlayerStatExtended,
-  s: ImageSettings
+  s: ImageSettings,
+  allMaps?: MapStatRow[]
 ): Promise<Buffer> {
   const cfg = s.mvp;
   const W   = s.canvas.width;
@@ -101,7 +102,8 @@ export async function generateMapMvpImage(
 
   // Enregistrement des fonts
   tryRegisterFont(cfg.fontFile, [
-    cfg.map_name, cfg.team1_name, cfg.team1_score, cfg.team2_score, cfg.team2_name,
+    cfg.map1, cfg.map2, cfg.map3,
+    cfg.team1_name, cfg.team1_score, cfg.team2_score, cfg.team2_name,
     cfg.mvp_label, cfg.player_name, cfg.player_team,
     cfg.kills, cfg.assists, cfg.deaths, cfg.rating, cfg.hs, cfg.clutches,
   ].map(f => f.font));
@@ -184,10 +186,15 @@ export async function generateMapMvpImage(
   const team1Name = match.team1_string || match.team1_name || "Team 1";
   const team2Name = match.team2_string || match.team2_name || "Team 2";
 
-  if (cfg.map_name.enabled) {
-    const displayMap = mapRow.map_name.replace(/^(de_|cs_|ar_)/, "").toUpperCase();
-    drawText(ctx, displayMap, cfg.map_name.x, cfg.map_name.y, fieldFont(cfg.map_name), cfg.map_name.color);
-  }
+  // Draw up to 3 map slots horizontally using allMaps[0..2]
+  const mapSlots = [cfg.map1, cfg.map2, cfg.map3];
+  mapSlots.forEach((slot, i) => {
+    if (!slot.enabled) return;
+    const r = allMaps?.[i];
+    if (!r) return;
+    const label = `${r.team1_score}  ${r.map_name.replace(/^(de_|cs_|ar_)/, "").toUpperCase()}  ${r.team2_score}`;
+    drawText(ctx, label, slot.x, slot.y, fieldFont(slot), slot.color);
+  });
   if (cfg.team1_name.enabled)  drawText(ctx, team1Name,                    cfg.team1_name.x,  cfg.team1_name.y,  fieldFont(cfg.team1_name),  cfg.team1_name.color);
   if (cfg.team1_score.enabled) drawText(ctx, String(mapRow.team1_score),   cfg.team1_score.x, cfg.team1_score.y, fieldFont(cfg.team1_score), cfg.team1_score.color);
   if (cfg.team2_score.enabled) drawText(ctx, String(mapRow.team2_score),   cfg.team2_score.x, cfg.team2_score.y, fieldFont(cfg.team2_score), cfg.team2_score.color);
