@@ -368,7 +368,7 @@ async function renderFullMatchMvpImage(req: Request, res: Response) {
     const settings = loadSettings();
     settings.mvp.map_image = { enabled: false };
 
-    const png = await generateMapMvpImage(matchRows[0], syntheticMap, mvpPlayer, settings);
+    const png = await generateMapMvpImage(matchRows[0], syntheticMap, mvpPlayer, settings, allMaps);
     res.setHeader("Content-Type", "image/png");
     res.setHeader("Cache-Control", "no-cache, no-store");
     res.send(png);

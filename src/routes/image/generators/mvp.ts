@@ -2,7 +2,7 @@ import { createCanvas, loadImage } from "canvas";
 import path from "path";
 import fs from "fs";
 import Utils from "../../../utility/utils.js";
-import { drawText, drawRoundRect, fieldFont, tryRegisterFont } from "../helpers.js";
+import { drawText, drawMultilineText, drawRoundRect, fieldFont, tryRegisterFont } from "../helpers.js";
 import type { ImageSettings, LogoConfig, PlayerStatExtended, MatchRow, MapStatRow } from "../types.js";
 
 /** Charge un logo depuis public/img/logos/ — retourne null si introuvable */
@@ -93,7 +93,8 @@ export async function generateMapMvpImage(
   match: MatchRow,
   mapRow: MapStatRow,
   player: PlayerStatExtended,
-  s: ImageSettings
+  s: ImageSettings,
+  allMaps?: MapStatRow[]
 ): Promise<Buffer> {
   const cfg = s.mvp;
   const W   = s.canvas.width;
@@ -185,8 +186,16 @@ export async function generateMapMvpImage(
   const team2Name = match.team2_string || match.team2_name || "Team 2";
 
   if (cfg.map_name.enabled) {
-    const displayMap = mapRow.map_name.replace(/^(de_|cs_|ar_)/, "").toUpperCase();
-    drawText(ctx, displayMap, cfg.map_name.x, cfg.map_name.y, fieldFont(cfg.map_name), cfg.map_name.color);
+    if (allMaps && allMaps.length > 1) {
+      const mapDisplay = allMaps
+        .map(r => `${r.team1_score}  ${r.map_name.replace(/^(de_|cs_|ar_)/, "").toUpperCase()}  ${r.team2_score}`)
+        .join("\n");
+      const lineHeight = Math.round(cfg.map_name.size * 1.5);
+      drawMultilineText(ctx, mapDisplay, cfg.map_name.x, cfg.map_name.y, fieldFont(cfg.map_name), cfg.map_name.color, lineHeight);
+    } else {
+      const displayMap = mapRow.map_name.replace(/^(de_|cs_|ar_)/, "").toUpperCase();
+      drawText(ctx, displayMap, cfg.map_name.x, cfg.map_name.y, fieldFont(cfg.map_name), cfg.map_name.color);
+    }
   }
   if (cfg.team1_name.enabled)  drawText(ctx, team1Name,                    cfg.team1_name.x,  cfg.team1_name.y,  fieldFont(cfg.team1_name),  cfg.team1_name.color);
   if (cfg.team1_score.enabled) drawText(ctx, String(mapRow.team1_score),   cfg.team1_score.x, cfg.team1_score.y, fieldFont(cfg.team1_score), cfg.team1_score.color);
