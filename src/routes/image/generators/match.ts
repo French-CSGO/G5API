@@ -1,8 +1,56 @@
 import { createCanvas, loadImage } from "canvas";
 import path from "path";
+import fs from "fs";
 import Utils from "../../../utility/utils.js";
 import { drawText, drawMultilineText, drawRoundRect, fieldFont, tryRegisterFont } from "../helpers.js";
-import type { ImageSettings, MatchRow, MapStatRow, PlayerStatRow, PlayerWithRating } from "../types.js";
+import type { ImageSettings, LogoConfig, MatchRow, MapStatRow, PlayerStatRow, PlayerWithRating } from "../types.js";
+
+/** Charge un logo depuis public/img/logos/ — retourne null si introuvable */
+async function tryLoadLogo(logoName: string | null | undefined) {
+  if (!logoName) return null;
+  const logosDir = path.join(process.cwd(), "public", "img", "logos");
+  const exts = [".png", ".svg", ".jpg", ".jpeg", ".webp"];
+  const candidates = [
+    ...exts.map(e => path.join(logosDir, logoName + e)),
+    path.join(logosDir, logoName),
+  ];
+  for (const p of candidates) {
+    if (fs.existsSync(p)) {
+      try { return await loadImage(p); } catch { /* skip */ }
+    }
+  }
+  return null;
+}
+
+/** Charge un drapeau : local public/img/flags/ en priorité, sinon flagcdn.com */
+async function tryLoadFlag(flag: string | null | undefined) {
+  if (!flag) return null;
+  const code = flag.toLowerCase();
+  const flagsDir = path.join(process.cwd(), "public", "img", "flags");
+  const exts = [".png", ".svg", ".jpg"];
+  for (const ext of exts) {
+    const p = path.join(flagsDir, code + ext);
+    if (fs.existsSync(p)) {
+      try { return await loadImage(p); } catch { /* skip */ }
+    }
+  }
+  // Fallback CDN
+  try { return await loadImage(`https://flagcdn.com/w160/${code}.png`); } catch { /* skip */ }
+  return null;
+}
+
+/** Charge un logo, avec fallback sur le drapeau de l'équipe */
+async function tryLoadLogoOrFlag(logo: string | null | undefined, flag: string | null | undefined) {
+  return (await tryLoadLogo(logo)) ?? (await tryLoadFlag(flag));
+}
+
+/** Dessine un logo centré sur (cx, cy) avec une taille size×size */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function drawLogoCentered(ctx: any, img: any, cfg: LogoConfig) {
+  if (!img) return;
+  const half = cfg.size / 2;
+  ctx.drawImage(img, cfg.x - half, cfg.y - half, cfg.size, cfg.size);
+}
 
 export async function generateMatchImage(
   match: MatchRow,
@@ -11,6 +59,11 @@ export async function generateMatchImage(
   players: PlayerStatRow[],
   s: ImageSettings
 ): Promise<Buffer> {
+  // Précharger les logos d'équipes
+  const [logo1, logo2] = await Promise.all([
+    tryLoadLogoOrFlag(match.team1_logo, match.team1_flag),
+    tryLoadLogoOrFlag(match.team2_logo, match.team2_flag),
+  ]);
   const m  = s.match;
   const W  = s.canvas.width;
   const H  = s.canvas.height;
@@ -124,6 +177,10 @@ export async function generateMatchImage(
       });
     }
   }
+
+  // ── Logos d'équipes ────────────────────────────────────────────────────────
+  if (m.team1_logo?.enabled) drawLogoCentered(ctx, logo1, m.team1_logo);
+  if (m.team2_logo?.enabled) drawLogoCentered(ctx, logo2, m.team2_logo);
 
   // ── Team names + series scores ──────────────────────────────────────────────
   if (m.team1_name.enabled)  drawText(ctx, team1Name,       m.team1_name.x,  m.team1_name.y,  fieldFont(m.team1_name),  m.team1_name.color);

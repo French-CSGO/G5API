@@ -644,4 +644,224 @@ router.get("/:match_id/:map_number/overtime", async (req, res) => {
   }
 });
 
+/** GET /mapstats/:match_id/mvp — Best player (by HLTV rating) for the entire match */
+router.get("/:match_id/mvp", async (req, res) => {
+  try {
+    const matchId = parseInt(req.params.match_id);
+    if (isNaN(matchId)) {
+      res.status(400).json({ message: "Invalid match_id" });
+      return;
+    }
+
+    const matchRows: RowDataPacket[] = await db.query(
+      `SELECT m.team1_id, m.team2_id, m.team1_string, m.team2_string,
+              t1.name AS team1_name, t1.logo AS team1_logo,
+              t2.name AS team2_name, t2.logo AS team2_logo
+       FROM \`match\` m
+       LEFT JOIN team t1 ON t1.id = m.team1_id
+       LEFT JOIN team t2 ON t2.id = m.team2_id
+       WHERE m.id = ?`,
+      [matchId]
+    );
+
+    if (!matchRows.length) {
+      res.status(404).json({ message: "Match not found" });
+      return;
+    }
+
+    const players: RowDataPacket[] = await db.query(
+      `SELECT ps.steam_id, ps.name, ps.team_id,
+         SUM(ps.kills) AS kills, SUM(ps.deaths) AS deaths, SUM(ps.assists) AS assists,
+         SUM(ps.roundsplayed) AS roundsplayed, SUM(ps.headshot_kills) AS headshot_kills,
+         SUM(ps.damage) AS damage,
+         SUM(ps.k1) AS k1, SUM(ps.k2) AS k2, SUM(ps.k3) AS k3, SUM(ps.k4) AS k4, SUM(ps.k5) AS k5,
+         SUM(ps.v1) AS v1, SUM(ps.v2) AS v2, SUM(ps.v3) AS v3, SUM(ps.v4) AS v4, SUM(ps.v5) AS v5,
+         SUM(ps.kast) AS kast, SUM(ps.contribution_score) AS contribution_score, SUM(ps.mvp) AS mvp
+       FROM player_stats ps
+       WHERE ps.match_id = ?
+       GROUP BY ps.steam_id, ps.team_id`,
+      [matchId]
+    );
+
+    if (!players.length) {
+      res.status(404).json({ message: "No player stats found" });
+      return;
+    }
+
+    const mvp = findMvpPlayer(players);
+    if (!mvp) {
+      res.status(404).json({ message: "No MVP found" });
+      return;
+    }
+
+    res.json(buildMvpResponse(mvp, matchRows[0], null, null));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: (err as Error).toString() });
+  }
+});
+
+/** GET /mapstats/:match_id/:map_number/mvp — Best player for a specific map (map_number is 0-indexed in DB) */
+router.get("/:match_id/:map_number/mvp", async (req, res) => {
+  try {
+    const matchId = parseInt(req.params.match_id);
+    const mapNumber = parseInt(req.params.map_number);
+
+    if (isNaN(matchId) || isNaN(mapNumber)) {
+      res.status(400).json({ message: "Invalid match_id or map_number" });
+      return;
+    }
+
+    const mapStatRows: RowDataPacket[] = await db.query(
+      "SELECT id, map_name, team1_score, team2_score FROM map_stats WHERE match_id = ? AND map_number = ? LIMIT 1",
+      [matchId, mapNumber]
+    );
+
+    if (!mapStatRows.length) {
+      res.status(404).json({ message: "Map stats not found" });
+      return;
+    }
+
+    const mapStat = mapStatRows[0];
+
+    const players: RowDataPacket[] = await db.query(
+      `SELECT ps.steam_id, ps.name, ps.team_id,
+         SUM(ps.kills) AS kills, SUM(ps.deaths) AS deaths, SUM(ps.assists) AS assists,
+         SUM(ps.roundsplayed) AS roundsplayed, SUM(ps.headshot_kills) AS headshot_kills,
+         SUM(ps.damage) AS damage,
+         SUM(ps.k1) AS k1, SUM(ps.k2) AS k2, SUM(ps.k3) AS k3, SUM(ps.k4) AS k4, SUM(ps.k5) AS k5,
+         SUM(ps.v1) AS v1, SUM(ps.v2) AS v2, SUM(ps.v3) AS v3, SUM(ps.v4) AS v4, SUM(ps.v5) AS v5,
+         SUM(ps.kast) AS kast, SUM(ps.contribution_score) AS contribution_score, SUM(ps.mvp) AS mvp
+       FROM player_stats ps
+       WHERE ps.match_id = ? AND ps.map_id = ?
+       GROUP BY ps.steam_id, ps.team_id`,
+      [matchId, mapStat.id]
+    );
+
+    if (!players.length) {
+      res.status(404).json({ message: "No player stats found for this map" });
+      return;
+    }
+
+    const mvp = findMvpPlayer(players);
+    if (!mvp) {
+      res.status(404).json({ message: "No MVP found" });
+      return;
+    }
+
+    const matchRows: RowDataPacket[] = await db.query(
+      `SELECT m.team1_id, m.team2_id, m.team1_string, m.team2_string,
+              t1.name AS team1_name, t1.logo AS team1_logo,
+              t2.name AS team2_name, t2.logo AS team2_logo
+       FROM \`match\` m
+       LEFT JOIN team t1 ON t1.id = m.team1_id
+       LEFT JOIN team t2 ON t2.id = m.team2_id
+       WHERE m.id = ?`,
+      [matchId]
+    );
+
+    if (!matchRows.length) {
+      res.status(404).json({ message: "Match not found" });
+      return;
+    }
+
+    res.json(buildMvpResponse(mvp, matchRows[0], mapStat.map_name, {
+      team1_score: mapStat.team1_score,
+      team2_score: mapStat.team2_score
+    }));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: (err as Error).toString() });
+  }
+});
+
+function findMvpPlayer(players: RowDataPacket[]): (RowDataPacket & { rating: number }) | null {
+  let mvpPlayer: (RowDataPacket & { rating: number }) | null = null;
+  let maxRating = -1;
+
+  for (const player of players) {
+    const rp = parseFloat(player.roundsplayed as string) || 0;
+    if (rp > 0) {
+      const rating = Utils.getRating(
+        parseFloat(player.kills as string) || 0,
+        rp,
+        parseFloat(player.deaths as string) || 0,
+        parseFloat(player.k1 as string) || 0,
+        parseFloat(player.k2 as string) || 0,
+        parseFloat(player.k3 as string) || 0,
+        parseFloat(player.k4 as string) || 0,
+        parseFloat(player.k5 as string) || 0
+      );
+      if (rating > maxRating) {
+        maxRating = rating;
+        mvpPlayer = { ...player, rating };
+      }
+    }
+  }
+
+  return mvpPlayer;
+}
+
+function buildMvpResponse(
+  mvp: RowDataPacket & { rating: number },
+  match: RowDataPacket,
+  mapName: string | null,
+  scores: { team1_score: number; team2_score: number } | null
+) {
+  const kills = parseFloat(mvp.kills as string) || 0;
+  const deaths = parseFloat(mvp.deaths as string) || 0;
+  const assists = parseFloat(mvp.assists as string) || 0;
+  const roundsPlayed = parseFloat(mvp.roundsplayed as string) || 0;
+  const headshots = parseFloat(mvp.headshot_kills as string) || 0;
+  const damage = parseFloat(mvp.damage as string) || 0;
+
+  const isTeam1 = mvp.team_id === match.team1_id;
+  const teamName = isTeam1
+    ? (match.team1_string || match.team1_name || "Team 1")
+    : (match.team2_string || match.team2_name || "Team 2");
+  const teamLogo = isTeam1 ? match.team1_logo : match.team2_logo;
+
+  return {
+    mvp: {
+      steam_id: mvp.steam_id,
+      name: mvp.name,
+      team_id: mvp.team_id,
+      team_name: teamName,
+      team_logo: teamLogo,
+      map_name: mapName,
+      team1_score: scores?.team1_score ?? null,
+      team2_score: scores?.team2_score ?? null,
+      rating: mvp.rating,
+      kills,
+      deaths,
+      assists,
+      roundsplayed: roundsPlayed,
+      headshot_kills: headshots,
+      hsp: kills > 0 ? parseFloat(((headshots / kills) * 100).toFixed(1)) : 0,
+      adr: roundsPlayed > 0 ? parseFloat((damage / roundsPlayed).toFixed(1)) : 0,
+      kdr: deaths > 0 ? parseFloat((kills / deaths).toFixed(2)) : kills,
+      k2: parseFloat(mvp.k2 as string) || 0,
+      k3: parseFloat(mvp.k3 as string) || 0,
+      k4: parseFloat(mvp.k4 as string) || 0,
+      k5: parseFloat(mvp.k5 as string) || 0,
+      v1: parseFloat(mvp.v1 as string) || 0,
+      v2: parseFloat(mvp.v2 as string) || 0,
+      v3: parseFloat(mvp.v3 as string) || 0,
+      v4: parseFloat(mvp.v4 as string) || 0,
+      v5: parseFloat(mvp.v5 as string) || 0,
+      kast: parseFloat(mvp.kast as string) || 0,
+      mvp_count: parseFloat(mvp.mvp as string) || 0,
+      contribution_score: parseFloat(mvp.contribution_score as string) || 0
+    },
+    match: {
+      team1_id: match.team1_id,
+      team2_id: match.team2_id,
+      team1_name: match.team1_string || match.team1_name || "Team 1",
+      team2_name: match.team2_string || match.team2_name || "Team 2",
+      team1_logo: match.team1_logo,
+      team2_logo: match.team2_logo
+    }
+  };
+}
+
 export default router;

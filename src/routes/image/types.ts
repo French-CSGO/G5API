@@ -50,6 +50,14 @@ export interface PlayerColumnHeaders {
   clutches_label:  string;
 }
 
+/** Position + size d'un logo d'équipe */
+export interface LogoConfig {
+  enabled: boolean;
+  x:       number;   // centre X
+  y:       number;   // centre Y
+  size:    number;   // taille (largeur = hauteur)
+}
+
 export interface ImageSettings {
   canvas: { width: number; height: number };
 
@@ -72,6 +80,8 @@ export interface ImageSettings {
     assists_r: FX;
     deaths_r:  FX;
     rating_r:  FX;
+    team1_logo: LogoConfig;
+    team2_logo: LogoConfig;
     column_headers: MatchColumnHeaders;
     shapes: {
       enabled:           boolean;
@@ -131,6 +141,76 @@ export interface ImageSettings {
     hs:       FC;
     clutches: FC;
     column_headers: PlayerColumnHeaders;
+    shapes: {
+      enabled:     boolean;
+      team_pill: {
+        enabled:      boolean;
+        fill:         string;
+        alpha:        number;
+        radius:       number;
+        width:        number;
+        height:       number;
+        border:       string;
+        border_alpha: number;
+        border_width: number;
+      };
+      player_pill: {
+        enabled:      boolean;
+        fill:         string;
+        alpha:        number;
+        radius:       number;
+        width:        number;
+        height:       number;
+        border:       string;
+        border_alpha: number;
+        border_width: number;
+      };
+      stats_bar: {
+        enabled:      boolean;
+        fill:         string;
+        alpha:        number;
+        radius:       number;
+        x:            number;
+        y:            number;
+        width:        number;
+        height:       number;
+        border:       string;
+        border_alpha: number;
+        border_width: number;
+      };
+    };
+  };
+
+  mvp: {
+    background:   string;
+    fontFile:     string;
+    map_name:     FC;
+    team1_name:   FC;
+    team1_score:  FC;
+    team2_score:  FC;
+    team2_name:   FC;
+    mvp_label:    FC;
+    player_name:  FC;
+    player_team:  FC;
+    kills:        FC;
+    assists:      FC;
+    deaths:       FC;
+    rating:       FC;
+    hs:           FC;
+    clutches:     FC;
+    team1_logo:   LogoConfig;
+    team2_logo:   LogoConfig;
+    column_headers: PlayerColumnHeaders;
+    map_image:    { enabled: boolean; };
+    player_image: {
+      enabled: boolean;
+      x:       number;   // centre X
+      y:       number;   // centre Y
+      size:    number;   // fallback if width/height not set
+      width:   number;   // largeur (rectangle)
+      height:  number;   // hauteur (rectangle)
+      circle:  boolean;  // découpe circulaire
+    };
     shapes: {
       enabled:     boolean;
       team_pill: {
@@ -268,6 +348,8 @@ export interface MatchRow extends RowDataPacket {
   team1_id: number; team2_id: number;
   team1_string: string | null; team2_string: string | null;
   team1_name: string | null;   team2_name: string | null;
+  team1_logo: string | null;   team2_logo: string | null;
+  team1_flag: string | null;   team2_flag: string | null;
 }
 export interface MapStatRow extends RowDataPacket {
   id: number; map_name: string;

@@ -58,6 +58,7 @@ app.use("/backups", express.static("public/backups"));
 app.use("/static/img/logos", express.static("public/img/logos"));
 app.use("/resource/flash/econ/tournaments/teams", express.static("public/img/logos"));
 app.use("/materials/panorama/images/tournaments/teams", express.static("public/img/logos"));
+app.use("/static/img/players", express.static("public/img/players"));
 
 
 // Security defaults with helmet
