@@ -1,7 +1,6 @@
-import { createCanvas, loadImage } from "canvas";
-import path from "path";
+import { createCanvas } from "canvas";
 import Utils from "../../../utility/utils.js";
-import { drawText, drawRoundRect, fieldFont, tryRegisterFont } from "../helpers.js";
+import { drawText, drawRoundRect, drawBackground, fieldFont, tryRegisterFont } from "../helpers.js";
 import type { ImageSettings, PlayerStatExtended } from "../types.js";
 
 export async function generatePlayerImage(
@@ -17,47 +16,35 @@ export async function generatePlayerImage(
   tryRegisterFont(cfg.fontFile, [
     cfg.team1_name, cfg.vs, cfg.team2_name, cfg.player_name,
     cfg.kills, cfg.assists, cfg.deaths, cfg.rating, cfg.hs, cfg.clutches,
+    { font: cfg.column_headers.font },
   ].map(f => f.font));
 
   const canvas = createCanvas(W, H);
   const ctx    = canvas.getContext("2d");
 
-  try {
-    ctx.drawImage(await loadImage(path.join(process.cwd(), "public", "img", cfg.background)), 0, 0, W, H);
-  } catch {
-    ctx.fillStyle = "#f0ebe3";
-    ctx.fillRect(0, 0, W, H);
-  }
+  await drawBackground(ctx, cfg.background, W, H, "#f0ebe3");
 
   // ── Graphical shapes ──────────────────────────────────────────────────────
   const sh = cfg.shapes;
   if (sh.enabled) {
-    // Team name pills (behind team1_name, and a combined pill for vs+team2_name)
     if (sh.team_pill.enabled) {
       const tp = sh.team_pill;
       const hw = tp.width / 2;
       const hh = tp.height / 2;
       if (cfg.team1_name.enabled)
         drawRoundRect(ctx, cfg.team1_name.x - hw, cfg.team1_name.y - hh, tp.width, tp.height, tp.radius, tp.fill, tp.alpha, tp.border, tp.border_alpha, tp.border_width);
-      // VS + team2 share one pill: tight left edge (just radius before VS), full hw after team2
       if (cfg.vs.enabled || cfg.team2_name.enabled) {
-        const refY  = cfg.vs.enabled ? cfg.vs.y : cfg.team2_name.y;
+        const refY     = cfg.vs.enabled ? cfg.vs.y : cfg.team2_name.y;
         const clampedR = Math.min(tp.radius, tp.height / 2);
-        const leftX  = cfg.vs.enabled
-          ? cfg.vs.x - clampedR
-          : cfg.team2_name.x - hw;
-        const rightX = cfg.team2_name.enabled
-          ? cfg.team2_name.x + hw
-          : cfg.vs.x + hw;
+        const leftX    = cfg.vs.enabled ? cfg.vs.x - clampedR : cfg.team2_name.x - hw;
+        const rightX   = cfg.team2_name.enabled ? cfg.team2_name.x + hw : cfg.vs.x + hw;
         drawRoundRect(ctx, leftX, refY - hh, rightX - leftX, tp.height, tp.radius, tp.fill, tp.alpha, tp.border, tp.border_alpha, tp.border_width);
       }
     }
-    // Player name pill
     if (sh.player_pill.enabled && cfg.player_name.enabled) {
       const pp = sh.player_pill;
       drawRoundRect(ctx, cfg.player_name.x - pp.width / 2, cfg.player_name.y - pp.height / 2, pp.width, pp.height, pp.radius, pp.fill, pp.alpha, pp.border, pp.border_alpha, pp.border_width);
     }
-    // Stats bar (behind all stat values)
     if (sh.stats_bar.enabled) {
       const sb = sh.stats_bar;
       const statY = sb.y > 0 ? sb.y
@@ -66,12 +53,9 @@ export async function generatePlayerImage(
     }
   }
 
-  // Team names + VS
   if (cfg.team1_name.enabled)  drawText(ctx, team1Name,  cfg.team1_name.x,  cfg.team1_name.y,  fieldFont(cfg.team1_name),  cfg.team1_name.color);
   if (cfg.vs.enabled)          drawText(ctx, "VS",        cfg.vs.x,          cfg.vs.y,          fieldFont(cfg.vs),          cfg.vs.color);
   if (cfg.team2_name.enabled)  drawText(ctx, team2Name,  cfg.team2_name.x,  cfg.team2_name.y,  fieldFont(cfg.team2_name),  cfg.team2_name.color);
-
-  // Player name
   if (cfg.player_name.enabled) drawText(ctx, player.name, cfg.player_name.x, cfg.player_name.y, fieldFont(cfg.player_name), cfg.player_name.color);
 
   const kills    = Number(player.kills);
@@ -86,7 +70,6 @@ export async function generatePlayerImage(
   );
   const hsp = kills > 0 ? Math.round((hsk / kills) * 100) : 0;
 
-  // ── Column headers ─────────────────────────────────────────────────────────
   const ch = cfg.column_headers;
   if (ch.enabled) {
     const chFont = `${ch.bold ? "bold " : ""}${ch.size}px ${ch.font}`;
@@ -98,7 +81,6 @@ export async function generatePlayerImage(
     if (ch.clutches_label) drawText(ctx, ch.clutches_label, cfg.clutches.x, ch.y2, chFont, ch.color);
   }
 
-  // Stats
   if (cfg.kills.enabled)    drawText(ctx, String(kills),    cfg.kills.x,    cfg.kills.y,    fieldFont(cfg.kills),    cfg.kills.color);
   if (cfg.assists.enabled)  drawText(ctx, String(assists),  cfg.assists.x,  cfg.assists.y,  fieldFont(cfg.assists),  cfg.assists.color);
   if (cfg.deaths.enabled)   drawText(ctx, String(deaths),   cfg.deaths.x,   cfg.deaths.y,   fieldFont(cfg.deaths),   cfg.deaths.color);

@@ -250,6 +250,18 @@ export interface ImageSettings {
         border_alpha: number;
         border_width: number;
       };
+      map_pill: {
+        enabled:       boolean;
+        fill:          string;
+        alpha:         number;
+        current_alpha: number;
+        radius:        number;
+        width:         number;
+        height:        number;
+        border:        string;
+        border_alpha:  number;
+        border_width:  number;
+      };
     };
   };
 

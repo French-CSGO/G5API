@@ -129,6 +129,18 @@ export const DEFAULT_SETTINGS: ImageSettings = {
         enabled: true, fill: "#000000", alpha: 0.3, radius: 22,
         x: 420, y: 0, width: 1140, height: 70, border: "#ffffff", border_alpha: 0.1, border_width: 1,
       },
+      map_pill: {
+        enabled:       true,
+        fill:          "#000000",
+        alpha:         0.3,
+        current_alpha: 0.7,
+        radius:        8,
+        width:         280,
+        height:        40,
+        border:        "#ffffff",
+        border_alpha:  0.2,
+        border_width:  1,
+      },
     },
   },
 
@@ -380,6 +392,7 @@ export function loadSettings(): ImageSettings {
           team_pill:   { ...dv.shapes.team_pill,   ...(sv.shapes?.team_pill   ?? {}) },
           player_pill: { ...dv.shapes.player_pill, ...(sv.shapes?.player_pill ?? {}) },
           stats_bar:   { ...dv.shapes.stats_bar,   ...(sv.shapes?.stats_bar   ?? {}) },
+          map_pill:    { ...dv.shapes.map_pill,    ...(sv.shapes?.map_pill    ?? {}) },
         },
       },
       team_season: {
@@ -411,7 +424,8 @@ export function loadSettings(): ImageSettings {
         },
       },
     };
-  } catch {
+  } catch (err) {
+    console.error("[image] loadSettings failed, using defaults:", err);
     return { ...DEFAULT_SETTINGS };
   }
 }
