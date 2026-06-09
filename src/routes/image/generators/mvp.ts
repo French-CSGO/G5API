@@ -110,25 +110,22 @@ export async function generateMapMvpImage(
   const ctx    = canvas.getContext("2d");
 
   // ── Background ────────────────────────────────────────────────────────────
-  let mapImgLoaded = false;
+  // 1. Fond custom — toujours dessiné en premier
+  try {
+    ctx.drawImage(await loadImage(path.join(process.cwd(), "public", "img", cfg.background)), 0, 0, W, H);
+  } catch {
+    ctx.fillStyle = "#1a1a2e";
+    ctx.fillRect(0, 0, W, H);
+  }
+  // 2. Image de map par-dessus (si activée), avec overlay sombre
   if (cfg.map_image?.enabled) {
     const mapImg = await tryLoadMapImage(mapRow.map_name);
     if (mapImg) {
       ctx.drawImage(mapImg, 0, 0, W, H);
-      // Overlay sombre pour lisibilité
       ctx.globalAlpha = 0.55;
       ctx.fillStyle = "#000000";
       ctx.fillRect(0, 0, W, H);
       ctx.globalAlpha = 1;
-      mapImgLoaded = true;
-    }
-  }
-  if (!mapImgLoaded) {
-    try {
-      ctx.drawImage(await loadImage(path.join(process.cwd(), "public", "img", cfg.background)), 0, 0, W, H);
-    } catch {
-      ctx.fillStyle = "#1a1a2e";
-      ctx.fillRect(0, 0, W, H);
     }
   }
 
