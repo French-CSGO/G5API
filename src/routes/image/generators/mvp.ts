@@ -58,13 +58,22 @@ async function tryLoadMapImage(mapName: string) {
   return null;
 }
 
-/** Charge l'image d'un joueur depuis public/img/players/{steamId}.{ext} */
+/** Charge l'image d'un joueur depuis public/img/players/{steamId}.{ext}, fallback sur default.{ext} */
 async function tryLoadPlayerImage(steamId: string) {
-  if (!steamId) return null;
   const playersDir = path.join(process.cwd(), "public", "img", "players");
   const exts = [".png", ".jpg", ".jpeg", ".webp"];
+  // Image spécifique au joueur
+  if (steamId) {
+    for (const ext of exts) {
+      const p = path.join(playersDir, steamId + ext);
+      if (fs.existsSync(p)) {
+        try { return await loadImage(p); } catch { /* skip */ }
+      }
+    }
+  }
+  // Fallback image par défaut
   for (const ext of exts) {
-    const p = path.join(playersDir, steamId + ext);
+    const p = path.join(playersDir, "default" + ext);
     if (fs.existsSync(p)) {
       try { return await loadImage(p); } catch { /* skip */ }
     }
