@@ -124,8 +124,8 @@ export async function generateMapMvpImage(
       const playedMap = allMaps?.[i];
       const isCurrent = slotIdx === curSlot;
 
-      // Box behind map name
-      if (cfg.shapes?.enabled && mp?.enabled) {
+      // Box behind map name — independent of the master shapes switch
+      if (mp?.enabled) {
         const pillAlpha = isCurrent ? mp.current_alpha : mp.alpha;
         drawRoundRect(
           ctx,
