@@ -111,7 +111,7 @@ export const DEFAULT_SETTINGS: ImageSettings = {
       kills_label: "K", assists_label: "A", deaths_label: "D",
       rating_label: "RTG", hs_label: "HS%", clutches_label: "CL",
     },
-    map_image:    { enabled: true },
+    map_image:    { enabled: false },
     player_image: { enabled: true, x: 960, y: 480, size: 120, width: 120, height: 200, circle: false },
     shapes: {
       enabled: false,
