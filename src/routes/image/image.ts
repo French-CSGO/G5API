@@ -45,7 +45,7 @@ async function fetchMatchRow(matchId: number): Promise<MatchRow | null> {
 
 async function fetchAllMaps(matchId: number): Promise<MapStatRow[]> {
   return (await db.query(
-    `SELECT id, map_name, team1_score, team2_score FROM map_stats WHERE match_id = ? ORDER BY map_number ASC`,
+    `SELECT id, map_name, map_number, team1_score, team2_score FROM map_stats WHERE match_id = ? ORDER BY map_number ASC`,
     [matchId]
   )) as MapStatRow[];
 }
@@ -291,6 +291,21 @@ async function renderMatchImage(req: Request, res: Response, mapParam: number | 
       allMaps = []; // per-map mode: map name only, no scores
     }
 
+    // Map slots (map1/map2/map3) — full series order, with planned (unplayed) maps from veto
+    const [mapSlots, plannedMaps] = await Promise.all([
+      fetchAllMaps(matchId),
+      fetchVetoPicks(matchId),
+    ]);
+
+    let currentSlotIndex = -1;
+    if (mode === "byNumber" && mapParam !== null) {
+      currentSlotIndex = mapParam - 1;
+    } else if (mode === "latest" && mapRow) {
+      currentSlotIndex = mapSlots.findIndex(r => r.id === mapRow!.id);
+    }
+    const totalMaps = plannedMaps.length || mapSlots.length;
+    if (totalMaps === 1 && currentSlotIndex >= 0) currentSlotIndex = 1;
+
     // For "latest" and "byNumber", filter player stats to that specific map
     // For "full", aggregate across all maps
     const filterByMap = mode !== "full" && mapStatsId !== null;
@@ -308,7 +323,7 @@ async function renderMatchImage(req: Request, res: Response, mapParam: number | 
       playerArgs
     ) as PlayerStatRow[];
 
-    const png = await generateMatchImage(match, mapRow, allMaps, players, loadSettings());
+    const png = await generateMatchImage(match, mapRow, allMaps, players, loadSettings(), mapSlots, plannedMaps, currentSlotIndex);
     res.setHeader("Content-Type", "image/png");
     res.setHeader("Cache-Control", "no-cache, no-store");
     res.send(png);

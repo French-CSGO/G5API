@@ -1,6 +1,6 @@
 import { createCanvas } from "canvas";
 import Utils from "../../../utility/utils.js";
-import { drawText, drawMultilineText, drawRoundRect, drawLogoCentered, drawBackground, fieldFont, tryRegisterFont } from "../helpers.js";
+import { drawText, drawRoundRect, drawLogoCentered, drawBackground, fieldFont, tryRegisterFont } from "../helpers.js";
 import { tryLoadLogoOrFlag, stripMapPrefix } from "./loaders.js";
 import type { ImageSettings, LogoConfig, MatchRow, MapStatRow, PlayerStatRow, PlayerWithRating } from "../types.js";
 
@@ -9,14 +9,18 @@ export async function generateMatchImage(
   mapRow: MapStatRow | null,
   allMaps: MapStatRow[],
   players: PlayerStatRow[],
-  s: ImageSettings
+  s: ImageSettings,
+  mapSlots?: MapStatRow[],
+  plannedMapNames?: string[],
+  currentSlotIndex?: number,
 ): Promise<Buffer> {
   const m = s.match;
   const W = s.canvas.width;
   const H = s.canvas.height;
 
   tryRegisterFont(m.fontFile, [
-    m.team1_name, m.team1_score, m.team2_score, m.team2_name, m.map_name,
+    m.team1_name, m.team1_score, m.team2_score, m.team2_name,
+    m.map1, m.map2, m.map3,
     m.player_name_l, m.player_name_r,
     m.kills_l, m.assists_l, m.deaths_l, m.rating_l,
     m.kills_r, m.assists_r, m.deaths_r, m.rating_r,
@@ -98,10 +102,6 @@ export async function generateMatchImage(
     ? allMaps.filter(r => r.team2_score > r.team1_score).length
     : (mapRow?.team2_score ?? 0);
 
-  const mapDisplay = allMaps.length > 0
-    ? allMaps.map(r => `${r.team1_score}  ${stripMapPrefix(r.map_name)}  ${r.team2_score}`).join("\n")
-    : (mapRow?.map_name ? stripMapPrefix(mapRow.map_name).split("").join(" ") : "");
-
   if (m.team1_name.enabled)  drawText(ctx, team1Name,       m.team1_name.x,  m.team1_name.y,  fieldFont(m.team1_name),  m.team1_name.color);
   if (m.team1_score.enabled) drawText(ctx, String(t1Score), m.team1_score.x, m.team1_score.y, fieldFont(m.team1_score), m.team1_score.color);
   if (m.team2_score.enabled) drawText(ctx, String(t2Score), m.team2_score.x, m.team2_score.y, fieldFont(m.team2_score), m.team2_score.color);
@@ -155,9 +155,43 @@ export async function generateMatchImage(
     }
   }
 
-  if (m.map_name.enabled && mapDisplay) {
-    const lineHeight = Math.round(m.map_name.size * 1.5);
-    drawMultilineText(ctx, mapDisplay, m.map_name.x, m.map_name.y, fieldFont(m.map_name), m.map_name.color, lineHeight);
+  // ── Map slots ─────────────────────────────────────────────────────────────
+  {
+    const slotsData = mapSlots ?? allMaps;
+    const mapNames: string[] = plannedMapNames?.length
+      ? plannedMapNames.slice(0, 3)
+      : slotsData.slice(0, 3).map(r => r.map_name);
+
+    const slotIndices: (0 | 1 | 2)[] = mapNames.length === 1 ? [1] : [0, 1, 2];
+    const slotCfgs = [m.map1, m.map2, m.map3] as const;
+    const mp = m.shapes?.map_pill;
+    const curSlot = currentSlotIndex ?? -1;
+
+    mapNames.forEach((name, i) => {
+      const slotIdx = slotIndices[i] ?? (i as 0 | 1 | 2);
+      const slot = slotCfgs[slotIdx];
+      if (!slot?.enabled) return;
+
+      const playedMap = slotsData[i];
+      const isCurrent = slotIdx === curSlot;
+
+      if (mp?.enabled) {
+        const pillAlpha = isCurrent ? mp.current_alpha : mp.alpha;
+        drawRoundRect(
+          ctx,
+          slot.x - mp.width / 2, slot.y - mp.height / 2,
+          mp.width, mp.height, mp.radius,
+          mp.fill, pillAlpha,
+          mp.border, mp.border_alpha, mp.border_width
+        );
+      }
+
+      const displayName = stripMapPrefix(name);
+      const text = playedMap
+        ? `${playedMap.team1_score}  ${displayName}  ${playedMap.team2_score}`
+        : displayName;
+      drawText(ctx, text, slot.x, slot.y, fieldFont(slot), slot.color);
+    });
   }
 
   return canvas.toBuffer("image/png");
