@@ -8,6 +8,47 @@ import { CHALLONGE_V2_BASE, challongeHeaders, challongeFetch, parseV2Match, pars
 
 let client: Client | null = null;
 
+// ─── Challonge bracket cache ──────────────────────────────────────────────────
+// updateSchedule() runs every minute, but Challonge brackets rarely change that
+// often, so cache each bracket's matches/participants for a few minutes to
+// avoid hammering the Challonge API quota.
+const CHALLONGE_CACHE_TTL_MS = 5 * 60 * 1000;
+interface ChallongeBracketData {
+  rawMatches: any[];
+  participantMap: Map<number, string>;
+}
+const challongeBracketCache = new Map<string, { data: ChallongeBracketData; expiresAt: number }>();
+
+async function getChallongeBracketData(slug: string, headers: Record<string, string>): Promise<ChallongeBracketData> {
+  const cached = challongeBracketCache.get(slug);
+  if (cached && cached.expiresAt > Date.now()) return cached.data;
+
+  const mRes = await challongeFetch(
+    `${CHALLONGE_V2_BASE}/tournaments/${slug}/matches.json?state=open&per_page=500`,
+    { headers }
+  ).catch(() => null);
+  const mData: any = mRes?.ok ? await mRes.json().catch(() => null) : null;
+  const rawMatches: any[] = Array.isArray(mData?.data) ? mData.data : (mData?.data ? [mData.data] : []);
+
+  const participantMap = new Map<number, string>();
+  const pRes = await challongeFetch(
+    `${CHALLONGE_V2_BASE}/tournaments/${slug}/participants.json?per_page=500`,
+    { headers }
+  ).catch(() => null);
+  if (pRes?.ok) {
+    const pData: any = await pRes.json().catch(() => null);
+    const rawParts: any[] = Array.isArray(pData?.data) ? pData.data : [];
+    for (const p of rawParts) {
+      const part = parseV2Participant(p);
+      participantMap.set(part.id, part.display_name);
+    }
+  }
+
+  const data: ChallongeBracketData = { rawMatches, participantMap };
+  challongeBracketCache.set(slug, { data, expiresAt: Date.now() + CHALLONGE_CACHE_TTL_MS });
+  return data;
+}
+
 function isDiscordEnabled(): boolean {
   return getSetting("discord.enabled") === "true" || getSetting("discord.enabled") === "1";
 }
@@ -418,28 +459,8 @@ export async function updateSchedule(): Promise<void> {
           const label = (bracket.label as string) || slug;
           const headers = challongeHeaders(challongeApiKey);
 
-          const mRes = await challongeFetch(
-            `${CHALLONGE_V2_BASE}/tournaments/${slug}/matches.json?state=open&per_page=500`,
-            { headers }
-          ).catch(() => null);
-          if (!mRes?.ok) continue;
-          const mData: any = await mRes.json().catch(() => null);
-          if (!mData) continue;
-          const rawMatches: any[] = Array.isArray(mData.data) ? mData.data : (mData.data ? [mData.data] : []);
-
-          const participantMap = new Map<number, string>();
-          const pRes = await challongeFetch(
-            `${CHALLONGE_V2_BASE}/tournaments/${slug}/participants.json?per_page=500`,
-            { headers }
-          ).catch(() => null);
-          if (pRes?.ok) {
-            const pData: any = await pRes.json().catch(() => null);
-            const rawParts: any[] = Array.isArray(pData?.data) ? pData.data : [];
-            for (const p of rawParts) {
-              const part = parseV2Participant(p);
-              participantMap.set(part.id, part.display_name);
-            }
-          }
+          const { rawMatches, participantMap } = await getChallongeBracketData(slug, headers);
+          if (!rawMatches.length) continue;
 
           const allBracketMatches = rawMatches
             .map(m => parseV2Match(m))
