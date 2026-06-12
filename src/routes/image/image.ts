@@ -26,6 +26,49 @@ import type {
 
 const router = Router();
 
+// ─── Shared DB helpers ────────────────────────────────────────────────────────
+
+async function fetchMatchRow(matchId: number): Promise<MatchRow | null> {
+  const rows = await db.query(
+    `SELECT m.team1_id, m.team2_id, m.team1_string, m.team2_string,
+            t1.name AS team1_name, t2.name AS team2_name,
+            t1.logo AS team1_logo, t2.logo AS team2_logo,
+            t1.flag AS team1_flag, t2.flag AS team2_flag
+     FROM \`match\` m
+     LEFT JOIN team t1 ON t1.id = m.team1_id
+     LEFT JOIN team t2 ON t2.id = m.team2_id
+     WHERE m.id = ?`,
+    [matchId]
+  ) as MatchRow[];
+  return rows?.[0] ?? null;
+}
+
+async function fetchAllMaps(matchId: number): Promise<MapStatRow[]> {
+  return (await db.query(
+    `SELECT id, map_name, map_number, team1_score, team2_score FROM map_stats WHERE match_id = ? ORDER BY map_number ASC`,
+    [matchId]
+  )) as MapStatRow[];
+}
+
+async function fetchVetoPicks(matchId: number): Promise<string[]> {
+  const rows = await db.query(
+    `SELECT map FROM veto WHERE match_id = ? AND pick_or_veto = 'pick' ORDER BY id ASC`,
+    [matchId]
+  ) as Array<{ map: string }>;
+  return rows.map(r => r.map);
+}
+
+function playerRating(p: PlayerStatExtended): number {
+  return Utils.getRating(
+    Number(p.kills), Number(p.roundsplayed), Number(p.deaths),
+    Number(p.k1), Number(p.k2), Number(p.k3), Number(p.k4), Number(p.k5)
+  );
+}
+
+function computeMvpPlayer(players: PlayerStatExtended[]): PlayerStatExtended {
+  return players.reduce((best, p) => playerRating(p) > playerRating(best) ? p : best);
+}
+
 // ─── Settings routes ──────────────────────────────────────────────────────────
 
 /** GET /image/fonts — liste les fichiers de police dans public/fonts/ */
@@ -206,18 +249,8 @@ async function renderMatchImage(req: Request, res: Response, mapParam: number | 
     const matchId = parseInt(req.params.match_id);
     if (isNaN(matchId)) { res.status(400).json({ error: "Invalid match ID" }); return; }
 
-    const matchRows = await db.query(
-      `SELECT m.team1_id, m.team2_id, m.team1_string, m.team2_string,
-              t1.name AS team1_name, t2.name AS team2_name,
-              t1.logo AS team1_logo, t2.logo AS team2_logo,
-              t1.flag AS team1_flag, t2.flag AS team2_flag
-       FROM \`match\` m
-       LEFT JOIN team t1 ON t1.id = m.team1_id
-       LEFT JOIN team t2 ON t2.id = m.team2_id
-       WHERE m.id = ?`,
-      [matchId]
-    ) as MatchRow[];
-    if (!matchRows?.length) { res.status(404).json({ error: "Match not found" }); return; }
+    const match = await fetchMatchRow(matchId);
+    if (!match) { res.status(404).json({ error: "Match not found" }); return; }
 
     let mapRow: MapStatRow | null = null;
     let mapStatsId: number | null = null;
@@ -258,6 +291,21 @@ async function renderMatchImage(req: Request, res: Response, mapParam: number | 
       allMaps = []; // per-map mode: map name only, no scores
     }
 
+    // Map slots (map1/map2/map3) — full series order, with planned (unplayed) maps from veto
+    const [mapSlots, plannedMaps] = await Promise.all([
+      fetchAllMaps(matchId),
+      fetchVetoPicks(matchId),
+    ]);
+
+    let currentSlotIndex = -1;
+    if (mode === "byNumber" && mapParam !== null) {
+      currentSlotIndex = mapParam - 1;
+    } else if (mode === "latest" && mapRow) {
+      currentSlotIndex = mapSlots.findIndex(r => r.id === mapRow!.id);
+    }
+    const totalMaps = plannedMaps.length || mapSlots.length;
+    if (totalMaps === 1 && currentSlotIndex >= 0) currentSlotIndex = 1;
+
     // For "latest" and "byNumber", filter player stats to that specific map
     // For "full", aggregate across all maps
     const filterByMap = mode !== "full" && mapStatsId !== null;
@@ -275,7 +323,7 @@ async function renderMatchImage(req: Request, res: Response, mapParam: number | 
       playerArgs
     ) as PlayerStatRow[];
 
-    const png = await generateMatchImage(matchRows[0], mapRow, allMaps, players, loadSettings());
+    const png = await generateMatchImage(match, mapRow, allMaps, players, loadSettings(), mapSlots, plannedMaps, currentSlotIndex);
     res.setHeader("Content-Type", "image/png");
     res.setHeader("Cache-Control", "no-cache, no-store");
     res.send(png);
@@ -302,73 +350,36 @@ async function renderFullMatchMvpImage(req: Request, res: Response) {
     const matchId = parseInt(req.params.match_id);
     if (isNaN(matchId)) { res.status(400).json({ error: "Invalid match ID" }); return; }
 
-    const matchRows = await db.query(
-      `SELECT m.team1_id, m.team2_id, m.team1_string, m.team2_string,
-              t1.name AS team1_name, t2.name AS team2_name,
-              t1.logo AS team1_logo, t2.logo AS team2_logo,
-              t1.flag AS team1_flag, t2.flag AS team2_flag
-       FROM \`match\` m
-       LEFT JOIN team t1 ON t1.id = m.team1_id
-       LEFT JOIN team t2 ON t2.id = m.team2_id
-       WHERE m.id = ?`,
-      [matchId]
-    ) as MatchRow[];
-    if (!matchRows?.length) { res.status(404).json({ error: "Match not found" }); return; }
-
-    // All maps for series score
-    const allMaps = await db.query(
-      `SELECT id, map_name, team1_score, team2_score FROM map_stats WHERE match_id = ? ORDER BY map_number ASC`,
-      [matchId]
-    ) as MapStatRow[];
+    const [match, allMaps, plannedMaps] = await Promise.all([
+      fetchMatchRow(matchId),
+      fetchAllMaps(matchId),
+      fetchVetoPicks(matchId),
+    ]);
+    if (!match) { res.status(404).json({ error: "Match not found" }); return; }
     if (!allMaps?.length) { res.status(404).json({ error: "No maps found for this match" }); return; }
 
-    // Series score (maps won)
     const t1Score = allMaps.filter(r => r.team1_score > r.team2_score).length;
     const t2Score = allMaps.filter(r => r.team2_score > r.team1_score).length;
+    const syntheticMap: MapStatRow = { id: 0, map_name: "match", team1_score: t1Score, team2_score: t2Score } as MapStatRow;
 
-    // Synthesize a "mapRow" representing the full match
-    const syntheticMap: MapStatRow = {
-      id:          0,
-      map_name:    "match",
-      team1_score: t1Score,
-      team2_score: t2Score,
-    } as MapStatRow;
-
-    // Aggregate player stats across all maps
     const players = await db.query(
       `SELECT steam_id, name, team_id,
-         SUM(kills)          AS kills,
-         SUM(deaths)         AS deaths,
-         SUM(assists)        AS assists,
-         SUM(roundsplayed)   AS roundsplayed,
-         SUM(headshot_kills) AS headshot_kills,
+         SUM(kills) AS kills, SUM(deaths) AS deaths, SUM(assists) AS assists,
+         SUM(roundsplayed) AS roundsplayed, SUM(headshot_kills) AS headshot_kills,
          SUM(k1) AS k1, SUM(k2) AS k2, SUM(k3) AS k3, SUM(k4) AS k4, SUM(k5) AS k5,
          SUM(v1) AS v1, SUM(v2) AS v2, SUM(v3) AS v3, SUM(v4) AS v4, SUM(v5) AS v5
-       FROM player_stats
-       WHERE match_id = ?
-       GROUP BY steam_id, team_id`,
+       FROM player_stats WHERE match_id = ? GROUP BY steam_id, team_id`,
       [matchId]
     ) as PlayerStatExtended[];
     if (!players?.length) { res.status(404).json({ error: "No player stats found for this match" }); return; }
 
-    // MVP = player with highest HLTV 2.0 rating (aggregated)
-    const mvpPlayer = players.reduce((best, p) => {
-      const r = Utils.getRating(
-        Number(p.kills), Number(p.roundsplayed), Number(p.deaths),
-        Number(p.k1), Number(p.k2), Number(p.k3), Number(p.k4), Number(p.k5)
-      );
-      const rBest = Utils.getRating(
-        Number(best.kills), Number(best.roundsplayed), Number(best.deaths),
-        Number(best.k1), Number(best.k2), Number(best.k3), Number(best.k4), Number(best.k5)
-      );
-      return r > rBest ? p : best;
-    });
+    const mvpPlayer = computeMvpPlayer(players);
+    const base = loadSettings();
+    // Don't mutate the loaded settings object — build a derived copy
+    const settings = { ...base, mvp: { ...base.mvp, map_image: { enabled: false } } };
 
-    // Disable map image for full-match MVP (no single map background)
-    const settings = loadSettings();
-    settings.mvp.map_image = { enabled: false };
-
-    const png = await generateMapMvpImage(matchRows[0], syntheticMap, mvpPlayer, settings, allMaps);
+    // Full match MVP: no single "current" map to highlight
+    const png = await generateMapMvpImage(match, syntheticMap, mvpPlayer, settings, allMaps, plannedMaps, -1);
     res.setHeader("Content-Type", "image/png");
     res.setHeader("Cache-Control", "no-cache, no-store");
     res.send(png);
@@ -380,69 +391,39 @@ async function renderFullMatchMvpImage(req: Request, res: Response) {
 
 async function renderMvpImage(req: Request, res: Response) {
   try {
-    const matchId  = parseInt(req.params.match_id);
+    const matchId   = parseInt(req.params.match_id);
     const mapNumber = parseInt(req.params.map_number);
-    if (isNaN(matchId))               { res.status(400).json({ error: "Invalid match ID" }); return; }
+    if (isNaN(matchId))                  { res.status(400).json({ error: "Invalid match ID" }); return; }
     if (isNaN(mapNumber) || mapNumber < 1) { res.status(400).json({ error: "Invalid map number" }); return; }
 
-    const matchRows = await db.query(
-      `SELECT m.team1_id, m.team2_id, m.team1_string, m.team2_string,
-              t1.name AS team1_name, t2.name AS team2_name,
-              t1.logo AS team1_logo, t2.logo AS team2_logo,
-              t1.flag AS team1_flag, t2.flag AS team2_flag
-       FROM \`match\` m
-       LEFT JOIN team t1 ON t1.id = m.team1_id
-       LEFT JOIN team t2 ON t2.id = m.team2_id
-       WHERE m.id = ?`,
-      [matchId]
-    ) as MatchRow[];
-    if (!matchRows?.length) { res.status(404).json({ error: "Match not found" }); return; }
+    const [match, allMaps, plannedMaps] = await Promise.all([
+      fetchMatchRow(matchId),
+      fetchAllMaps(matchId),
+      fetchVetoPicks(matchId),
+    ]);
+    if (!match) { res.status(404).json({ error: "Match not found" }); return; }
 
-    // Resolve map_number (1-indexed) to map_stats row
-    const mapRows = await db.query(
-      `SELECT id, map_name, team1_score, team2_score FROM map_stats WHERE match_id = ? AND map_number = ? LIMIT 1`,
-      [matchId, mapNumber - 1]
-    ) as MapStatRow[];
-    if (!mapRows?.length) { res.status(404).json({ error: `Map ${mapNumber} not found for this match` }); return; }
-    const mapRow = mapRows[0];
+    // map_number is 1-indexed from the user; DB stores 0-indexed
+    const mapRow = allMaps[mapNumber - 1] ?? null;
+    if (!mapRow) { res.status(404).json({ error: `Map ${mapNumber} not found for this match` }); return; }
 
-    // Fetch all players' extended stats for this specific map
     const players = await db.query(
       `SELECT steam_id, name, team_id,
-         SUM(kills)          AS kills,
-         SUM(deaths)         AS deaths,
-         SUM(assists)        AS assists,
-         SUM(roundsplayed)   AS roundsplayed,
-         SUM(headshot_kills) AS headshot_kills,
+         SUM(kills) AS kills, SUM(deaths) AS deaths, SUM(assists) AS assists,
+         SUM(roundsplayed) AS roundsplayed, SUM(headshot_kills) AS headshot_kills,
          SUM(k1) AS k1, SUM(k2) AS k2, SUM(k3) AS k3, SUM(k4) AS k4, SUM(k5) AS k5,
          SUM(v1) AS v1, SUM(v2) AS v2, SUM(v3) AS v3, SUM(v4) AS v4, SUM(v5) AS v5
-       FROM player_stats
-       WHERE match_id = ? AND map_id = ?
-       GROUP BY steam_id, team_id`,
+       FROM player_stats WHERE match_id = ? AND map_id = ? GROUP BY steam_id, team_id`,
       [matchId, mapRow.id]
     ) as PlayerStatExtended[];
     if (!players?.length) { res.status(404).json({ error: "No player stats found for this map" }); return; }
 
-    // MVP = player with highest HLTV 2.0 rating
-    const mvpPlayer = players.reduce((best, p) => {
-      const r = Utils.getRating(
-        Number(p.kills), Number(p.roundsplayed), Number(p.deaths),
-        Number(p.k1), Number(p.k2), Number(p.k3), Number(p.k4), Number(p.k5)
-      );
-      const rBest = Utils.getRating(
-        Number(best.kills), Number(best.roundsplayed), Number(best.deaths),
-        Number(best.k1), Number(best.k2), Number(best.k3), Number(best.k4), Number(best.k5)
-      );
-      return r > rBest ? p : best;
-    });
+    // BO1: single map goes in center slot (index 1); BO3+: slot = mapNumber - 1
+    const totalMaps = plannedMaps.length || allMaps.length;
+    const currentSlotIndex = totalMaps === 1 ? 1 : mapNumber - 1;
 
-    // Fetch all maps for the series so map slots are always populated
-    const allMaps = await db.query(
-      `SELECT id, map_name, team1_score, team2_score FROM map_stats WHERE match_id = ? ORDER BY map_number ASC`,
-      [matchId]
-    ) as MapStatRow[];
-
-    const png = await generateMapMvpImage(matchRows[0], mapRow, mvpPlayer, loadSettings(), allMaps);
+    const mvpPlayer = computeMvpPlayer(players);
+    const png = await generateMapMvpImage(match, mapRow, mvpPlayer, loadSettings(), allMaps, plannedMaps, currentSlotIndex);
     res.setHeader("Content-Type", "image/png");
     res.setHeader("Cache-Control", "no-cache, no-store");
     res.send(png);
@@ -472,28 +453,16 @@ async function renderPlayerImage(req: Request, res: Response, mapNumber: number 
     const steamId = req.params.steam_id;
     if (isNaN(matchId)) { res.status(400).json({ error: "Invalid match ID" }); return; }
 
-    const matchRows = await db.query(
-      `SELECT m.team1_id, m.team2_id, m.team1_string, m.team2_string,
-              t1.name AS team1_name, t2.name AS team2_name,
-              t1.logo AS team1_logo, t2.logo AS team2_logo,
-              t1.flag AS team1_flag, t2.flag AS team2_flag
-       FROM \`match\` m
-       LEFT JOIN team t1 ON t1.id = m.team1_id
-       LEFT JOIN team t2 ON t2.id = m.team2_id
-       WHERE m.id = ?`,
-      [matchId]
-    ) as MatchRow[];
-    if (!matchRows?.length) { res.status(404).json({ error: "Match not found" }); return; }
+    const match = await fetchMatchRow(matchId);
+    if (!match) { res.status(404).json({ error: "Match not found" }); return; }
 
     // Resolve map_number (1-indexed) to map_stats.id
     let mapId: number | null = null;
     if (mapNumber !== null) {
-      const mapRows = await db.query(
-        `SELECT id FROM map_stats WHERE match_id = ? AND map_number = ? LIMIT 1`,
-        [matchId, mapNumber - 1]
-      ) as MapStatRow[];
-      if (!mapRows?.length) { res.status(404).json({ error: `Map ${mapNumber} not found for this match` }); return; }
-      mapId = mapRows[0].id;
+      const allMaps = await fetchAllMaps(matchId);
+      const mapRow = allMaps[mapNumber - 1] ?? null;
+      if (!mapRow) { res.status(404).json({ error: `Map ${mapNumber} not found for this match` }); return; }
+      mapId = mapRow.id;
     }
 
     const mapFilter = mapId !== null ? "AND map_id = ?" : "";
@@ -511,7 +480,6 @@ async function renderPlayerImage(req: Request, res: Response, mapNumber: number 
     ) as PlayerStatExtended[];
     if (!players?.length) { res.status(404).json({ error: "Player not found in this match" }); return; }
 
-    const match     = matchRows[0];
     const player    = players[0];
     const isTeam1   = player.team_id === match.team1_id;
     const team1Name = match.team1_string || match.team1_name || "Team 1";

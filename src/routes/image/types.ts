@@ -69,7 +69,9 @@ export interface ImageSettings {
     team1_score:   FC;
     team2_score:   FC;
     team2_name:    FC;
-    map_name:      FC;
+    map1:          FC;
+    map2:          FC;
+    map3:          FC;
     player_name_l: FX;
     player_name_r: FX;
     kills_l:   FX;
@@ -123,6 +125,18 @@ export interface ImageSettings {
         odd_alpha:       number;
         even_fill:       string;
         even_alpha:      number;
+      };
+      map_pill: {
+        enabled:       boolean;
+        fill:          string;
+        alpha:         number;
+        current_alpha: number;
+        radius:        number;
+        width:         number;
+        height:        number;
+        border:        string;
+        border_alpha:  number;
+        border_width:  number;
       };
     };
   };
@@ -250,6 +264,18 @@ export interface ImageSettings {
         border_alpha: number;
         border_width: number;
       };
+      map_pill: {
+        enabled:       boolean;
+        fill:          string;
+        alpha:         number;
+        current_alpha: number;
+        radius:        number;
+        width:         number;
+        height:        number;
+        border:        string;
+        border_alpha:  number;
+        border_width:  number;
+      };
     };
   };
 
@@ -356,6 +382,7 @@ export interface MatchRow extends RowDataPacket {
 export interface MapStatRow extends RowDataPacket {
   id: number; map_name: string;
   team1_score: number; team2_score: number;
+  map_number?: number;
 }
 export interface PlayerStatRow extends RowDataPacket {
   steam_id: string; name: string; team_id: number;

@@ -1,122 +1,44 @@
-import { createCanvas, loadImage } from "canvas";
-import path from "path";
-import fs from "fs";
+import { createCanvas } from "canvas";
 import Utils from "../../../utility/utils.js";
-import { drawText, drawMultilineText, drawRoundRect, fieldFont, tryRegisterFont } from "../helpers.js";
+import { drawText, drawRoundRect, drawLogoCentered, drawBackground, fieldFont, tryRegisterFont } from "../helpers.js";
+import { tryLoadLogoOrFlag, stripMapPrefix } from "./loaders.js";
 import type { ImageSettings, LogoConfig, MatchRow, MapStatRow, PlayerStatRow, PlayerWithRating } from "../types.js";
-
-/** Charge un logo depuis public/img/logos/ — retourne null si introuvable */
-async function tryLoadLogo(logoName: string | null | undefined) {
-  if (!logoName) return null;
-  const logosDir = path.join(process.cwd(), "public", "img", "logos");
-  const exts = [".png", ".svg", ".jpg", ".jpeg", ".webp"];
-  const candidates = [
-    ...exts.map(e => path.join(logosDir, logoName + e)),
-    path.join(logosDir, logoName),
-  ];
-  for (const p of candidates) {
-    if (fs.existsSync(p)) {
-      try { return await loadImage(p); } catch { /* skip */ }
-    }
-  }
-  return null;
-}
-
-/** Charge un drapeau : local public/img/flags/ en priorité, sinon flagcdn.com */
-async function tryLoadFlag(flag: string | null | undefined) {
-  if (!flag) return null;
-  const code = flag.toLowerCase();
-  const flagsDir = path.join(process.cwd(), "public", "img", "flags");
-  const exts = [".png", ".svg", ".jpg"];
-  for (const ext of exts) {
-    const p = path.join(flagsDir, code + ext);
-    if (fs.existsSync(p)) {
-      try { return await loadImage(p); } catch { /* skip */ }
-    }
-  }
-  // Fallback CDN
-  try { return await loadImage(`https://flagcdn.com/w160/${code}.png`); } catch { /* skip */ }
-  return null;
-}
-
-/** Charge un logo, avec fallback sur le drapeau de l'équipe */
-async function tryLoadLogoOrFlag(logo: string | null | undefined, flag: string | null | undefined) {
-  return (await tryLoadLogo(logo)) ?? (await tryLoadFlag(flag));
-}
-
-/** Dessine un logo centré sur (cx, cy) avec une taille size×size */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function drawLogoCentered(ctx: any, img: any, cfg: LogoConfig) {
-  if (!img) return;
-  const half = cfg.size / 2;
-  ctx.drawImage(img, cfg.x - half, cfg.y - half, cfg.size, cfg.size);
-}
 
 export async function generateMatchImage(
   match: MatchRow,
   mapRow: MapStatRow | null,
   allMaps: MapStatRow[],
   players: PlayerStatRow[],
-  s: ImageSettings
+  s: ImageSettings,
+  mapSlots?: MapStatRow[],
+  plannedMapNames?: string[],
+  currentSlotIndex?: number,
 ): Promise<Buffer> {
-  // Précharger les logos d'équipes
-  const [logo1, logo2] = await Promise.all([
-    tryLoadLogoOrFlag(match.team1_logo, match.team1_flag),
-    tryLoadLogoOrFlag(match.team2_logo, match.team2_flag),
-  ]);
-  const m  = s.match;
-  const W  = s.canvas.width;
-  const H  = s.canvas.height;
+  const m = s.match;
+  const W = s.canvas.width;
+  const H = s.canvas.height;
 
   tryRegisterFont(m.fontFile, [
-    m.team1_name, m.team1_score, m.team2_score, m.team2_name, m.map_name,
+    m.team1_name, m.team1_score, m.team2_score, m.team2_name,
+    m.map1, m.map2, m.map3,
     m.player_name_l, m.player_name_r,
     m.kills_l, m.assists_l, m.deaths_l, m.rating_l,
     m.kills_r, m.assists_r, m.deaths_r, m.rating_r,
   ].map(f => f.font));
 
-  const withRating = (row: PlayerStatRow): PlayerWithRating => ({
-    ...row,
-    rating: Utils.getRating(
-      Number(row.kills), Number(row.roundsplayed), Number(row.deaths),
-      Number(row.k1), Number(row.k2), Number(row.k3), Number(row.k4), Number(row.k5)
-    ),
-  });
-
-  const team1Players = players.filter(pl => pl.team_id === match.team1_id).slice(0, 5).map(withRating);
-  const team2Players = players.filter(pl => pl.team_id === match.team2_id).slice(0, 5).map(withRating);
-
-  const team1Name = match.team1_string || match.team1_name || "Team 1";
-  const team2Name = match.team2_string || match.team2_name || "Team 2";
-
-  // Series score: count maps won by each team
-  const isMultiMap = allMaps.length > 1;
-  const t1Score = isMultiMap
-    ? allMaps.filter(r => r.team1_score > r.team2_score).length
-    : (mapRow?.team1_score ?? 0);
-  const t2Score = isMultiMap
-    ? allMaps.filter(r => r.team2_score > r.team1_score).length
-    : (mapRow?.team2_score ?? 0);
-
-  // Map display: one line per map "13 ANCIENT 12", or spaced single map name
-  const mapDisplay = allMaps.length > 0
-    ? allMaps.map(r => `${r.team1_score}  ${r.map_name.replace(/^de_/, "").toUpperCase()}  ${r.team2_score}`).join("\n")
-    : (mapRow?.map_name ?? "").replace(/^de_/, "").toUpperCase().split("").join(" ");
+  const [logo1, logo2] = await Promise.all([
+    tryLoadLogoOrFlag(match.team1_logo, match.team1_flag),
+    tryLoadLogoOrFlag(match.team2_logo, match.team2_flag),
+  ]);
 
   const canvas = createCanvas(W, H);
   const ctx    = canvas.getContext("2d");
 
-  try {
-    ctx.drawImage(await loadImage(path.join(process.cwd(), "public", "img", m.background)), 0, 0, W, H);
-  } catch {
-    ctx.fillStyle = "#f0ebe3";
-    ctx.fillRect(0, 0, W, H);
-  }
+  await drawBackground(ctx, m.background, W, H, "#f0ebe3");
 
-  // ── Graphical shapes (optional overlay) ────────────────────────────────────
+  // ── Graphical shapes ──────────────────────────────────────────────────────
   const sh = m.shapes;
   if (sh.enabled) {
-    // Team name pills
     if (sh.team_pill.enabled) {
       const tp = sh.team_pill;
       const hw = tp.width / 2;
@@ -125,7 +47,6 @@ export async function generateMatchImage(
       drawRoundRect(ctx, m.team2_name.x - hw, m.team2_name.y - hh, tp.width, tp.height, tp.radius, tp.fill, tp.alpha, tp.border, tp.border_alpha, tp.border_width);
     }
 
-    // Stats table backgrounds + row stripes
     if (sh.stats_table.enabled) {
       const st = sh.stats_table;
       const activeRows = m.rows_y.filter(y => y > 0);
@@ -134,39 +55,28 @@ export async function generateMatchImage(
         const lastY  = Math.max(...activeRows);
         const tableH = lastY - firstY + st.row_height;
         const tableY = firstY - st.row_height / 2;
-        // Draw both table backgrounds
         drawRoundRect(ctx, st.l_x, tableY, st.width, tableH, st.radius, st.fill, st.alpha);
         drawRoundRect(ctx, st.r_x, tableY, st.width, tableH, st.radius, st.fill, st.alpha);
-        // Row stripes
         activeRows.forEach((ry, i) => {
-          const rowY = ry - st.row_height / 2;
-          const isEven = i % 2 === 0;
-          const rFill  = isEven ? st.odd_fill  : st.even_fill;
-          const rAlpha = isEven ? st.odd_alpha : st.even_alpha;
+          const rowY  = ry - st.row_height / 2;
+          const rFill  = i % 2 === 0 ? st.odd_fill  : st.even_fill;
+          const rAlpha = i % 2 === 0 ? st.odd_alpha : st.even_alpha;
           if (rAlpha > 0) {
-            // Clip to table bounds for stripes
-            ctx.save();
-            ctx.beginPath();
-            ctx.rect(st.l_x, tableY, st.width, tableH);
-            ctx.clip();
-            ctx.globalAlpha = rAlpha;
-            ctx.fillStyle = rFill;
-            ctx.fillRect(st.l_x, rowY, st.width, st.row_height);
-            ctx.restore();
-            ctx.save();
-            ctx.beginPath();
-            ctx.rect(st.r_x, tableY, st.width, tableH);
-            ctx.clip();
-            ctx.globalAlpha = rAlpha;
-            ctx.fillStyle = rFill;
-            ctx.fillRect(st.r_x, rowY, st.width, st.row_height);
-            ctx.restore();
+            for (const lx of [st.l_x, st.r_x]) {
+              ctx.save();
+              ctx.beginPath();
+              ctx.rect(lx, tableY, st.width, tableH);
+              ctx.clip();
+              ctx.globalAlpha = rAlpha;
+              ctx.fillStyle = rFill;
+              ctx.fillRect(lx, rowY, st.width, st.row_height);
+              ctx.restore();
+            }
           }
         });
       }
     }
 
-    // Player name pills (left and right)
     if (sh.player_pill.enabled) {
       const pp = sh.player_pill;
       const hh = pp.height / 2;
@@ -178,31 +88,55 @@ export async function generateMatchImage(
     }
   }
 
-  // ── Logos d'équipes ────────────────────────────────────────────────────────
-  if (m.team1_logo?.enabled) drawLogoCentered(ctx, logo1, m.team1_logo);
-  if (m.team2_logo?.enabled) drawLogoCentered(ctx, logo2, m.team2_logo);
+  if (m.team1_logo?.enabled) drawLogoCentered(ctx, logo1, m.team1_logo as LogoConfig);
+  if (m.team2_logo?.enabled) drawLogoCentered(ctx, logo2, m.team2_logo as LogoConfig);
 
-  // ── Team names + series scores ──────────────────────────────────────────────
+  const team1Name = match.team1_string || match.team1_name || "Team 1";
+  const team2Name = match.team2_string || match.team2_name || "Team 2";
+
+  const isMultiMap = allMaps.length > 1;
+  const t1Score = isMultiMap
+    ? allMaps.filter(r => r.team1_score > r.team2_score).length
+    : (mapRow?.team1_score ?? 0);
+  const t2Score = isMultiMap
+    ? allMaps.filter(r => r.team2_score > r.team1_score).length
+    : (mapRow?.team2_score ?? 0);
+
   if (m.team1_name.enabled)  drawText(ctx, team1Name,       m.team1_name.x,  m.team1_name.y,  fieldFont(m.team1_name),  m.team1_name.color);
   if (m.team1_score.enabled) drawText(ctx, String(t1Score), m.team1_score.x, m.team1_score.y, fieldFont(m.team1_score), m.team1_score.color);
   if (m.team2_score.enabled) drawText(ctx, String(t2Score), m.team2_score.x, m.team2_score.y, fieldFont(m.team2_score), m.team2_score.color);
   if (m.team2_name.enabled)  drawText(ctx, team2Name,       m.team2_name.x,  m.team2_name.y,  fieldFont(m.team2_name),  m.team2_name.color);
 
-  // ── Column headers ─────────────────────────────────────────────────────────
   const ch = m.column_headers;
   if (ch.enabled) {
     const chFont = `${ch.bold ? "bold " : ""}${ch.size}px ${ch.font}`;
-    if (ch.kills_label)   { drawText(ctx, ch.kills_label,   m.kills_l.x,   ch.y, chFont, ch.color); drawText(ctx, ch.kills_label,   m.kills_r.x,   ch.y, chFont, ch.color); }
-    if (ch.assists_label) { drawText(ctx, ch.assists_label, m.assists_l.x, ch.y, chFont, ch.color); drawText(ctx, ch.assists_label, m.assists_r.x, ch.y, chFont, ch.color); }
-    if (ch.deaths_label)  { drawText(ctx, ch.deaths_label,  m.deaths_l.x,  ch.y, chFont, ch.color); drawText(ctx, ch.deaths_label,  m.deaths_r.x,  ch.y, chFont, ch.color); }
-    if (ch.rating_label)  { drawText(ctx, ch.rating_label,  m.rating_l.x,  ch.y, chFont, ch.color); drawText(ctx, ch.rating_label,  m.rating_r.x,  ch.y, chFont, ch.color); }
+    const pairs: [string | undefined, number, number][] = [
+      [ch.kills_label,   m.kills_l.x,   m.kills_r.x],
+      [ch.assists_label, m.assists_l.x, m.assists_r.x],
+      [ch.deaths_label,  m.deaths_l.x,  m.deaths_r.x],
+      [ch.rating_label,  m.rating_l.x,  m.rating_r.x],
+    ];
+    for (const [label, lx, rx] of pairs) {
+      if (label) {
+        drawText(ctx, label, lx, ch.y, chFont, ch.color);
+        drawText(ctx, label, rx, ch.y, chFont, ch.color);
+      }
+    }
   }
 
-  // ── Player rows ────────────────────────────────────────────────────────────
+  const withRating = (row: PlayerStatRow): PlayerWithRating => ({
+    ...row,
+    rating: Utils.getRating(
+      Number(row.kills), Number(row.roundsplayed), Number(row.deaths),
+      Number(row.k1), Number(row.k2), Number(row.k3), Number(row.k4), Number(row.k5)
+    ),
+  });
+  const team1Players = players.filter(pl => pl.team_id === match.team1_id).slice(0, 5).map(withRating);
+  const team2Players = players.filter(pl => pl.team_id === match.team2_id).slice(0, 5).map(withRating);
+
   for (let i = 0; i < 5; i++) {
     const rowY = m.rows_y[i];
-    if (!rowY) continue; // Y=0 → row disabled
-
+    if (!rowY) continue;
     const p1 = team1Players[i];
     if (p1) {
       if (m.player_name_l.enabled) drawText(ctx, p1.name,            m.player_name_l.x, rowY, fieldFont(m.player_name_l), m.player_name_l.color);
@@ -211,7 +145,6 @@ export async function generateMatchImage(
       if (m.deaths_l.enabled)      drawText(ctx, String(p1.deaths),  m.deaths_l.x,      rowY, fieldFont(m.deaths_l),      m.deaths_l.color);
       if (m.rating_l.enabled)      drawText(ctx, String(p1.rating),  m.rating_l.x,      rowY, fieldFont(m.rating_l),      m.rating_l.color);
     }
-
     const p2 = team2Players[i];
     if (p2) {
       if (m.player_name_r.enabled) drawText(ctx, p2.name,            m.player_name_r.x, rowY, fieldFont(m.player_name_r), m.player_name_r.color);
@@ -222,10 +155,43 @@ export async function generateMatchImage(
     }
   }
 
-  // ── Map display (multi-line for series, single for one map) ────────────────
-  if (m.map_name.enabled && mapDisplay) {
-    const lineHeight = Math.round(m.map_name.size * 1.5);
-    drawMultilineText(ctx, mapDisplay, m.map_name.x, m.map_name.y, fieldFont(m.map_name), m.map_name.color, lineHeight);
+  // ── Map slots ─────────────────────────────────────────────────────────────
+  {
+    const slotsData = mapSlots ?? allMaps;
+    const mapNames: string[] = plannedMapNames?.length
+      ? plannedMapNames.slice(0, 3)
+      : slotsData.slice(0, 3).map(r => r.map_name);
+
+    const slotIndices: (0 | 1 | 2)[] = mapNames.length === 1 ? [1] : [0, 1, 2];
+    const slotCfgs = [m.map1, m.map2, m.map3] as const;
+    const mp = m.shapes?.map_pill;
+    const curSlot = currentSlotIndex ?? -1;
+
+    mapNames.forEach((name, i) => {
+      const slotIdx = slotIndices[i] ?? (i as 0 | 1 | 2);
+      const slot = slotCfgs[slotIdx];
+      if (!slot?.enabled) return;
+
+      const playedMap = slotsData[i];
+      const isCurrent = slotIdx === curSlot;
+
+      if (mp?.enabled) {
+        const pillAlpha = isCurrent ? mp.current_alpha : mp.alpha;
+        drawRoundRect(
+          ctx,
+          slot.x - mp.width / 2, slot.y - mp.height / 2,
+          mp.width, mp.height, mp.radius,
+          mp.fill, pillAlpha,
+          mp.border, mp.border_alpha, mp.border_width
+        );
+      }
+
+      const displayName = stripMapPrefix(name);
+      const text = playedMap
+        ? `${playedMap.team1_score}  ${displayName}  ${playedMap.team2_score}`
+        : displayName;
+      drawText(ctx, text, slot.x, slot.y, fieldFont(slot), slot.color);
+    });
   }
 
   return canvas.toBuffer("image/png");

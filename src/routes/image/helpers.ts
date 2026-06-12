@@ -1,5 +1,5 @@
-import { registerFont } from "canvas";
-import type { CanvasRenderingContext2D } from "canvas";
+import { registerFont, loadImage } from "canvas";
+import type { CanvasRenderingContext2D, Image as CanvasImage } from "canvas";
 import path from "path";
 import fs from "fs";
 import multer from "multer";
@@ -77,6 +77,38 @@ export function drawRoundRect(
 
 export function fieldFont(f: { bold: boolean; size: number; font: string }): string {
   return `${f.bold ? "bold " : ""}${f.size}px ${f.font}`;
+}
+
+/** Draws a logo centered at (cfg.x, cfg.y) with size cfg.size × cfg.size */
+export function drawLogoCentered(
+  ctx: CanvasRenderingContext2D,
+  img: CanvasImage | null,
+  cfg: { x: number; y: number; size: number }
+): void {
+  if (!img) return;
+  const half = cfg.size / 2;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  ctx.drawImage(img as any, cfg.x - half, cfg.y - half, cfg.size, cfg.size);
+}
+
+/** Draws a background image; fills with fallbackColor if the image fails to load */
+export async function drawBackground(
+  ctx: CanvasRenderingContext2D,
+  filename: string,
+  w: number,
+  h: number,
+  fallback?: string
+): Promise<void> {
+  try {
+    const img = await loadImage(path.join(process.cwd(), "public", "img", filename));
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ctx.drawImage(img as any, 0, 0, w, h);
+  } catch {
+    if (fallback) {
+      ctx.fillStyle = fallback;
+      ctx.fillRect(0, 0, w, h);
+    }
+  }
 }
 
 export function tryRegisterFont(fontFile: string, families: string[]): void {
