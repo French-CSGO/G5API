@@ -119,8 +119,7 @@ router.post(
           demoFile: zipFilename,
           matchUrl,
           downloadUrl: (() => {
-            const demosBaseUrl: string = config.has("server.demosBaseUrl") ? config.get("server.demosBaseUrl") : "";
-            const base = demosBaseUrl.replace(/\/$/, "") || `${hostname.replace(/\/$/, "")}/api/demo`;
+            const base = (getSetting("demos.baseUrl") || `${hostname.replace(/\/$/, "")}/api/demo`).replace(/\/$/, "");
             return `${base}/${zipFilename}`;
           })(),
         }).catch(() => {});

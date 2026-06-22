@@ -62,6 +62,9 @@ const DEFAULTS: Record<string, string> = {
   "vpsRelay.enabled": "false",
   "vpsRelay.url": "",
   "vpsRelay.apiKey": "",
+
+  // Demos
+  "demos.baseUrl": "",
 };
 
 // ─── Chargement initial ───────────────────────────────────────────────────────

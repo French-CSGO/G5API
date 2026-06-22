@@ -207,8 +207,7 @@ router.post("/", async (req: Request, res: Response) => {
       demoFile: safeDemoFilename,
       matchUrl,
       downloadUrl: (() => {
-        const demosBaseUrl: string = config.has("server.demosBaseUrl") ? config.get("server.demosBaseUrl") : "";
-        const base = demosBaseUrl.replace(/\/$/, "") || `${(config.get("server.hostname") as string).replace(/\/$/, "")}/api/demo`;
+        const base = (getSetting("demos.baseUrl") || `${(config.get("server.hostname") as string).replace(/\/$/, "")}/api/demo`).replace(/\/$/, "");
         return `${base}/${safeDemoFilename}`;
       })(),
     }).catch(() => {});
