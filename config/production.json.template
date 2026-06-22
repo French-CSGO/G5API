@@ -9,6 +9,7 @@
     "useRedis": $USEREDIS,
     "apiURL": "$APIURL",
     "uploadDemos": $UPLOADDEMOS,
+    "demosBaseUrl": "$DEMOSBASEURL",
     "localLoginEnabled": $LOCALLOGINS,
     "redisUrl": "$REDISURL",
     "redisTTL": $REDISTTL,

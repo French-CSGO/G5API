@@ -118,7 +118,11 @@ router.post(
           mapName,
           demoFile: zipFilename,
           matchUrl,
-          downloadUrl: `${hostname.replace(/\/$/, "")}/api/demo/${zipFilename}`,
+          downloadUrl: (() => {
+            const demosBaseUrl: string = config.has("server.demosBaseUrl") ? config.get("server.demosBaseUrl") : "";
+            const base = demosBaseUrl.replace(/\/$/, "") || `${hostname.replace(/\/$/, "")}/api/demo`;
+            return `${base}/${zipFilename}`;
+          })(),
         }).catch(() => {});
 
         // VPS relay
