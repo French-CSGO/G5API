@@ -90,7 +90,7 @@ export class QueueService {
       "de_nuke",
       "de_anubis",
       "de_dust2",
-      "de_vertigo",
+      "de_cache",
     ];
 
     // Fetch season params and cvars
