@@ -600,6 +600,190 @@ router.get("/match/:match_id", async (req, res, next) => {
 /**
  * @swagger
  *
+ * /playerstats/:steam_id/live:
+ *   get:
+ *     description: Get the current live match stats for a given Steam ID (player stats + team stats).
+ *     produces:
+ *       - application/json
+ *     parameters:
+ *       - name: steam_id
+ *         description: The steam ID of the user
+ *         required: true
+ *         schema:
+ *          type: string
+ *     tags:
+ *       - playerstats
+ *     responses:
+ *       200:
+ *         description: Live match info with player and team aggregated stats.
+ *       404:
+ *         $ref: '#/components/responses/NotFound'
+ *       500:
+ *         $ref: '#/components/responses/Error'
+ */
+router.get("/:steam_id/live", async (req, res, next) => {
+  try {
+    const steamId: string = req.params.steam_id;
+
+    // Find the current live match for this player
+    const liveMatchSql: string =
+      "SELECT m.id, m.team1_id, m.team2_id, m.team1_string, m.team2_string, " +
+      "m.team1_score, m.team2_score, m.team1_series_score, m.team2_series_score, " +
+      "m.max_maps, m.title, m.season_id, m.start_time, ps.team_id as player_team_id " +
+      "FROM `match` m " +
+      "JOIN player_stats ps ON ps.match_id = m.id " +
+      "WHERE ps.steam_id = ? " +
+      "AND m.end_time IS NULL " +
+      "AND (m.cancelled = 0 OR m.cancelled IS NULL) " +
+      "ORDER BY m.id DESC LIMIT 1";
+    const liveMatches: RowDataPacket[] = await db.query(liveMatchSql, [steamId]);
+
+    if (!liveMatches.length) {
+      res.status(404).json({ message: "No live match found for player " + steamId });
+      return;
+    }
+
+    const match = liveMatches[0];
+    const matchId: number = match.id;
+    const playerTeamId: number = match.player_team_id;
+
+    const statFields =
+      "SUM(kills) as kills, SUM(deaths) as deaths, SUM(assists) as assists, " +
+      "SUM(roundsplayed) as roundsplayed, SUM(headshot_kills) as headshot_kills, " +
+      "SUM(damage) as damage, SUM(util_damage) as util_damage, " +
+      "SUM(flashbang_assists) as flashbang_assists, SUM(enemies_flashed) as enemies_flashed, " +
+      "SUM(bomb_plants) as bomb_plants, SUM(bomb_defuses) as bomb_defuses, " +
+      "SUM(v1) as v1, SUM(v2) as v2, SUM(v3) as v3, SUM(v4) as v4, SUM(v5) as v5, " +
+      "SUM(k1) as k1, SUM(k2) as k2, SUM(k3) as k3, SUM(k4) as k4, SUM(k5) as k5, " +
+      "SUM(kast) as kast, SUM(mvp) as mvp, SUM(contribution_score) as contribution_score";
+
+    // Player's aggregated stats across all maps in this match
+    const playerStatSql: string =
+      `SELECT steam_id, name, team_id, ${statFields} ` +
+      "FROM player_stats WHERE match_id = ? AND steam_id = ? " +
+      "GROUP BY steam_id, name, team_id";
+    const playerStats: RowDataPacket[] = await db.query(playerStatSql, [matchId, steamId]);
+
+    // Team's aggregated stats (all players on the same team)
+    const teamStatSql: string =
+      `SELECT steam_id, name, team_id, ${statFields} ` +
+      "FROM player_stats WHERE match_id = ? AND team_id = ? " +
+      "GROUP BY steam_id, name, team_id";
+    const teamStats: RowDataPacket[] = await db.query(teamStatSql, [matchId, playerTeamId]);
+
+    res.json({
+      match,
+      playerStats: playerStats[0] || null,
+      teamStats,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: (err as Error).toString() });
+  }
+});
+
+/**
+ * @swagger
+ *
+ * /playerstats/:steam_id/live/stream:
+ *   get:
+ *     description: SSE stream for the current live match stats of a given Steam ID.
+ *     produces:
+ *       - text/event-stream
+ *     parameters:
+ *       - name: steam_id
+ *         required: true
+ *         schema:
+ *          type: string
+ *     tags:
+ *       - playerstats
+ */
+router.get("/:steam_id/live/stream", async (req, res, next) => {
+  try {
+    const steamId: string = req.params.steam_id;
+
+    const liveMatchSql: string =
+      "SELECT m.id, m.team1_id, m.team2_id, m.team1_string, m.team2_string, " +
+      "m.team1_score, m.team2_score, m.team1_series_score, m.team2_series_score, " +
+      "m.max_maps, m.title, m.season_id, m.start_time, m.end_time, ps.team_id as player_team_id " +
+      "FROM `match` m " +
+      "JOIN player_stats ps ON ps.match_id = m.id " +
+      "WHERE ps.steam_id = ? " +
+      "AND (m.cancelled = 0 OR m.cancelled IS NULL) " +
+      "ORDER BY m.id DESC LIMIT 1";
+
+    const statFields =
+      "SUM(kills) as kills, SUM(deaths) as deaths, SUM(assists) as assists, " +
+      "SUM(roundsplayed) as roundsplayed, SUM(headshot_kills) as headshot_kills, " +
+      "SUM(damage) as damage, SUM(util_damage) as util_damage, " +
+      "SUM(flashbang_assists) as flashbang_assists, SUM(enemies_flashed) as enemies_flashed, " +
+      "SUM(bomb_plants) as bomb_plants, SUM(bomb_defuses) as bomb_defuses, " +
+      "SUM(v1) as v1, SUM(v2) as v2, SUM(v3) as v3, SUM(v4) as v4, SUM(v5) as v5, " +
+      "SUM(k1) as k1, SUM(k2) as k2, SUM(k3) as k3, SUM(k4) as k4, SUM(k5) as k5, " +
+      "SUM(kast) as kast, SUM(mvp) as mvp, SUM(contribution_score) as contribution_score";
+
+    const buildPayload = async (): Promise<object> => {
+      const liveMatches: RowDataPacket[] = await db.query(liveMatchSql, [steamId]);
+      if (!liveMatches.length) return { match: null, playerStats: null, teamStats: [] };
+
+      const match = liveMatches[0];
+      const matchId: number = match.id;
+      const playerTeamId: number = match.player_team_id;
+
+      const playerStats: RowDataPacket[] = await db.query(
+        `SELECT steam_id, name, team_id, ${statFields} FROM player_stats WHERE match_id = ? AND steam_id = ? GROUP BY steam_id, name, team_id`,
+        [matchId, steamId]
+      );
+      const teamStats: RowDataPacket[] = await db.query(
+        `SELECT steam_id, name, team_id, ${statFields} FROM player_stats WHERE match_id = ? AND team_id = ? GROUP BY steam_id, name, team_id`,
+        [matchId, playerTeamId]
+      );
+
+      return { match, playerStats: playerStats[0] || null, teamStats };
+    };
+
+    res.set({
+      "Cache-Control": "no-cache",
+      "Connection": "keep-alive",
+      "Content-Type": "text/event-stream",
+      "X-Accel-Buffering": "no",
+    });
+    res.flushHeaders();
+
+    const sendPayload = async (): Promise<void> => {
+      const payload = await buildPayload();
+      res.write(`event: livestats\ndata: ${JSON.stringify(payload)}\n\n`);
+    };
+
+    await sendPayload();
+
+    const onUpdate: (() => Promise<void>) = async () => {
+      await sendPayload();
+    };
+
+    GlobalEmitter.on("playerStatsUpdate", onUpdate);
+    GlobalEmitter.on("matchUpdate", onUpdate);
+
+    req.on("close", () => {
+      GlobalEmitter.removeListener("playerStatsUpdate", onUpdate);
+      GlobalEmitter.removeListener("matchUpdate", onUpdate);
+      res.end();
+    });
+    req.on("disconnect", () => {
+      GlobalEmitter.removeListener("playerStatsUpdate", onUpdate);
+      GlobalEmitter.removeListener("matchUpdate", onUpdate);
+      res.end();
+    });
+  } catch (err) {
+    console.error((err as Error).toString());
+    res.status(500).write(`event: error\ndata: ${(err as Error).toString()}\n\n`);
+    res.end();
+  }
+});
+
+/**
+ * @swagger
+ *
  * /playerstats:
  *   post:
  *     description: Create player stats in a match/map.
