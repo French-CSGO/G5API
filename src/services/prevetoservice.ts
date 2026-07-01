@@ -268,20 +268,12 @@ async function progressSession(session: VetoSessionRow): Promise<void> {
   const remaining = pool.filter((m) => !used.has(m));
   const pickedCount = history.filter((h) => h.pick_or_veto === "pick").length;
 
+  // The decider map (the one nobody explicitly picked) is always settled by
+  // an in-game knife round, never a web side choice — matches the standard
+  // competitive convention MatchZy itself falls back to for undecided maps.
   if (remaining.length === 1 && pickedCount === session.num_maps - 1) {
     const map = remaining[0];
     await insertVetoRow(session.match_id, null, map, "pick");
-    if (session.side_type === "standard") {
-      const lastActingTeam: Team = session.last_acting_team ?? otherTeam(session.starting_team);
-      const chooser = otherTeam(lastActingTeam);
-      const deadline = session.timer_enabled ? deadlineFromNow(session) : null;
-      await db.query(
-        "UPDATE veto_session SET pending_side_map = ?, pending_side_team = ?, step_deadline = ? WHERE id = ?",
-        [map, chooser, deadline, session.id]
-      );
-      GlobalEmitter.emit("prevetoUpdateAny");
-      return;
-    }
   }
 
   const finalCount: RowDataPacket[] = await db.query(
@@ -291,11 +283,17 @@ async function progressSession(session: VetoSessionRow): Promise<void> {
   const decidedMaps = finalCount[0].cnt;
   if (decidedMaps >= session.num_maps) {
     if (session.side_type === "standard") {
+      // Only explicit picks need a web side choice; the decider (if any)
+      // always resolves via in-game knife instead.
+      const sidesNeeded: RowDataPacket[] = await db.query(
+        "SELECT COUNT(*) AS cnt FROM veto WHERE match_id = ? AND pick_or_veto = 'pick' AND team_name != 'Decider'",
+        [session.match_id]
+      );
       const sideCount: RowDataPacket[] = await db.query(
         "SELECT COUNT(*) AS cnt FROM veto_side WHERE match_id = ?",
         [session.match_id]
       );
-      if (sideCount[0].cnt < session.num_maps) return;
+      if (sideCount[0].cnt < sidesNeeded[0].cnt) return;
     }
     const refreshed = await getSessionRowById(session.id);
     if (refreshed && refreshed.status === "in_progress") {
