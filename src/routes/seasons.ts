@@ -355,7 +355,7 @@ router.get("/:season_id", async (req, res, next) => {
       "m.team1_id, m.team2_id, m.winner, m.team1_score, m.team2_score, " +
       "m.team1_series_score, m.team2_series_score, m.team1_string, m.team2_string, " +
       "m.cancelled, m.forfeit, m.start_time, m.end_time, m.max_maps, " +
-      "m.title, m.skip_veto, m.private_match, m.enforce_teams, " +
+      "m.title, m.skip_veto, m.pending_veto, m.private_match, m.enforce_teams, " +
       "m.min_player_ready, m.season_id, m.is_pug, " +
       "ms.team1_score AS map1_t1_score, ms.team2_score AS map1_t2_score " +
       "FROM `match` m " +

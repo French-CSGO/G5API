@@ -14,6 +14,7 @@ export interface MatchData {
     max_maps?: number | null,
     title?: string,
     skip_veto?: number | null | boolean,
+    pending_veto?: number | null | boolean,
     veto_first?: string,
     veto_mappool?: string,
     side_type?: string,
