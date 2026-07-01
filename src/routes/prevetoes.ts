@@ -10,6 +10,7 @@ const router = Router();
 import GlobalEmitter from "../utility/emitter.js";
 import {
   getPublicState,
+  submitReady,
   submitStartChoice,
   submitAction,
   submitSide,
@@ -114,6 +115,29 @@ router.get("/:token/stream", async (req, res) => {
     console.error(err);
     res.status(500).write(`event: error\ndata: ${(err as Error).toString()}\n\n`);
     res.end();
+  }
+});
+
+/**
+ * @swagger
+ *
+ * /prevetoes/{token}/ready:
+ *   post:
+ *     description: Mark a team ready. Both teams must be ready before the veto (and its timer) starts.
+ *     tags:
+ *       - prevetoes
+ *     responses:
+ *       200:
+ *         description: Ready state applied.
+ */
+router.post("/:token/ready", async (req, res) => {
+  try {
+    const team = req.body?.team === "team2" ? "team2" : req.body?.team === "team1" ? "team1" : undefined;
+    const result = await submitReady(req.params.token, team);
+    res.status(result.ok ? 200 : 400).json(result);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: (err as Error).toString() });
   }
 });
 

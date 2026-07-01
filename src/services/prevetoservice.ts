@@ -22,7 +22,7 @@ import { sendVetoCompleteEmbed } from "./discord.js";
 type Team = "team1" | "team2";
 type ActionType = "ban" | "pick";
 export type Role = "team1" | "team2" | "tablet" | "admin";
-type Status = "awaiting_start" | "in_progress" | "completed" | "cancelled";
+type Status = "awaiting_ready" | "awaiting_start" | "in_progress" | "completed" | "cancelled";
 
 interface PlanStep {
   type: ActionType;
@@ -42,6 +42,8 @@ interface VetoSessionRow extends RowDataPacket {
   pending_side_map: string | null;
   pending_side_team: Team | null;
   last_acting_team: Team | null;
+  team1_ready: number;
+  team2_ready: number;
   timer_enabled: number;
   timer_seconds: number;
   step_deadline: string | null;
@@ -118,16 +120,19 @@ export async function createVetoSession(
   await db.query("INSERT INTO veto_session SET ?", [
     {
       match_id: matchId,
-      status: "awaiting_start",
+      status: "awaiting_ready",
       map_pool: mapPool.join(" "),
       num_maps: numMaps,
       side_type: sideType,
       starting_team: "team1",
       plan: JSON.stringify(plan),
       current_step_index: 0,
+      team1_ready: false,
+      team2_ready: false,
       timer_enabled: timerEnabled,
       timer_seconds: timerSeconds,
-      step_deadline: timerEnabled ? deadlineFromNow({ timer_seconds: timerSeconds }) : null,
+      // No deadline yet: the veto (and its timer) only starts once both teams are ready.
+      step_deadline: null,
       team1_token: tokens.team1,
       team2_token: tokens.team2,
       tablet_token: tokens.tablet,
@@ -297,6 +302,26 @@ async function progressSession(session: VetoSessionRow): Promise<void> {
       await finalizeSession(refreshed);
     }
   }
+}
+
+async function applyReady(session: VetoSessionRow, team: Team): Promise<void> {
+  if (session.status !== "awaiting_ready") return;
+  const team1Ready = team === "team1" ? true : !!session.team1_ready;
+  const team2Ready = team === "team2" ? true : !!session.team2_ready;
+
+  if (team1Ready && team2Ready) {
+    const deadline = session.timer_enabled ? deadlineFromNow(session) : null;
+    await db.query(
+      "UPDATE veto_session SET team1_ready = 1, team2_ready = 1, status = 'awaiting_start', step_deadline = ? WHERE id = ?",
+      [deadline, session.id]
+    );
+  } else {
+    await db.query(
+      "UPDATE veto_session SET team1_ready = ?, team2_ready = ? WHERE id = ?",
+      [team1Ready, team2Ready, session.id]
+    );
+  }
+  GlobalEmitter.emit("prevetoUpdateAny");
 }
 
 async function applyStartChoice(session: VetoSessionRow, choice: "start" | "swap"): Promise<void> {
@@ -484,10 +509,33 @@ export async function adminForce(token: string): Promise<ActionResult> {
   if (!found) return { ok: false, message: "Session introuvable." };
   const { session, role } = found;
   if (role !== "admin") return { ok: false, message: "Action réservée à l'administrateur." };
+  if (session.status === "awaiting_ready") {
+    await applyReady(session, "team1");
+    const refreshed = await getSessionRowById(session.id);
+    if (refreshed) await applyReady(refreshed, "team2");
+    return { ok: true };
+  }
   if (session.status !== "awaiting_start" && session.status !== "in_progress") {
     return { ok: false, message: "Rien à forcer, le veto est terminé." };
   }
   await autoResolveTimeout(session);
+  return { ok: true };
+}
+
+export async function submitReady(token: string, team?: "team1" | "team2"): Promise<ActionResult> {
+  const found = await getSessionByToken(token);
+  if (!found) return { ok: false, message: "Session introuvable." };
+  const { session, role } = found;
+  if (session.status !== "awaiting_ready") {
+    return { ok: false, message: "Cette étape est déjà terminée." };
+  }
+  let targetTeam: Team;
+  if (role === "team1") targetTeam = "team1";
+  else if (role === "team2") targetTeam = "team2";
+  else if (role === "tablet" && (team === "team1" || team === "team2")) targetTeam = team;
+  else return { ok: false, message: "Action non autorisée." };
+
+  await applyReady(session, targetTeam);
   return { ok: true };
 }
 
@@ -501,11 +549,11 @@ export async function adminReset(token: string): Promise<ActionResult> {
   await db.query("DELETE FROM veto WHERE match_id = ?", [session.match_id]);
   const pool = session.map_pool.split(" ").filter(Boolean);
   const plan = buildPlan(pool.length, session.num_maps);
-  const deadline = session.timer_enabled ? deadlineFromNow(session) : null;
   await db.query(
-    "UPDATE veto_session SET status = 'awaiting_start', plan = ?, starting_team = 'team1', current_step_index = 0, " +
-      "pending_side_map = NULL, pending_side_team = NULL, last_acting_team = NULL, step_deadline = ? WHERE id = ?",
-    [JSON.stringify(plan), deadline, session.id]
+    "UPDATE veto_session SET status = 'awaiting_ready', plan = ?, starting_team = 'team1', current_step_index = 0, " +
+      "pending_side_map = NULL, pending_side_team = NULL, last_acting_team = NULL, " +
+      "team1_ready = 0, team2_ready = 0, step_deadline = NULL WHERE id = ?",
+    [JSON.stringify(plan), session.id]
   );
   await db.query(
     "UPDATE `match` SET pending_veto = 1, skip_veto = 0, veto_mappool = ?, map_sides = NULL, veto_first = NULL WHERE id = ?",
@@ -524,10 +572,16 @@ export interface PreVetoAwaiting {
   map?: string;
 }
 
+export interface PreVetoReadyState {
+  team1: boolean;
+  team2: boolean;
+  can_ready_team1: boolean;
+  can_ready_team2: boolean;
+}
+
 export interface PreVetoState {
   role: Role;
   match_id: number;
-  match_title: string | null;
   team1_name: string | null;
   team2_name: string | null;
   status: Status;
@@ -536,6 +590,7 @@ export interface PreVetoState {
   map_pool: string[];
   remaining_pool: string[];
   history: { team_name: string; map: string; pick_or_veto: string; side: string | null; side_team: string | null }[];
+  ready: PreVetoReadyState;
   awaiting: PreVetoAwaiting | null;
   can_act: boolean;
   is_admin: boolean;
@@ -550,7 +605,7 @@ export async function getPublicState(token: string): Promise<PreVetoState | null
   const { session, role } = found;
 
   const matchRows: RowDataPacket[] = await db.query(
-    "SELECT m.title, t1.name AS team1_name, t2.name AS team2_name " +
+    "SELECT t1.name AS team1_name, t2.name AS team2_name " +
       "FROM `match` m LEFT JOIN team t1 ON t1.id = m.team1_id LEFT JOIN team t2 ON t2.id = m.team2_id " +
       "WHERE m.id = ?",
     [session.match_id]
@@ -585,10 +640,14 @@ export async function getPublicState(token: string): Promise<PreVetoState | null
   const canAct =
     awaiting != null && (role === "tablet" || (role !== "admin" && role === awaiting.team));
 
+  const team1Ready = !!session.team1_ready;
+  const team2Ready = !!session.team2_ready;
+  const canReadyTeam1 = session.status === "awaiting_ready" && !team1Ready && (role === "team1" || role === "tablet");
+  const canReadyTeam2 = session.status === "awaiting_ready" && !team2Ready && (role === "team2" || role === "tablet");
+
   return {
     role,
     match_id: session.match_id,
-    match_title: match?.title ?? null,
     team1_name: match?.team1_name ?? null,
     team2_name: match?.team2_name ?? null,
     status: session.status,
@@ -603,6 +662,12 @@ export async function getPublicState(token: string): Promise<PreVetoState | null
       side: h.side ?? null,
       side_team: h.side_team ?? null
     })),
+    ready: {
+      team1: team1Ready,
+      team2: team2Ready,
+      can_ready_team1: canReadyTeam1,
+      can_ready_team2: canReadyTeam2
+    },
     awaiting,
     can_act: canAct,
     is_admin: role === "admin",
