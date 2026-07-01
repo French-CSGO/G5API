@@ -259,7 +259,7 @@ export async function updateScoreboard(): Promise<void> {
   try {
     const matchSql =
       "SELECT m.id, m.team1_string, m.team2_string, m.team1_score, m.team2_score, " +
-      "gs.ip_string, gs.port " +
+      "m.pending_veto, gs.ip_string, gs.port " +
       "FROM `match` m LEFT JOIN game_server gs ON m.server_id = gs.id " +
       "WHERE m.end_time IS NULL AND m.cancelled = 0 ORDER BY m.id ASC";
     const matches: RowDataPacket[] = await db.query(matchSql, []);
@@ -276,6 +276,12 @@ export async function updateScoreboard(): Promise<void> {
       content = "🟡 Aucun match en cours actuellement.";
     } else {
       for (const match of matches) {
+        if (match.pending_veto) {
+          content +=
+            `• **${match.team1_string}** vs **${match.team2_string}**` +
+            ` | 🗳️ Véto en cours...\n\n`;
+          continue;
+        }
         const serverIP = match.ip_string ? `${match.ip_string}:${match.port}` : "N/A";
         const mapSql =
           "SELECT map_name, team1_score, team2_score FROM map_stats WHERE match_id = ? ORDER BY id ASC";

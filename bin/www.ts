@@ -18,6 +18,7 @@ import config from 'config';
 import { initDiscord } from '../src/services/discord.js';
 import { initTwitch } from '../src/services/twitch.js';
 import { loadSettings } from '../src/services/settings.js';
+import { startPreVetoTimerSweep } from '../src/services/prevetoservice.js';
 
 /**
  * Get port from environment and store in Express.
@@ -45,6 +46,7 @@ loadSettings().then(() => {
   initDiscord();
   initTwitch();
 });
+startPreVetoTimerSweep();
 
 /**
  * Normalize a port into a number, string, or false.

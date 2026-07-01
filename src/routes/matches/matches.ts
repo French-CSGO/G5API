@@ -27,6 +27,7 @@ import { TeamData } from "../../types/teams/TeamData.js";
 import { RowDataPacket } from "mysql2";
 import { AccessMessage } from "../../types/mapstats/AccessMessage.js";
 import { startAndWait, isEnabled as pterodactylEnabled } from "../../services/pterodactyl.js";
+import { createVetoSession } from "../../services/prevetoservice.js";
 
 
 /**
@@ -374,7 +375,7 @@ router.get("/", async (req, res, next) => {
     let sql: string =
       "SELECT mtch.id, mtch.user_id, mtch.server_id, mtch.team1_id, mtch.team2_id, mtch.winner, mtch.team1_score, " +
       "mtch.team2_score, mtch.team1_series_score, mtch.team2_series_score, mtch.team1_string, mtch.team2_string, " +
-      "mtch.cancelled, mtch.forfeit, mtch.start_time, mtch.end_time, mtch.max_maps, mtch.title, mtch.skip_veto, mtch.private_match, " +
+      "mtch.cancelled, mtch.forfeit, mtch.start_time, mtch.end_time, mtch.max_maps, mtch.title, mtch.skip_veto, mtch.pending_veto, mtch.private_match, " +
       "mtch.enforce_teams, mtch.min_player_ready, mtch.season_id, mtch.is_pug, usr.name as owner, mp.team1_score as team1_mapscore, mp.team2_score as team2_mapscore " +
       "FROM `match` mtch JOIN user usr ON mtch.user_id = usr.id LEFT JOIN map_stats mp ON mp.match_id = mtch.id " +
       "GROUP BY mtch.id " +
@@ -439,7 +440,7 @@ router.get("/mymatches", Utils.ensureAuthenticated, async (req, res, next) => {
     let sql: string =
       "SELECT mtch.id, mtch.user_id, mtch.server_id, mtch.team1_id, mtch.team2_id, mtch.winner, mtch.team1_score, " +
       "mtch.team2_score, mtch.team1_series_score, mtch.team2_series_score, mtch.team1_string, mtch.team2_string, " +
-      "mtch.cancelled, mtch.forfeit, mtch.start_time, mtch.end_time, mtch.max_maps, mtch.title, mtch.skip_veto, mtch.private_match, " +
+      "mtch.cancelled, mtch.forfeit, mtch.start_time, mtch.end_time, mtch.max_maps, mtch.title, mtch.skip_veto, mtch.pending_veto, mtch.private_match, " +
       "mtch.enforce_teams, mtch.min_player_ready, mtch.season_id, mtch.is_pug, usr.name as owner, mp.team1_score as team1_mapscore, mp.team2_score as team2_mapscore " +
       "FROM `match` mtch JOIN user usr ON mtch.user_id = usr.id LEFT JOIN map_stats mp ON mp.match_id = mtch.id " +
       "WHERE mtch.user_id = ? " +
@@ -504,7 +505,7 @@ router.get("/limit/:limiter", async (req, res, next) => {
         "SELECT id, user_id, server_id, team1_id, team2_id, winner, " +
         "team1_score, team2_score, team1_series_score, team2_series_score, " +
         "team1_string, team2_string, cancelled, forfeit, start_time, end_time, " +
-        "max_maps, title, skip_veto, private_match, enforce_teams, min_player_ready, " +
+        "max_maps, title, skip_veto, pending_veto, private_match, enforce_teams, min_player_ready, " +
         "season_id, is_pug, map_sides FROM `match` WHERE cancelled = 0 " +
         "OR cancelled IS NULL ORDER BY end_time DESC LIMIT ?";
     }
@@ -531,7 +532,7 @@ router.get("/page/:firstvalue&:lastvalue", async (req, res, next) => {
         "SELECT id, user_id, server_id, team1_id, team2_id, winner, " +
         "team1_score, team2_score, team1_series_score, team2_series_score, " +
         "team1_string, team2_string, cancelled, forfeit, start_time, end_time, " +
-        "max_maps, title, skip_veto, private_match, enforce_teams, min_player_ready, " +
+        "max_maps, title, skip_veto, pending_veto, private_match, enforce_teams, min_player_ready, " +
         "season_id, is_pug, map_sides FROM `match` WHERE cancelled = 0 " +
         "OR cancelled IS NULL ORDER BY id DESC LIMIT ?,?";
     }
@@ -561,7 +562,7 @@ router.get("/:match_id", async (req, res, next) => {
         "SELECT id, user_id, server_id, team1_id, team2_id, winner, " +
         "team1_score, team2_score, team1_series_score, team2_series_score, " +
         "team1_string, team2_string, cancelled, forfeit, start_time, end_time, " +
-        "max_maps, title, skip_veto, private_match, enforce_teams, min_player_ready, " +
+        "max_maps, title, skip_veto, pending_veto, private_match, enforce_teams, min_player_ready, " +
         "season_id, is_pug, map_sides, veto_mappool FROM `match` where id = ?";
     }
     let matchID: string = req.params.match_id;
@@ -818,7 +819,7 @@ router.get("/:match_id/stream", async (req, res, next) => {
         "SELECT id, user_id, server_id, team1_id, team2_id, winner, " +
         "team1_score, team2_score, team1_series_score, team2_series_score, " +
         "team1_string, team2_string, cancelled, forfeit, start_time, end_time, " +
-        "max_maps, title, skip_veto, private_match, enforce_teams, min_player_ready, " +
+        "max_maps, title, skip_veto, pending_veto, private_match, enforce_teams, min_player_ready, " +
         "season_id, is_pug, map_sides, veto_mappool FROM `match` where id = ?";
     }
 
@@ -1374,8 +1375,12 @@ router.post("/", Utils.ensureAuthenticated, async (req, res, next) => {
       length: 24,
       capitalization: "uppercase"
     });
-    let skipVeto: boolean =
-      req.body[0].skip_veto == null ? false : req.body[0].skip_veto;
+    const vetoBeforeMatch: boolean = req.body[0].veto_before_match === true;
+    let skipVeto: boolean = vetoBeforeMatch
+      ? false
+      : req.body[0].skip_veto == null
+        ? false
+        : req.body[0].skip_veto;
     let insertMatch: any;
     let insertSet: MatchData = {
       user_id: req.user!.id,
@@ -1387,6 +1392,7 @@ router.post("/", Utils.ensureAuthenticated, async (req, res, next) => {
       max_maps: req.body[0].max_maps,
       title: req.body[0].title,
       skip_veto: skipVeto,
+      pending_veto: vetoBeforeMatch,
       veto_first: req.body[0].veto_first,
       veto_mappool: req.body[0].veto_mappool,
       side_type:
@@ -1443,6 +1449,43 @@ router.post("/", Utils.ensureAuthenticated, async (req, res, next) => {
             : cvarInsertSet[key]
         ]);
       }
+    }
+    if (vetoBeforeMatch) {
+      // Reserve the server immediately, but don't push the match config to it
+      // (or announce the match) until the pre-match web veto is finished.
+      if (!req.body[0].ignore_server && req.body[0].server_id != null) {
+        await db.query("UPDATE game_server SET in_use = 1 WHERE id = ?", [
+          req.body[0].server_id
+        ]);
+      }
+      const mapPool: string[] = (req.body[0].veto_mappool ?? "")
+        .replace(/[,]+/g, "")
+        .split(" ")
+        .filter((m: string) => m.length > 0);
+      const timerEnabled: boolean =
+        req.body[0].veto_timer_enabled == null ? true : !!req.body[0].veto_timer_enabled;
+      const timerSeconds: number =
+        req.body[0].veto_timer_seconds == null ? 30 : parseInt(req.body[0].veto_timer_seconds);
+      const links = await createVetoSession(
+        insertMatch.insertId,
+        mapPool,
+        parseInt(req.body[0].max_maps),
+        insertSet.side_type ?? "standard",
+        timerEnabled,
+        timerSeconds
+      );
+      res.json({
+        message: "Match inserted successfully! Waiting on the pre-match veto.",
+        id: insertMatch.insertId,
+        pending_veto: true,
+        veto_links: {
+          team1: `/veto/team1/${links.team1}`,
+          team2: `/veto/team2/${links.team2}`,
+          tablet: `/veto/tablet/${links.tablet}`,
+          admin: `/veto/admin/${links.admin}`
+        }
+      });
+      return;
     }
     if (!req.body[0].ignore_server) {
       if (req.body[0].server_id != null) {
