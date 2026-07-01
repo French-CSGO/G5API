@@ -649,7 +649,7 @@ router.get("/:steam_id/live", async (req, res, next) => {
 
     // Current map (most recent map_stats row with no end_time)
     const currentMapSql: string =
-      "SELECT map_stats_id, map_number, map_name, team1_score, team2_score " +
+      "SELECT id, map_number, map_name, team1_score, team2_score " +
       "FROM map_stats WHERE match_id = ? AND end_time IS NULL " +
       "ORDER BY map_number DESC LIMIT 1";
     const currentMapRows: RowDataPacket[] = await db.query(currentMapSql, [matchId]);
@@ -666,7 +666,7 @@ router.get("/:steam_id/live", async (req, res, next) => {
     const mapFilter = currentMap
       ? "AND map_id = ?"
       : "";
-    const mapParam = currentMap ? [currentMap.map_stats_id] : [];
+    const mapParam = currentMap ? [currentMap.id] : [];
 
     const playerStatSql: string =
       `SELECT steam_id, name, team_id, ${statFields} ` +
@@ -728,7 +728,7 @@ router.get("/:steam_id/live/stream", async (req, res, next) => {
       "ORDER BY m.id DESC LIMIT 1";
 
     const currentMapSql: string =
-      "SELECT map_stats_id, map_number, map_name, team1_score, team2_score " +
+      "SELECT id, map_number, map_name, team1_score, team2_score " +
       "FROM map_stats WHERE match_id = ? AND end_time IS NULL " +
       "ORDER BY map_number DESC LIMIT 1";
 
@@ -750,7 +750,7 @@ router.get("/:steam_id/live/stream", async (req, res, next) => {
       const currentMap = currentMapRows[0] || null;
 
       const mapFilter = currentMap ? "AND map_id = ?" : "";
-      const mapParam = currentMap ? [currentMap.map_stats_id] : [];
+      const mapParam = currentMap ? [currentMap.id] : [];
 
       const playerStats: RowDataPacket[] = await db.query(
         `SELECT steam_id, name, team_id, ${statFields} FROM player_stats WHERE match_id = ? AND steam_id = ? ${mapFilter}`,
