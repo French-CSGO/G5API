@@ -628,7 +628,7 @@ router.get("/:steam_id/live", async (req, res, next) => {
     // Find the current live match for this player
     const liveMatchSql: string =
       "SELECT m.id, m.team1_id, m.team2_id, m.team1_string, m.team2_string, " +
-      "m.team1_score, m.team2_score, m.team1_series_score, m.team2_series_score, " +
+      "m.team1_series_score, m.team2_series_score, " +
       "m.max_maps, m.title, m.season_id, m.start_time, ps.team_id as player_team_id " +
       "FROM `match` m " +
       "JOIN player_stats ps ON ps.match_id = m.id " +
@@ -647,32 +647,47 @@ router.get("/:steam_id/live", async (req, res, next) => {
     const matchId: number = match.id;
     const playerTeamId: number = match.player_team_id;
 
-    const statFields =
-      "SUM(kills) as kills, SUM(deaths) as deaths, SUM(assists) as assists, " +
-      "SUM(roundsplayed) as roundsplayed, SUM(headshot_kills) as headshot_kills, " +
-      "SUM(damage) as damage, SUM(util_damage) as util_damage, " +
-      "SUM(flashbang_assists) as flashbang_assists, SUM(enemies_flashed) as enemies_flashed, " +
-      "SUM(bomb_plants) as bomb_plants, SUM(bomb_defuses) as bomb_defuses, " +
-      "SUM(v1) as v1, SUM(v2) as v2, SUM(v3) as v3, SUM(v4) as v4, SUM(v5) as v5, " +
-      "SUM(k1) as k1, SUM(k2) as k2, SUM(k3) as k3, SUM(k4) as k4, SUM(k5) as k5, " +
-      "SUM(kast) as kast, SUM(mvp) as mvp, SUM(contribution_score) as contribution_score";
+    // Current map (most recent map_stats row with no end_time)
+    const currentMapSql: string =
+      "SELECT map_stats_id, map_number, map_name, team1_score, team2_score " +
+      "FROM map_stats WHERE match_id = ? AND end_time IS NULL " +
+      "ORDER BY map_number DESC LIMIT 1";
+    const currentMapRows: RowDataPacket[] = await db.query(currentMapSql, [matchId]);
+    const currentMap = currentMapRows[0] || null;
 
-    // Player's aggregated stats across all maps in this match
+    const statFields =
+      "kills, deaths, assists, roundsplayed, headshot_kills, " +
+      "damage, util_damage, flashbang_assists, enemies_flashed, " +
+      "bomb_plants, bomb_defuses, " +
+      "v1, v2, v3, v4, v5, k1, k2, k3, k4, k5, " +
+      "kast, mvp, contribution_score";
+
+    // Player stats for the current map only
+    const mapFilter = currentMap
+      ? "AND map_id = ?"
+      : "";
+    const mapParam = currentMap ? [currentMap.map_stats_id] : [];
+
     const playerStatSql: string =
       `SELECT steam_id, name, team_id, ${statFields} ` +
-      "FROM player_stats WHERE match_id = ? AND steam_id = ? " +
-      "GROUP BY steam_id, name, team_id";
-    const playerStats: RowDataPacket[] = await db.query(playerStatSql, [matchId, steamId]);
+      `FROM player_stats WHERE match_id = ? AND steam_id = ? ${mapFilter}`;
+    const playerStats: RowDataPacket[] = await db.query(
+      playerStatSql,
+      [matchId, steamId, ...mapParam]
+    );
 
-    // Team's aggregated stats (all players on the same team)
+    // Team stats for the current map only
     const teamStatSql: string =
       `SELECT steam_id, name, team_id, ${statFields} ` +
-      "FROM player_stats WHERE match_id = ? AND team_id = ? " +
-      "GROUP BY steam_id, name, team_id";
-    const teamStats: RowDataPacket[] = await db.query(teamStatSql, [matchId, playerTeamId]);
+      `FROM player_stats WHERE match_id = ? AND team_id = ? ${mapFilter}`;
+    const teamStats: RowDataPacket[] = await db.query(
+      teamStatSql,
+      [matchId, playerTeamId, ...mapParam]
+    );
 
     res.json({
       match,
+      currentMap,
       playerStats: playerStats[0] || null,
       teamStats,
     });
@@ -704,7 +719,7 @@ router.get("/:steam_id/live/stream", async (req, res, next) => {
 
     const liveMatchSql: string =
       "SELECT m.id, m.team1_id, m.team2_id, m.team1_string, m.team2_string, " +
-      "m.team1_score, m.team2_score, m.team1_series_score, m.team2_series_score, " +
+      "m.team1_series_score, m.team2_series_score, " +
       "m.max_maps, m.title, m.season_id, m.start_time, m.end_time, ps.team_id as player_team_id " +
       "FROM `match` m " +
       "JOIN player_stats ps ON ps.match_id = m.id " +
@@ -712,34 +727,41 @@ router.get("/:steam_id/live/stream", async (req, res, next) => {
       "AND (m.cancelled = 0 OR m.cancelled IS NULL) " +
       "ORDER BY m.id DESC LIMIT 1";
 
+    const currentMapSql: string =
+      "SELECT map_stats_id, map_number, map_name, team1_score, team2_score " +
+      "FROM map_stats WHERE match_id = ? AND end_time IS NULL " +
+      "ORDER BY map_number DESC LIMIT 1";
+
     const statFields =
-      "SUM(kills) as kills, SUM(deaths) as deaths, SUM(assists) as assists, " +
-      "SUM(roundsplayed) as roundsplayed, SUM(headshot_kills) as headshot_kills, " +
-      "SUM(damage) as damage, SUM(util_damage) as util_damage, " +
-      "SUM(flashbang_assists) as flashbang_assists, SUM(enemies_flashed) as enemies_flashed, " +
-      "SUM(bomb_plants) as bomb_plants, SUM(bomb_defuses) as bomb_defuses, " +
-      "SUM(v1) as v1, SUM(v2) as v2, SUM(v3) as v3, SUM(v4) as v4, SUM(v5) as v5, " +
-      "SUM(k1) as k1, SUM(k2) as k2, SUM(k3) as k3, SUM(k4) as k4, SUM(k5) as k5, " +
-      "SUM(kast) as kast, SUM(mvp) as mvp, SUM(contribution_score) as contribution_score";
+      "kills, deaths, assists, roundsplayed, headshot_kills, " +
+      "damage, util_damage, flashbang_assists, enemies_flashed, " +
+      "bomb_plants, bomb_defuses, v1, v2, v3, v4, v5, k1, k2, k3, k4, k5, " +
+      "kast, mvp, contribution_score";
 
     const buildPayload = async (): Promise<object> => {
       const liveMatches: RowDataPacket[] = await db.query(liveMatchSql, [steamId]);
-      if (!liveMatches.length) return { match: null, playerStats: null, teamStats: [] };
+      if (!liveMatches.length) return { match: null, currentMap: null, playerStats: null, teamStats: [] };
 
       const match = liveMatches[0];
       const matchId: number = match.id;
       const playerTeamId: number = match.player_team_id;
 
+      const currentMapRows: RowDataPacket[] = await db.query(currentMapSql, [matchId]);
+      const currentMap = currentMapRows[0] || null;
+
+      const mapFilter = currentMap ? "AND map_id = ?" : "";
+      const mapParam = currentMap ? [currentMap.map_stats_id] : [];
+
       const playerStats: RowDataPacket[] = await db.query(
-        `SELECT steam_id, name, team_id, ${statFields} FROM player_stats WHERE match_id = ? AND steam_id = ? GROUP BY steam_id, name, team_id`,
-        [matchId, steamId]
+        `SELECT steam_id, name, team_id, ${statFields} FROM player_stats WHERE match_id = ? AND steam_id = ? ${mapFilter}`,
+        [matchId, steamId, ...mapParam]
       );
       const teamStats: RowDataPacket[] = await db.query(
-        `SELECT steam_id, name, team_id, ${statFields} FROM player_stats WHERE match_id = ? AND team_id = ? GROUP BY steam_id, name, team_id`,
-        [matchId, playerTeamId]
+        `SELECT steam_id, name, team_id, ${statFields} FROM player_stats WHERE match_id = ? AND team_id = ? ${mapFilter}`,
+        [matchId, playerTeamId, ...mapParam]
       );
 
-      return { match, playerStats: playerStats[0] || null, teamStats };
+      return { match, currentMap, playerStats: playerStats[0] || null, teamStats };
     };
 
     res.set({
