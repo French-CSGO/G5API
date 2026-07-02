@@ -744,7 +744,7 @@ export async function sendGotvMatchEmbed(data: {
       .addFields(
         { name: "Match", value: `[#${data.matchId}](${data.matchUrl})`, inline: false },
         { name: "Équipes", value: `**${data.team1Name}** vs **${data.team2Name}**`, inline: false },
-        { name: "GOTV", value: `\`connect 54.37.50.33:${gotvPort}\``, inline: false }
+        { name: "URL", value: `https://broadcast.white-gaming.fr`, inline: false }
       )
       .setTimestamp();
     await sendEmbedToTargets(channelIds, embed);
