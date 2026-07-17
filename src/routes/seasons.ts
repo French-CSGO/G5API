@@ -1379,11 +1379,10 @@ async function getSeasonChallongeTournaments(seasonId: number): Promise<RowDataP
 
 /** Trouve le slug Challonge qui contient le match donné (via challonge_id sur la table match) */
 async function getSlugForMatch(seasonId: number, challongeMatchId: number, apiKey: string): Promise<string> {
-  // Cherche d'abord via le match G5 existant (challonge_id stocké)
+  // Cherche d'abord via le match G5 existant (challonge_slug stocké directement dessus)
   const existing: RowDataPacket[] = await db.query(
-    "SELECT sct.challonge_slug FROM `match` m " +
-    "JOIN season_challonge_tournament sct ON sct.season_id = m.season_id " +
-    "WHERE m.challonge_id = ? AND m.season_id = ? LIMIT 1",
+    "SELECT challonge_slug FROM `match` " +
+    "WHERE challonge_id = ? AND season_id = ? AND challonge_slug IS NOT NULL LIMIT 1",
     [challongeMatchId, seasonId]
   );
   if (existing.length) return existing[0].challonge_slug as string;
