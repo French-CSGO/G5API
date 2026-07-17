@@ -35,4 +35,5 @@ export interface MatchData {
     team2_series_score?: number,
     toornament_id?: string | null,
     challonge_id?: number | null,
+    challonge_slug?: string | null,
 }
