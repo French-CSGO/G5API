@@ -28,7 +28,7 @@ export async function generateTeamSeasonImage(
   const canvas = createCanvas(W, H);
   const ctx    = canvas.getContext("2d");
 
-  await drawBackground(ctx, cfg.background, W, H, "#f0ebe3");
+  await drawBackground(ctx, cfg.background, W, H);
 
   // ── Graphical shapes ──────────────────────────────────────────────────────
   const sh = cfg.shapes;

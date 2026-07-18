@@ -34,7 +34,7 @@ export async function generateMatchImage(
   const canvas = createCanvas(W, H);
   const ctx    = canvas.getContext("2d");
 
-  await drawBackground(ctx, m.background, W, H, "#f0ebe3");
+  await drawBackground(ctx, m.background, W, H);
 
   // ── Graphical shapes ──────────────────────────────────────────────────────
   const sh = m.shapes;
