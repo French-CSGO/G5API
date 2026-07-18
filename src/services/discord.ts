@@ -645,6 +645,16 @@ export async function sendSeriesResultEvent(data: {
 export async function sendVetoCompleteEmbed(matchId: number): Promise<void> {
   if (!isDiscordEnabled()) return;
   try {
+    // Verrou atomique : plusieurs événements (webhook MatchZy dupliqué, veto
+    // pré-match + relecture en jeu, etc.) peuvent tenter de déclencher cet
+    // embed pour le même match. Seul l'appel qui bascule veto_announced de
+    // false à true a le droit d'envoyer, ce qui garantit un envoi unique.
+    const claim: any = await db.query(
+      "UPDATE `match` SET veto_announced = 1 WHERE id = ? AND veto_announced = 0",
+      [matchId]
+    );
+    if (claim.affectedRows < 1) return;
+
     const hostname: string = config.get("server.hostname");
     const matchUrl = `${hostname.replace(/\/$/, "")}/match/${matchId}`;
 
