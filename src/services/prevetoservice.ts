@@ -554,7 +554,7 @@ export async function adminReset(token: string): Promise<ActionResult> {
     [JSON.stringify(plan), session.id]
   );
   await db.query(
-    "UPDATE `match` SET pending_veto = 1, skip_veto = 0, veto_mappool = ?, map_sides = NULL, veto_first = NULL, veto_announced = 0 WHERE id = ?",
+    "UPDATE `match` SET pending_veto = 1, skip_veto = 0, veto_mappool = ?, map_sides = NULL, veto_first = NULL WHERE id = ?",
     [session.map_pool, session.match_id]
   );
   GlobalEmitter.emit("prevetoUpdateAny");
