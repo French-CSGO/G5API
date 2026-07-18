@@ -2,6 +2,9 @@ import { loadImage } from "canvas";
 import type { Image } from "canvas";
 import path from "path";
 import fs from "fs";
+import fetch from "node-fetch";
+import Utils from "../../../utility/utils.js";
+import { writeFileSafe } from "../helpers.js";
 
 const MAP_PREFIX_RE = /^(de_|cs_|ar_)/;
 
@@ -62,10 +65,32 @@ export async function tryLoadPlayerImage(steamId: string): Promise<Image | null>
       const p = path.join(dir, steamId + e);
       if (fs.existsSync(p)) { try { return await loadImage(p); } catch { /* skip */ } }
     }
+    // No manually-uploaded photo — fall back to the player's live Steam avatar
+    const steamImg = await tryLoadSteamAvatar(steamId, dir);
+    if (steamImg) return steamImg;
   }
   for (const e of exts) {
     const p = path.join(dir, "default" + e);
     if (fs.existsSync(p)) { try { return await loadImage(p); } catch { /* skip */ } }
   }
   return null;
+}
+
+/** Fetches the player's Steam avatar and caches it to disk as {steamId}.png for future calls. */
+async function tryLoadSteamAvatar(steamId: string, playersDir: string): Promise<Image | null> {
+  try {
+    const avatarUrl = await Utils.getSteamImage(steamId);
+    if (!avatarUrl) return null;
+    const res = await fetch(avatarUrl);
+    if (!res.ok) return null;
+    const buffer = Buffer.from(await res.arrayBuffer());
+    const img = await loadImage(buffer);
+    try {
+      if (!fs.existsSync(playersDir)) fs.mkdirSync(playersDir, { recursive: true });
+      writeFileSafe(path.join(playersDir, `${steamId}.png`), buffer);
+    } catch { /* caching is best-effort */ }
+    return img;
+  } catch {
+    return null;
+  }
 }
