@@ -10,7 +10,7 @@ import path from "path";
 import fs from "fs";
 
 import { db } from "../../services/db.js";
-import { upload, writeFileSafe, escapeHtmlAttr } from "./helpers.js";
+import { upload, writeFileSafe } from "./helpers.js";
 import { loadSettings, saveSettings } from "./settings.js";
 import Utils from "../../utility/utils.js";
 import { generateMatchImage } from "./generators/match.js";
@@ -224,31 +224,6 @@ router.post(
     res.json({ message: "Font saved.", filename: safeFontFilename });
   }
 );
-
-// ─── OBS embed route ──────────────────────────────────────────────────────────
-
-/**
- * GET /image/embed/* — page HTML minimale qui affiche une image générée (match, mvp,
- * player, team season...) en plein cadre et fond transparent. À utiliser comme URL de
- * Browser Source OBS plutôt que l'URL PNG directe : Chrome ajoute un fond gris
- * (hsl(0, 0%, 90%)) aux images ouvertes seules dans un document, ce qui n'arrive pas
- * quand l'image est intégrée dans une page HTML comme ici.
- * Exemple : /image/embed/match/1181/map/1/mvp → affiche /image/match/1181/map/1/mvp
- */
-router.get("/embed/*", (req: Request, res: Response) => {
-  const subPath = req.params[0] as string;
-  const qs = req.originalUrl.split("?")[1];
-  const src = escapeHtmlAttr(`/api/image/${subPath}${qs ? `?${qs}` : ""}`);
-  res.setHeader("Content-Type", "text/html; charset=utf-8");
-  res.send(`<!doctype html>
-<html>
-<head><meta charset="utf-8"><style>
-  html, body { margin: 0; padding: 0; height: 100%; background: transparent; overflow: hidden; }
-  img { display: block; width: 100%; height: 100%; object-fit: contain; }
-</style></head>
-<body><img src="${src}"></body>
-</html>`);
-});
 
 // ─── Match image routes ───────────────────────────────────────────────────────
 

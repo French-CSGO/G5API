@@ -75,14 +75,6 @@ export function drawRoundRect(
   ctx.restore();
 }
 
-export function escapeHtmlAttr(str: string): string {
-  return str
-    .replace(/&/g, "&amp;")
-    .replace(/"/g, "&quot;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-}
-
 export function fieldFont(f: { bold: boolean; size: number; font: string }): string {
   return `${f.bold ? "bold " : ""}${f.size}px ${f.font}`;
 }
