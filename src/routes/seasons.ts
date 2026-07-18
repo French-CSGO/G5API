@@ -1595,7 +1595,12 @@ router.get("/:season_id/challonge/matches", Utils.ensureAuthenticated, async (re
     const g5ByChallongeId = new Map<number, number>();
     const g5ByTeamPair = new Map<string, number>();
     for (const m of g5Matches) {
-      if (m.challonge_id) g5ByChallongeId.set(Number(m.challonge_id), m.id);
+      if (m.challonge_id) {
+        g5ByChallongeId.set(Number(m.challonge_id), m.id);
+        continue;
+      }
+      // Fallback team-pair uniquement pour les matchs pré-existants sans challonge_id
+      // (sinon un match déjà lié à un challonge_id précis "vole" les rematchs du même duo)
       const k1 = `${m.team1_id}:${m.team2_id}`;
       const k2 = `${m.team2_id}:${m.team1_id}`;
       if (!g5ByTeamPair.has(k1) || g5ByTeamPair.get(k1)! < m.id) g5ByTeamPair.set(k1, m.id);
