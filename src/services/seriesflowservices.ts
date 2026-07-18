@@ -415,11 +415,21 @@ class SeriesFlowService {
     await db.query(sqlString, [insertObj]);
     GlobalEmitter.emit("vetoUpdate");
 
-    // Déclenche l'embed veto dès que 7 étapes sont complètes
+    // Déclenche l'embed veto une seule fois, dès que toutes les étapes
+    // (une par map du pool) sont complètes. Le nombre d'étapes dépend de la
+    // taille du pool de maps (veto_mappool), pas d'une constante fixe.
+    const poolInfo: RowDataPacket[] = await db.query(
+      "SELECT veto_mappool FROM `match` WHERE id = ?", [matchid]
+    );
+    const expectedSteps = (poolInfo[0]?.veto_mappool ?? "")
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean).length;
+
     const vetoCount: RowDataPacket[] = await db.query(
       "SELECT COUNT(*) AS cnt FROM veto WHERE match_id = ?", [matchid]
     );
-    if (vetoCount[0]?.cnt >= 7) {
+    if (expectedSteps > 0 && vetoCount[0]?.cnt === expectedSteps) {
       sendVetoCompleteEmbed(Number(matchid)).catch(() => {});
     }
   }
