@@ -467,6 +467,14 @@ export async function updateSchedule(): Promise<void> {
         );
         const usedChallongeIds = new Set<number>(existingChallongeIds.map((r: any) => r.challonge_id));
 
+        const challongeRoundFormatRows: RowDataPacket[] = await db.query(
+          "SELECT challonge_slug, group_id, round, max_maps FROM season_challonge_round_format WHERE season_id = ?",
+          [season.id]
+        );
+        const challongeRoundFormats = new Map<string, number>(
+          challongeRoundFormatRows.map((r: any) => [`${r.challonge_slug}|${r.group_id}|${r.round}`, r.max_maps])
+        );
+
         let seasonHeader = false;
 
         for (const bracket of brackets) {
@@ -510,7 +518,8 @@ export async function updateSchedule(): Promise<void> {
           for (const m of toShow) {
             const team1Name = participantMap.get(m.player1_id!) ?? `#${m.player1_id}`;
             const team2Name = participantMap.get(m.player2_id!) ?? `#${m.player2_id}`;
-            content += `• **${team1Name}** vs **${team2Name}** — Ronde ${m.round}`;
+            const maxMaps = challongeRoundFormats.get(`${slug}|${m.group_id ?? "none"}|${m.round}`) ?? 1;
+            content += `• **${team1Name}** vs **${team2Name}** — Ronde ${m.round} — \`BO${maxMaps}\``;
             if (m.scheduled_time) {
               const scheduled = new Date(m.scheduled_time).toLocaleString("fr-FR", {
                 timeZone: "Europe/Paris", hour: "2-digit", minute: "2-digit",
