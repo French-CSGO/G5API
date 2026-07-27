@@ -18,11 +18,13 @@ import { generatePlayerImage } from "./generators/player.js";
 import { generateTeamSeasonImage } from "./generators/teamSeason.js";
 import { generateMapMvpImage } from "./generators/mvp.js";
 import { generateTeamMatchImage } from "./generators/teamMatch.js";
+import { generateSwissImage } from "./generators/swiss.js";
+import { getChallongeAPIKey, getSeasonChallongeTournaments, enrichChallongeMatches } from "../seasons.js";
 import type { ImageSettings } from "./types.js";
 import type {
   MatchRow, MapStatRow, PlayerStatRow,
   PlayerStatExtended, TeamSeasonRow, RoundsRow, WinsRow,
-  TeamNameRow, BestMapRow, TeamNameLogoRow,
+  TeamNameRow, BestMapRow, TeamNameLogoRow, SwissPositionRow,
 } from "./types.js";
 
 const router = Router();
@@ -853,5 +855,46 @@ async function renderSeasonVersusImage(req: Request, res: Response) {
     res.status(500).json({ error: "Failed to generate season versus image" });
   }
 }
+
+// ─── Swiss stage image route ──────────────────────────────────────────────────
+
+/** GET /image/season/:season_id/swiss/:tournament_id — image des matchs positionnés (click & drop) */
+router.get("/season/:season_id/swiss/:tournament_id", async (req: Request, res: Response) => {
+  try {
+    const seasonId     = parseInt(req.params.season_id);
+    const tournamentId = parseInt(req.params.tournament_id);
+    if (isNaN(seasonId) || isNaN(tournamentId)) { res.status(400).json({ error: "Invalid ID" }); return; }
+
+    const tournaments = await getSeasonChallongeTournaments(seasonId);
+    const tournament = tournaments.find(t => t.id === tournamentId);
+    if (!tournament) { res.status(404).json({ error: "Bracket not found" }); return; }
+
+    const positions = await db.query(
+      "SELECT challonge_match_id, x, y FROM season_challonge_match_position WHERE tournament_id = ?",
+      [tournamentId]
+    ) as SwissPositionRow[];
+
+    let matches: Awaited<ReturnType<typeof enrichChallongeMatches>> = [];
+    if (positions.length) {
+      const apiKey = getChallongeAPIKey();
+      matches = await enrichChallongeMatches(
+        tournament.challonge_slug as string,
+        tournament.label as string,
+        apiKey,
+        undefined,
+        new Map(),
+        new Map()
+      );
+    }
+
+    const png = await generateSwissImage(matches, positions, loadSettings());
+    res.setHeader("Content-Type", "image/png");
+    res.setHeader("Cache-Control", "no-cache, no-store");
+    res.send(png);
+  } catch (err) {
+    console.error("[image/swiss] Error:", err);
+    res.status(500).json({ error: "Failed to generate swiss image" });
+  }
+});
 
 export default router;
