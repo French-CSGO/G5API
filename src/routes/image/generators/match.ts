@@ -24,12 +24,15 @@ export async function generateMatchImage(
   const H = s.canvas.height;
 
   tryRegisterFont(m.fontFile, [
-    m.team1_name, m.team1_score, m.team2_score, m.team2_name,
-    m.map1, m.map2, m.map3,
-    m.player_name_l, m.player_name_r,
-    m.kad_l, m.rating_l,
-    m.kad_r, m.rating_r,
-  ].map(f => f.font));
+    ...([
+      m.team1_name, m.team1_score, m.team2_score, m.team2_name,
+      m.map1, m.map2, m.map3,
+      m.player_name_l, m.player_name_r,
+      m.kad_l, m.rating_l,
+      m.kad_r, m.rating_r,
+    ].map(f => f.font)),
+    ...(m.column_headers.enabled ? [m.column_headers.font] : []),
+  ]);
 
   const withRating = (row: PlayerStatRow): PlayerWithRating => ({
     ...row,
@@ -128,10 +131,12 @@ export async function generateMatchImage(
 
   const ch = m.column_headers;
   if (ch.enabled) {
+    const firstEnabledIdx = m.rows_y.findIndex(y => y > 0);
+    const xIdx = firstEnabledIdx >= 0 ? firstEnabledIdx : 0;
     const chFont = `${ch.bold ? "bold " : ""}${ch.size}px ${ch.font}`;
     const pairs: [string | undefined, number, number][] = [
-      [ch.kad_label,    m.kad_l.x[0],    m.kad_r.x[0]],
-      [ch.rating_label, m.rating_l.x[0], m.rating_r.x[0]],
+      [ch.kad_label,    m.kad_l.x[xIdx],    m.kad_r.x[xIdx]],
+      [ch.rating_label, m.rating_l.x[xIdx], m.rating_r.x[xIdx]],
     ];
     for (const [label, lx, rx] of pairs) {
       if (label) {

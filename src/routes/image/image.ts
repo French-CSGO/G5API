@@ -93,20 +93,13 @@ async function fetchSeasonTeamPlayers(seasonId: number, teamId: number): Promise
   ) as PlayerStatRow[];
 }
 
-/** Top joueurs (agrégés sur la saison) des deux équipes, pour l'image "versus" de saison. */
+/** Top 5 joueurs (agrégés sur la saison) des deux équipes, pour l'image "versus" de saison. */
 async function fetchSeasonVersusPlayers(seasonId: number, team1Id: number, team2Id: number): Promise<PlayerStatRow[]> {
-  return await db.query(
-    `SELECT ps.steam_id, ps.name, ps.team_id,
-       SUM(ps.kills) AS kills, SUM(ps.deaths) AS deaths, SUM(ps.assists) AS assists,
-       SUM(ps.roundsplayed) AS roundsplayed,
-       SUM(ps.k1) AS k1, SUM(ps.k2) AS k2, SUM(ps.k3) AS k3, SUM(ps.k4) AS k4, SUM(ps.k5) AS k5
-     FROM player_stats ps
-     JOIN \`match\` m ON m.id = ps.match_id
-     WHERE m.season_id = ? AND ps.team_id IN (?, ?)
-     GROUP BY ps.steam_id, ps.team_id
-     ORDER BY ps.team_id, SUM(ps.kills) DESC`,
-    [seasonId, team1Id, team2Id]
-  ) as PlayerStatRow[];
+  const [team1Players, team2Players] = await Promise.all([
+    fetchSeasonTeamPlayers(seasonId, team1Id),
+    fetchSeasonTeamPlayers(seasonId, team2Id),
+  ]);
+  return [...team1Players, ...team2Players];
 }
 
 /** Maps jouées cette saison entre ces deux équipes précises, scores normalisés du point de vue de team1Id. */
