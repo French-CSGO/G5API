@@ -20,6 +20,7 @@ export async function generateTeamMatchImage(
 
   tryRegisterFont(cfg.fontFile, [
     cfg.team_name, cfg.player_name, cfg.kad, cfg.rating,
+    { font: cfg.row_labels.font },
   ].map(f => f.font));
 
   const withRating = (row: PlayerStatRow): PlayerWithRating => ({
