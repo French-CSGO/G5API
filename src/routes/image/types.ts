@@ -11,27 +11,36 @@ export interface FC {
   y:       number;
 }
 
-/** Champ sans Y — colonnes du match (le Y vient de rows_y) */
+/** Champ positionnable individuellement pour chacune des 5 lignes joueurs */
 export interface FX {
   enabled: boolean;
   font:    string;
   color:   string;
   size:    number;
   bold:    boolean;
-  x:       number;
+  x:       [number, number, number, number, number];
+  y:       [number, number, number, number, number];
 }
 
 export interface MatchColumnHeaders {
-  enabled:       boolean;
-  y:             number;
-  font:          string;
-  color:         string;
-  size:          number;
-  bold:          boolean;
-  kills_label:   string;
-  assists_label: string;
-  deaths_label:  string;
-  rating_label:  string;
+  enabled:      boolean;
+  y:            number;
+  font:         string;
+  color:        string;
+  size:         number;
+  bold:         boolean;
+  kad_label:    string; // "K / A / D"
+  rating_label: string;
+}
+
+/** Photo joueur du match, positionnable individuellement pour chacune des 5 lignes */
+export interface PlayerPhotoConfig {
+  enabled: boolean;
+  x:       [number, number, number, number, number];
+  y:       [number, number, number, number, number];
+  width:   number;
+  height:  number;
+  circle:  boolean;
 }
 
 export interface PlayerColumnHeaders {
@@ -58,6 +67,20 @@ export interface LogoConfig {
   size:    number;   // taille (largeur = hauteur)
 }
 
+/** Étiquettes à gauche des lignes de stat de l'image team_match (X partagé, Y par ligne) */
+export interface TeamMatchRowLabels {
+  enabled:      boolean;
+  font:         string;
+  color:        string;
+  size:         number;
+  bold:         boolean;
+  x:            number;
+  kad_label:    string; // "K / A / D"
+  kad_y:        number;
+  rating_label: string;
+  rating_y:     number;
+}
+
 export interface ImageSettings {
   canvas: { width: number; height: number };
 
@@ -74,14 +97,12 @@ export interface ImageSettings {
     map3:          FC;
     player_name_l: FX;
     player_name_r: FX;
-    kills_l:   FX;
-    assists_l: FX;
-    deaths_l:  FX;
+    kad_l:     FX; // texte combiné "K / A / D"
     rating_l:  FX;
-    kills_r:   FX;
-    assists_r: FX;
-    deaths_r:  FX;
+    kad_r:     FX;
     rating_r:  FX;
+    player_photo_l: PlayerPhotoConfig;
+    player_photo_r: PlayerPhotoConfig;
     team1_logo: LogoConfig;
     team2_logo: LogoConfig;
     column_headers: MatchColumnHeaders;
@@ -368,6 +389,19 @@ export interface ImageSettings {
       };
     };
   };
+
+  /** Stats d'une seule équipe pour un match donné (photos + logo + stats) */
+  team_match: {
+    background:  string;
+    fontFile:    string;
+    team_logo:   LogoConfig;
+    team_name:   FC;
+    photos:      PlayerPhotoConfig;
+    player_name: FX;
+    kad:         FX; // texte combiné "K / A / D"
+    rating:      FX;
+    row_labels:  TeamMatchRowLabels;
+  };
 }
 
 // ─── DB row interfaces ────────────────────────────────────────────────────────
@@ -407,3 +441,6 @@ export interface RoundsRow   extends RowDataPacket { rounds_won: number; rounds_
 export interface WinsRow     extends RowDataPacket { wins: number; losses: number; }
 export interface TeamNameRow extends RowDataPacket { name: string; }
 export interface BestMapRow  extends RowDataPacket { map_name: string; wins: number; }
+export interface TeamNameLogoRow extends RowDataPacket {
+  id: number; name: string; logo: string | null; flag: string | null;
+}
