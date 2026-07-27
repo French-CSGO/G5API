@@ -49,6 +49,9 @@ const app = express();
 // Trust reverse proxy (Caddy) so secure cookies and rate limiting work correctly
 app.set("trust proxy", 1);
 
+// Security defaults with helmet
+app.use(helmet());
+
 app.use(logger("dev"));
 app.use(express.raw({ type: "application/octet-stream", limit: "2gb" }));
 app.use(express.json({ limit: "512kb" }));
@@ -60,10 +63,25 @@ app.use("/static/img/logos", express.static("public/img/logos"));
 app.use("/resource/flash/econ/tournaments/teams", express.static("public/img/logos"));
 app.use("/materials/panorama/images/tournaments/teams", express.static("public/img/logos"));
 app.use("/static/img/players", express.static("public/img/players"));
-
-
-// Security defaults with helmet
-app.use(helmet());
+app.use(
+  "/static/img",
+  (req, res, next) => {
+    // Only serve common raster image types to avoid exposing arbitrary uploaded content
+    if (!/\.(png|jpe?g|webp|gif|ico)$/i.test(req.path)) {
+      res.sendStatus(404);
+      return;
+    }
+    next();
+  },
+  express.static("public/img", {
+    dotfiles: "deny",
+    fallthrough: false,
+    setHeaders: (res) => {
+      res.setHeader("X-Content-Type-Options", "nosniff");
+      res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+    }
+  })
+);
 
 let sessionType: any;
 if (config.get("server.useRedis")) {

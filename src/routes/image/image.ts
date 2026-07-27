@@ -17,11 +17,12 @@ import { generateMatchImage } from "./generators/match.js";
 import { generatePlayerImage } from "./generators/player.js";
 import { generateTeamSeasonImage } from "./generators/teamSeason.js";
 import { generateMapMvpImage } from "./generators/mvp.js";
+import { generateTeamMatchImage } from "./generators/teamMatch.js";
 import type { ImageSettings } from "./types.js";
 import type {
   MatchRow, MapStatRow, PlayerStatRow,
   PlayerStatExtended, TeamSeasonRow, RoundsRow, WinsRow,
-  TeamNameRow, BestMapRow,
+  TeamNameRow, BestMapRow, TeamNameLogoRow,
 } from "./types.js";
 
 const router = Router();
@@ -58,6 +59,63 @@ async function fetchVetoPicks(matchId: number): Promise<string[]> {
   return rows.map(r => r.map);
 }
 
+/** Stats agrégées (ou pour une map précise si mapStatsId est fourni) d'une seule équipe. */
+async function fetchTeamPlayers(matchId: number, teamId: number, mapStatsId: number | null): Promise<PlayerStatRow[]> {
+  const mapFilter = mapStatsId !== null ? "AND map_id = ?" : "";
+  const args = mapStatsId !== null ? [matchId, teamId, mapStatsId] : [matchId, teamId];
+  return await db.query(
+    `SELECT steam_id, MAX(name) AS name, team_id,
+       SUM(kills) AS kills, SUM(deaths) AS deaths, SUM(assists) AS assists,
+       SUM(roundsplayed) AS roundsplayed,
+       SUM(k1) AS k1, SUM(k2) AS k2, SUM(k3) AS k3, SUM(k4) AS k4, SUM(k5) AS k5
+     FROM player_stats
+     WHERE match_id = ? AND team_id = ? ${mapFilter}
+     GROUP BY steam_id, team_id
+     ORDER BY kills DESC`,
+    args
+  ) as PlayerStatRow[];
+}
+
+/** Top 5 joueurs (agrégés sur toute la saison) d'une seule équipe. */
+async function fetchSeasonTeamPlayers(seasonId: number, teamId: number): Promise<PlayerStatRow[]> {
+  return await db.query(
+    `SELECT ps.steam_id, ps.name, ps.team_id,
+       SUM(ps.kills) AS kills, SUM(ps.deaths) AS deaths, SUM(ps.assists) AS assists,
+       SUM(ps.roundsplayed) AS roundsplayed,
+       SUM(ps.k1) AS k1, SUM(ps.k2) AS k2, SUM(ps.k3) AS k3, SUM(ps.k4) AS k4, SUM(ps.k5) AS k5
+     FROM player_stats ps
+     JOIN \`match\` m ON m.id = ps.match_id
+     WHERE m.season_id = ? AND ps.team_id = ?
+     GROUP BY ps.steam_id, ps.team_id
+     ORDER BY SUM(ps.kills) DESC
+     LIMIT 5`,
+    [seasonId, teamId]
+  ) as PlayerStatRow[];
+}
+
+/** Top 5 joueurs (agrégés sur la saison) des deux équipes, pour l'image "versus" de saison. */
+async function fetchSeasonVersusPlayers(seasonId: number, team1Id: number, team2Id: number): Promise<PlayerStatRow[]> {
+  const [team1Players, team2Players] = await Promise.all([
+    fetchSeasonTeamPlayers(seasonId, team1Id),
+    fetchSeasonTeamPlayers(seasonId, team2Id),
+  ]);
+  return [...team1Players, ...team2Players];
+}
+
+/** Maps jouées cette saison entre ces deux équipes précises, scores normalisés du point de vue de team1Id. */
+async function fetchSeasonHeadToHeadMaps(seasonId: number, team1Id: number, team2Id: number): Promise<MapStatRow[]> {
+  return await db.query(
+    `SELECT ms.id, ms.map_name, ms.map_number,
+       CASE WHEN m.team1_id = ? THEN ms.team1_score ELSE ms.team2_score END AS team1_score,
+       CASE WHEN m.team1_id = ? THEN ms.team2_score ELSE ms.team1_score END AS team2_score
+     FROM map_stats ms
+     JOIN \`match\` m ON m.id = ms.match_id
+     WHERE m.season_id = ? AND ((m.team1_id = ? AND m.team2_id = ?) OR (m.team1_id = ? AND m.team2_id = ?))
+     ORDER BY ms.id ASC`,
+    [team1Id, team1Id, seasonId, team1Id, team2Id, team2Id, team1Id]
+  ) as MapStatRow[];
+}
+
 function playerRating(p: PlayerStatExtended): number {
   return Utils.getRating(
     Number(p.kills), Number(p.roundsplayed), Number(p.deaths),
@@ -67,6 +125,33 @@ function playerRating(p: PlayerStatExtended): number {
 
 function computeMvpPlayer(players: PlayerStatExtended[]): PlayerStatExtended {
   return players.reduce((best, p) => playerRating(p) > playerRating(best) ? p : best);
+}
+
+/**
+ * Live preview support: a POST request may carry unsaved settings in its body
+ * (`{ settings: ImageSettings }`) so the panel can render a real preview of
+ * in-progress edits without writing them to disk first. GET requests (and any
+ * POST without a body) fall back to the persisted settings as before.
+ */
+function settingsFromRequest(req: Request): ImageSettings {
+  const provided = (req.body as { settings?: unknown } | undefined)?.settings;
+  if (!provided || typeof provided !== "object") return loadSettings();
+
+  const s = provided as ImageSettings;
+
+  // Clamp canvas dimensions to avoid memory/CPU DoS via createCanvas()
+  s.canvas = s.canvas ?? { width: 1920, height: 1080 };
+  s.canvas.width = Math.min(4096, Math.max(1, Number(s.canvas.width) || 1920));
+  s.canvas.height = Math.min(4096, Math.max(1, Number(s.canvas.height) || 1080));
+
+  // Prevent path traversal via filenames used by drawBackground()/tryRegisterFont()
+  const sanitize = (x: any) => {
+    if (x?.background) x.background = path.basename(String(x.background));
+    if (x?.fontFile) x.fontFile = path.basename(String(x.fontFile));
+  };
+  ["match", "player", "team_season", "mvp", "team_match"].forEach(k => sanitize((s as any)[k]));
+
+  return s;
 }
 
 // ─── Settings routes ──────────────────────────────────────────────────────────
@@ -268,14 +353,26 @@ router.post(
 router.get("/match/:match_id", async (req: Request, res: Response) => {
   await renderMatchImage(req, res, null, "full");
 });
+/** POST /image/match/:match_id/preview — même rendu, à partir de settings non sauvegardés (body: { settings }) */
+router.post("/match/:match_id/preview", async (req: Request, res: Response) => {
+  await renderMatchImage(req, res, null, "full");
+});
 
 /** GET /image/match/:match_id/map — current (latest) map stats */
 router.get("/match/:match_id/map", async (req: Request, res: Response) => {
   await renderMatchImage(req, res, null, "latest");
 });
+router.post("/match/:match_id/map/preview", async (req: Request, res: Response) => {
+  await renderMatchImage(req, res, null, "latest");
+});
 
 /** GET /image/match/:match_id/map/:map_number — stats by map number (1, 2, 3...) */
 router.get("/match/:match_id/map/:map_number", async (req: Request, res: Response) => {
+  const mapNumber = parseInt(req.params.map_number);
+  if (isNaN(mapNumber) || mapNumber < 1) { res.status(400).json({ error: "Invalid map number" }); return; }
+  await renderMatchImage(req, res, mapNumber, "byNumber");
+});
+router.post("/match/:match_id/map/:map_number/preview", async (req: Request, res: Response) => {
   const mapNumber = parseInt(req.params.map_number);
   if (isNaN(mapNumber) || mapNumber < 1) { res.status(400).json({ error: "Invalid map number" }); return; }
   await renderMatchImage(req, res, mapNumber, "byNumber");
@@ -360,7 +457,7 @@ async function renderMatchImage(req: Request, res: Response, mapParam: number | 
       playerArgs
     ) as PlayerStatRow[];
 
-    const png = await generateMatchImage(match, mapRow, allMaps, players, loadSettings(), mapSlots, plannedMaps, currentSlotIndex);
+    const png = await generateMatchImage(match, mapRow, allMaps, players, settingsFromRequest(req), mapSlots, plannedMaps, currentSlotIndex);
     res.setHeader("Content-Type", "image/png");
     res.setHeader("Cache-Control", "no-cache, no-store");
     res.send(png);
@@ -376,9 +473,15 @@ async function renderMatchImage(req: Request, res: Response, mapParam: number | 
 router.get("/match/:match_id/mvp", async (req: Request, res: Response) => {
   await renderFullMatchMvpImage(req, res);
 });
+router.post("/match/:match_id/mvp/preview", async (req: Request, res: Response) => {
+  await renderFullMatchMvpImage(req, res);
+});
 
 /** GET /image/match/:match_id/map/:map_number/mvp — image MVP de la map */
 router.get("/match/:match_id/map/:map_number/mvp", async (req: Request, res: Response) => {
+  await renderMvpImage(req, res);
+});
+router.post("/match/:match_id/map/:map_number/mvp/preview", async (req: Request, res: Response) => {
   await renderMvpImage(req, res);
 });
 
@@ -411,7 +514,7 @@ async function renderFullMatchMvpImage(req: Request, res: Response) {
     if (!players?.length) { res.status(404).json({ error: "No player stats found for this match" }); return; }
 
     const mvpPlayer = computeMvpPlayer(players);
-    const base = loadSettings();
+    const base = settingsFromRequest(req);
     // Don't mutate the loaded settings object — build a derived copy
     const settings = { ...base, mvp: { ...base.mvp, map_image: { enabled: false } } };
 
@@ -460,7 +563,7 @@ async function renderMvpImage(req: Request, res: Response) {
     const currentSlotIndex = totalMaps === 1 ? 1 : mapNumber - 1;
 
     const mvpPlayer = computeMvpPlayer(players);
-    const png = await generateMapMvpImage(match, mapRow, mvpPlayer, loadSettings(), allMaps, plannedMaps, currentSlotIndex);
+    const png = await generateMapMvpImage(match, mapRow, mvpPlayer, settingsFromRequest(req), allMaps, plannedMaps, currentSlotIndex);
     res.setHeader("Content-Type", "image/png");
     res.setHeader("Cache-Control", "no-cache, no-store");
     res.send(png);
@@ -476,9 +579,17 @@ async function renderMvpImage(req: Request, res: Response) {
 router.get("/match/:match_id/player/:steam_id", async (req: Request, res: Response) => {
   await renderPlayerImage(req, res, null);
 });
+router.post("/match/:match_id/player/:steam_id/preview", async (req: Request, res: Response) => {
+  await renderPlayerImage(req, res, null);
+});
 
 /** GET /image/match/:match_id/map/:map_number/player/:steam_id — stats joueur sur une map (par numéro 1, 2, 3...) */
 router.get("/match/:match_id/map/:map_number/player/:steam_id", async (req: Request, res: Response) => {
+  const mapNumber = parseInt(req.params.map_number);
+  if (isNaN(mapNumber) || mapNumber < 1) { res.status(400).json({ error: "Invalid map number" }); return; }
+  await renderPlayerImage(req, res, mapNumber);
+});
+router.post("/match/:match_id/map/:map_number/player/:steam_id/preview", async (req: Request, res: Response) => {
   const mapNumber = parseInt(req.params.map_number);
   if (isNaN(mapNumber) || mapNumber < 1) { res.status(400).json({ error: "Invalid map number" }); return; }
   await renderPlayerImage(req, res, mapNumber);
@@ -524,7 +635,7 @@ async function renderPlayerImage(req: Request, res: Response, mapNumber: number 
     const myTeam    = isTeam1 ? team1Name : team2Name;
     const opp       = isTeam1 ? team2Name : team1Name;
 
-    const png = await generatePlayerImage(myTeam, opp, player, loadSettings());
+    const png = await generatePlayerImage(myTeam, opp, player, settingsFromRequest(req));
     res.setHeader("Content-Type", "image/png");
     res.setHeader("Cache-Control", "no-cache, no-store");
     res.send(png);
@@ -534,10 +645,72 @@ async function renderPlayerImage(req: Request, res: Response, mapNumber: number 
   }
 }
 
+// ─── Team match image routes ───────────────────────────────────────────────────
+// Stats d'une seule équipe (team_number 1 ou 2) pour un match : logo, photos et
+// stats des 5 titulaires. Utile pour un visuel par équipe plutôt que le match entier.
+
+/** GET /image/match/:match_id/team/:team_number — stats agrégées du match complet */
+router.get("/match/:match_id/team/:team_number", async (req: Request, res: Response) => {
+  await renderTeamMatchImage(req, res, null);
+});
+router.post("/match/:match_id/team/:team_number/preview", async (req: Request, res: Response) => {
+  await renderTeamMatchImage(req, res, null);
+});
+
+/** GET /image/match/:match_id/map/:map_number/team/:team_number — stats d'une map précise */
+router.get("/match/:match_id/map/:map_number/team/:team_number", async (req: Request, res: Response) => {
+  const mapNumber = parseInt(req.params.map_number);
+  if (isNaN(mapNumber) || mapNumber < 1) { res.status(400).json({ error: "Invalid map number" }); return; }
+  await renderTeamMatchImage(req, res, mapNumber);
+});
+router.post("/match/:match_id/map/:map_number/team/:team_number/preview", async (req: Request, res: Response) => {
+  const mapNumber = parseInt(req.params.map_number);
+  if (isNaN(mapNumber) || mapNumber < 1) { res.status(400).json({ error: "Invalid map number" }); return; }
+  await renderTeamMatchImage(req, res, mapNumber);
+});
+
+async function renderTeamMatchImage(req: Request, res: Response, mapNumber: number | null) {
+  try {
+    const matchId    = parseInt(req.params.match_id);
+    const teamNumber = parseInt(req.params.team_number);
+    if (isNaN(matchId)) { res.status(400).json({ error: "Invalid match ID" }); return; }
+    if (teamNumber !== 1 && teamNumber !== 2) { res.status(400).json({ error: "team_number must be 1 or 2" }); return; }
+
+    const match = await fetchMatchRow(matchId);
+    if (!match) { res.status(404).json({ error: "Match not found" }); return; }
+
+    let mapStatsId: number | null = null;
+    if (mapNumber !== null) {
+      const allMaps = await fetchAllMaps(matchId);
+      // map_number is 1-indexed from the user; DB stores 0-indexed
+      const mapRow = allMaps[mapNumber - 1] ?? null;
+      if (!mapRow) { res.status(404).json({ error: `Map ${mapNumber} not found for this match` }); return; }
+      mapStatsId = mapRow.id;
+    }
+
+    const isTeam1   = teamNumber === 1;
+    const teamId    = isTeam1 ? match.team1_id   : match.team2_id;
+    const teamName  = isTeam1 ? (match.team1_string || match.team1_name || "Team 1")
+                               : (match.team2_string || match.team2_name || "Team 2");
+    const teamLogo  = isTeam1 ? match.team1_logo : match.team2_logo;
+    const teamFlag  = isTeam1 ? match.team1_flag : match.team2_flag;
+
+    const players = await fetchTeamPlayers(matchId, teamId, mapStatsId);
+    if (!players?.length) { res.status(404).json({ error: "No player stats found for this team" }); return; }
+
+    const png = await generateTeamMatchImage(teamName, teamLogo, teamFlag, players, settingsFromRequest(req));
+    res.setHeader("Content-Type", "image/png");
+    res.setHeader("Cache-Control", "no-cache, no-store");
+    res.send(png);
+  } catch (err) {
+    console.error("[image/team-match] Error:", err);
+    res.status(500).json({ error: "Failed to generate team match image" });
+  }
+}
+
 // ─── Team season image route ──────────────────────────────────────────────────
 
-/** GET /image/season/:season_id/team/:team_id */
-router.get("/season/:season_id/team/:team_id", async (req: Request, res: Response) => {
+async function renderTeamSeasonImage(req: Request, res: Response) {
   try {
     const seasonId = parseInt(req.params.season_id);
     const teamId   = parseInt(req.params.team_id);
@@ -616,7 +789,7 @@ router.get("/season/:season_id/team/:team_id", async (req: Request, res: Respons
       roundsRows[0]    ?? { rounds_won: 0, rounds_lost: 0 } as RoundsRow,
       winsRows[0]      ?? { wins: 0, losses: 0 } as WinsRow,
       bestMap,
-      loadSettings()
+      settingsFromRequest(req)
     );
     res.setHeader("Content-Type", "image/png");
     res.setHeader("Cache-Control", "no-cache, no-store");
@@ -625,6 +798,97 @@ router.get("/season/:season_id/team/:team_id", async (req: Request, res: Respons
     console.error("[image/team-season] Error:", err);
     res.status(500).json({ error: "Failed to generate team season image" });
   }
+}
+
+/** GET /image/season/:season_id/team/:team_id */
+router.get("/season/:season_id/team/:team_id", renderTeamSeasonImage);
+/** POST /image/season/:season_id/team/:team_id/preview — settings non sauvegardés (body: { settings }) */
+router.post("/season/:season_id/team/:team_id/preview", renderTeamSeasonImage);
+
+// ─── Season "match style" image routes ─────────────────────────────────────
+// Réutilisent exactement les mêmes gabarits (mêmes positions) que les images
+// de match : generateTeamMatchImage (une équipe) et generateMatchImage (versus
+// deux équipes), mais avec des stats agrégées sur toute la saison au lieu
+// d'un seul match/map.
+
+/** GET /image/season/:season_id/team/:team_id/roster — même gabarit que /match/:id/team/:n, agrégé sur la saison */
+router.get("/season/:season_id/team/:team_id/roster", async (req: Request, res: Response) => {
+  await renderSeasonTeamRosterImage(req, res);
 });
+/** POST .../roster/preview — settings non sauvegardés (body: { settings }) */
+router.post("/season/:season_id/team/:team_id/roster/preview", async (req: Request, res: Response) => {
+  await renderSeasonTeamRosterImage(req, res);
+});
+
+async function renderSeasonTeamRosterImage(req: Request, res: Response) {
+  try {
+    const seasonId = parseInt(req.params.season_id);
+    const teamId   = parseInt(req.params.team_id);
+    if (isNaN(seasonId) || isNaN(teamId)) { res.status(400).json({ error: "Invalid ID" }); return; }
+
+    const teamRows = await db.query(`SELECT id, name, logo, flag FROM team WHERE id = ?`, [teamId]) as TeamNameLogoRow[];
+    if (!teamRows?.length) { res.status(404).json({ error: "Team not found" }); return; }
+
+    const players = await fetchSeasonTeamPlayers(seasonId, teamId);
+    if (!players?.length) { res.status(404).json({ error: "No player stats found for this team this season" }); return; }
+
+    const team = teamRows[0];
+    const png = await generateTeamMatchImage(team.name, team.logo, team.flag, players, settingsFromRequest(req));
+    res.setHeader("Content-Type", "image/png");
+    res.setHeader("Cache-Control", "no-cache, no-store");
+    res.send(png);
+  } catch (err) {
+    console.error("[image/season-team-roster] Error:", err);
+    res.status(500).json({ error: "Failed to generate season team roster image" });
+  }
+}
+
+/** GET /image/season/:season_id/versus/:team1_id/:team2_id — même gabarit que /match/:id, agrégé sur la saison */
+router.get("/season/:season_id/versus/:team1_id/:team2_id", async (req: Request, res: Response) => {
+  await renderSeasonVersusImage(req, res);
+});
+/** POST .../preview — settings non sauvegardés (body: { settings }) */
+router.post("/season/:season_id/versus/:team1_id/:team2_id/preview", async (req: Request, res: Response) => {
+  await renderSeasonVersusImage(req, res);
+});
+
+async function renderSeasonVersusImage(req: Request, res: Response) {
+  try {
+    const seasonId = parseInt(req.params.season_id);
+    const team1Id  = parseInt(req.params.team1_id);
+    const team2Id  = parseInt(req.params.team2_id);
+    if (isNaN(seasonId) || isNaN(team1Id) || isNaN(team2Id)) { res.status(400).json({ error: "Invalid ID" }); return; }
+
+    const teamRows = await db.query(
+      `SELECT id, name, logo, flag FROM team WHERE id IN (?, ?)`,
+      [team1Id, team2Id]
+    ) as TeamNameLogoRow[];
+    const team1 = teamRows.find(t => t.id === team1Id);
+    const team2 = teamRows.find(t => t.id === team2Id);
+    if (!team1 || !team2) { res.status(404).json({ error: "Team not found" }); return; }
+
+    const match = {
+      team1_id: team1Id, team2_id: team2Id,
+      team1_string: team1.name, team2_string: team2.name,
+      team1_name: team1.name,   team2_name: team2.name,
+      team1_logo: team1.logo,   team2_logo: team2.logo,
+      team1_flag: team1.flag,   team2_flag: team2.flag,
+    } as MatchRow;
+
+    const [players, headToHeadMaps] = await Promise.all([
+      fetchSeasonVersusPlayers(seasonId, team1Id, team2Id),
+      fetchSeasonHeadToHeadMaps(seasonId, team1Id, team2Id),
+    ]);
+    if (!players?.length) { res.status(404).json({ error: "No player stats found for these teams this season" }); return; }
+
+    const png = await generateMatchImage(match, null, headToHeadMaps, players, settingsFromRequest(req), [], [], -1);
+    res.setHeader("Content-Type", "image/png");
+    res.setHeader("Cache-Control", "no-cache, no-store");
+    res.send(png);
+  } catch (err) {
+    console.error("[image/season-versus] Error:", err);
+    res.status(500).json({ error: "Failed to generate season versus image" });
+  }
+}
 
 export default router;

@@ -1,17 +1,34 @@
 import path from "path";
 import fs from "fs";
-import type { FC, FX, LogoConfig, ImageSettings } from "./types.js";
+import type { FC, FX, LogoConfig, PlayerPhotoConfig, TeamMatchRowLabels, ImageSettings } from "./types.js";
 
 export const SETTINGS_PATH = path.join(process.cwd(), "public", "image-settings.json");
+
+const ROWS_Y_DEFAULT: [number, number, number, number, number] = [485, 625, 770, 0, 0];
+const PLAYER_COLUMNS_X: [number, number, number, number, number] = [320, 640, 960, 1280, 1600];
 
 export const fc = (enabled: boolean, font: string, color: string, size: number, bold: boolean, x: number, y: number): FC =>
   ({ enabled, font, color, size, bold, x, y });
 
 export const fx = (enabled: boolean, font: string, color: string, size: number, bold: boolean, x: number): FX =>
-  ({ enabled, font, color, size, bold, x });
+  ({ enabled, font, color, size, bold, x: [x, x, x, x, x], y: [...ROWS_Y_DEFAULT] as [number, number, number, number, number] });
 
 export const logo = (enabled: boolean, x: number, y: number, size: number): LogoConfig =>
   ({ enabled, x, y, size });
+
+export const playerPhoto = (enabled: boolean, x: number, width: number, height: number, circle: boolean): PlayerPhotoConfig =>
+  ({ enabled, x: [x, x, x, x, x], y: [...ROWS_Y_DEFAULT] as [number, number, number, number, number], width, height, circle });
+
+// Champ FX avec un X différent par joueur (colonne) mais un Y partagé (ligne) —
+// l'inverse de fx() ci-dessus, pour une mise en page "colonnes joueurs" (team_match).
+export const fxCols = (
+  enabled: boolean, font: string, color: string, size: number, bold: boolean,
+  xs: [number, number, number, number, number], y: number,
+): FX => ({ enabled, font, color, size, bold, x: [...xs], y: [y, y, y, y, y] });
+
+export const photoCols = (
+  enabled: boolean, xs: [number, number, number, number, number], width: number, height: number, circle: boolean, y: number,
+): PlayerPhotoConfig => ({ enabled, x: [...xs], y: [y, y, y, y, y], width, height, circle });
 
 export const DEFAULT_SETTINGS: ImageSettings = {
   canvas: { width: 1920, height: 1080 },
@@ -19,7 +36,7 @@ export const DEFAULT_SETTINGS: ImageSettings = {
   match: {
     background:    "marble.png",
     fontFile:      "",
-    rows_y:        [485, 625, 770, 0, 0],
+    rows_y:        [...ROWS_Y_DEFAULT],
     team1_name:    fc(true, "Arial", "#1a1a2e", 30, true, 415,  302),
     team1_score:   fc(true, "Arial", "#1a1a2e", 30, true, 806,  302),
     team2_score:   fc(true, "Arial", "#1a1a2e", 30, true, 1114, 302),
@@ -29,20 +46,18 @@ export const DEFAULT_SETTINGS: ImageSettings = {
     map3:          fc(true, "Arial", "#1a1a2e", 24, true, 1440, 980),
     player_name_l: fx(true, "Arial", "#1a1a2e", 20, true, 180),
     player_name_r: fx(true, "Arial", "#1a1a2e", 20, true, 1450),
-    kills_l:       fx(true, "Arial", "#1a1a2e", 20, false, 630),
-    assists_l:     fx(true, "Arial", "#1a1a2e", 20, false, 710),
-    deaths_l:      fx(true, "Arial", "#1a1a2e", 20, false, 800),
+    kad_l:         fx(true, "Arial", "#1a1a2e", 20, false, 700),
     rating_l:      fx(true, "Arial", "#1a1a2e", 20, false, 890),
-    kills_r:       fx(true, "Arial", "#1a1a2e", 20, false, 1025),
-    assists_r:     fx(true, "Arial", "#1a1a2e", 20, false, 1105),
-    deaths_r:      fx(true, "Arial", "#1a1a2e", 20, false, 1195),
+    kad_r:         fx(true, "Arial", "#1a1a2e", 20, false, 1120),
     rating_r:      fx(true, "Arial", "#1a1a2e", 20, false, 1280),
+    player_photo_l: playerPhoto(true, 110,  56, 56, true),
+    player_photo_r: playerPhoto(true, 1520, 56, 56, true),
     team1_logo: logo(true,  310, 302, 60),
     team2_logo: logo(true, 1610, 302, 60),
     column_headers: {
       enabled: false, y: 400,
       font: "Arial", color: "#1a1a2e", size: 20, bold: true,
-      kills_label: "K", assists_label: "A", deaths_label: "D", rating_label: "RTG",
+      kad_label: "K / A / D", rating_label: "RTG",
     },
     shapes: {
       enabled:     false,
@@ -300,13 +315,80 @@ export const DEFAULT_SETTINGS: ImageSettings = {
       },
     },
   },
+
+  team_match: {
+    background:  "marble.png",
+    fontFile:    "",
+    team_logo:   logo(true, 960, 130, 120),
+    team_name:   fc(true, "Arial", "#1a1a2e", 46, true, 960, 230),
+    photos:      photoCols(true, PLAYER_COLUMNS_X, 220, 220, true, 380),
+    player_name: fxCols(true, "Arial", "#1a1a2e", 24, true, PLAYER_COLUMNS_X, 520),
+    kad:         fxCols(true, "Arial", "#1a1a2e", 26, false, PLAYER_COLUMNS_X, 590),
+    rating:      fxCols(true, "Arial", "#1a1a2e", 26, false, PLAYER_COLUMNS_X, 650),
+    row_labels: {
+      enabled: true,
+      font: "Arial", color: "#888888", size: 20, bold: true,
+      x: 80,
+      kad_label:    "K / A / D", kad_y:    590,
+      rating_label: "Rating",    rating_y: 650,
+    },
+  },
 };
 
 export function mergeFC(def: FC, saved: Partial<FC> | undefined): FC {
   return { ...def, ...(saved ?? {}) };
 }
 
-export function mergeFX(def: FX, saved: Partial<FX> | undefined): FX {
+// Ramène une valeur sauvegardée (ancien scalaire, nouveau tableau, ou absente)
+// à un tableau de 5 positions, une par ligne joueur.
+function normalizeArr5(
+  val: unknown,
+  fallback: readonly number[],
+  def: readonly number[],
+): [number, number, number, number, number] {
+  if (Array.isArray(val)) {
+    return [0, 1, 2, 3, 4].map(i => val[i] ?? fallback[i] ?? def[i]) as [number, number, number, number, number];
+  }
+  if (typeof val === "number") {
+    return [val, val, val, val, val];
+  }
+  return [0, 1, 2, 3, 4].map(i => fallback[i] ?? def[i]) as [number, number, number, number, number];
+}
+
+export function mergeFX(
+  def: FX,
+  saved: (Partial<FX> & { x?: unknown; y?: unknown }) | undefined,
+  rowsYFallback: readonly number[] = def.y,
+): FX {
+  const s = saved ?? {};
+  return {
+    ...def,
+    ...s,
+    x: normalizeArr5(s.x, def.x, def.x),
+    // Anciennes configs : pas de Y sauvegardé → on part des rows_y déjà en place
+    // (pour ne pas déplacer les champs déjà positionnés par l'admin).
+    y: normalizeArr5(s.y, rowsYFallback, def.y),
+  };
+}
+
+export function mergePlayerPhoto(
+  def: PlayerPhotoConfig,
+  saved: (Partial<PlayerPhotoConfig> & { x?: unknown; y?: unknown }) | undefined,
+  rowsYFallback: readonly number[] = def.y,
+): PlayerPhotoConfig {
+  const s = saved ?? {};
+  return {
+    ...def,
+    ...s,
+    x: normalizeArr5(s.x, def.x, def.x),
+    y: normalizeArr5(s.y, rowsYFallback, def.y),
+  };
+}
+
+export function mergeRowLabels(
+  def: TeamMatchRowLabels,
+  saved: Partial<TeamMatchRowLabels> | undefined,
+): TeamMatchRowLabels {
   return { ...def, ...(saved ?? {}) };
 }
 
@@ -318,10 +400,13 @@ export function loadSettings(): ImageSettings {
     const dp  = DEFAULT_SETTINGS.player;
     const dt  = DEFAULT_SETTINGS.team_season;
     const dv  = DEFAULT_SETTINGS.mvp;
+    const dtm = DEFAULT_SETTINGS.team_match;
     const sm  = p.match       ?? {};
     const sp  = p.player      ?? {};
     const st  = p.team_season ?? {};
     const sv  = p.mvp         ?? {};
+    const stm = p.team_match  ?? {};
+    const rows_y: readonly number[] = sm.rows_y ?? dm.rows_y;
     return {
       canvas: { ...DEFAULT_SETTINGS.canvas, ...(p.canvas ?? {}) },
       match: {
@@ -335,19 +420,25 @@ export function loadSettings(): ImageSettings {
         map1:          mergeFC(dm.map1,          sm.map1),
         map2:          mergeFC(dm.map2,          sm.map2),
         map3:          mergeFC(dm.map3,          sm.map3),
-        player_name_l: mergeFX(dm.player_name_l, sm.player_name_l),
-        player_name_r: mergeFX(dm.player_name_r, sm.player_name_r),
-        kills_l:       mergeFX(dm.kills_l,       sm.kills_l),
-        assists_l:     mergeFX(dm.assists_l,      sm.assists_l),
-        deaths_l:      mergeFX(dm.deaths_l,       sm.deaths_l),
-        rating_l:      mergeFX(dm.rating_l,       sm.rating_l),
-        kills_r:        mergeFX(dm.kills_r,        sm.kills_r),
-        assists_r:      mergeFX(dm.assists_r,      sm.assists_r),
-        deaths_r:       mergeFX(dm.deaths_r,       sm.deaths_r),
-        rating_r:       mergeFX(dm.rating_r,       sm.rating_r),
+        player_name_l: mergeFX(dm.player_name_l, sm.player_name_l, rows_y),
+        player_name_r: mergeFX(dm.player_name_r, sm.player_name_r, rows_y),
+        // Compat avec les anciennes configs pré-fusion (kills_l/assists_l/deaths_l séparés)
+        kad_l:         mergeFX(dm.kad_l,    sm.kad_l ?? sm.assists_l ?? sm.kills_l ?? sm.deaths_l, rows_y),
+        rating_l:      mergeFX(dm.rating_l, sm.rating_l, rows_y),
+        kad_r:         mergeFX(dm.kad_r,    sm.kad_r ?? sm.assists_r ?? sm.kills_r ?? sm.deaths_r, rows_y),
+        rating_r:      mergeFX(dm.rating_r, sm.rating_r, rows_y),
+        player_photo_l: mergePlayerPhoto(dm.player_photo_l, sm.player_photo_l, rows_y),
+        player_photo_r: mergePlayerPhoto(dm.player_photo_r, sm.player_photo_r, rows_y),
         team1_logo:     { ...dm.team1_logo, ...(sm.team1_logo ?? {}) },
         team2_logo:     { ...dm.team2_logo, ...(sm.team2_logo ?? {}) },
-        column_headers: { ...dm.column_headers, ...(sm.column_headers ?? {}) },
+        column_headers: (() => {
+          const saved = sm.column_headers ?? {};
+          const merged = { ...dm.column_headers, ...saved } as typeof dm.column_headers & Record<string, any>;
+          if (!("kad_label" in saved) && ("kills_label" in saved || "assists_label" in saved || "deaths_label" in saved)) {
+            merged.kad_label = [saved.kills_label ?? "K", saved.assists_label ?? "A", saved.deaths_label ?? "D"].join(" / ");
+          }
+          return merged;
+        })(),
         shapes: {
           ...dm.shapes,
           ...(sm.shapes ?? {}),
@@ -439,6 +530,17 @@ export function loadSettings(): ImageSettings {
           player_pill:      { ...dt.shapes.player_pill,      ...(st.shapes?.player_pill      ?? {}) },
           stats_background: { ...dt.shapes.stats_background, ...(st.shapes?.stats_background ?? {}) },
         },
+      },
+      team_match: {
+        background:  stm.background ?? dtm.background,
+        fontFile:    stm.fontFile   ?? dtm.fontFile,
+        team_logo:   { ...dtm.team_logo, ...(stm.team_logo ?? {}) },
+        team_name:   mergeFC(dtm.team_name, stm.team_name),
+        photos:      mergePlayerPhoto(dtm.photos, stm.photos),
+        player_name: mergeFX(dtm.player_name, stm.player_name),
+        kad:         mergeFX(dtm.kad,    stm.kad),
+        rating:      mergeFX(dtm.rating, stm.rating),
+        row_labels:  mergeRowLabels(dtm.row_labels, stm.row_labels),
       },
     };
   } catch (err) {
