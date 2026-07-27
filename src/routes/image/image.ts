@@ -3,7 +3,7 @@
  * resourcePath: /image
  * description: Express API for generating real-time match stat images.
  */
-import { Router, Request, Response } from "express";
+import { Router, Request, Response, NextFunction } from "express";
 
 type MReq = Request & { file?: { originalname: string; buffer: Buffer; mimetype: string; size: number } };
 import path from "path";
@@ -160,8 +160,17 @@ router.post(
   }
 );
 
+/** Réservé aux utilisateurs avec le rôle cast ou admin. */
+function requireCastOrAdmin(req: Request, res: Response, next: NextFunction) {
+  if (!req.user || (!Utils.castCheck(req.user) && !Utils.adminCheck(req.user))) {
+    res.status(403).json({ error: "Accès réservé aux utilisateurs avec le rôle cast." });
+    return;
+  }
+  next();
+}
+
 /** GET /image/players — liste les images de joueurs dans public/img/players/ */
-router.get("/players", (_req: Request, res: Response) => {
+router.get("/players", Utils.ensureAuthenticated, requireCastOrAdmin, (_req: Request, res: Response) => {
   const playersDir = path.join(process.cwd(), "public", "img", "players");
   try {
     const files = fs.existsSync(playersDir)
@@ -176,6 +185,8 @@ router.get("/players", (_req: Request, res: Response) => {
 /** POST /image/upload/player — upload d'une image joueur dans public/img/players/{steamid}.png */
 router.post(
   "/upload/player",
+  Utils.ensureAuthenticated,
+  requireCastOrAdmin,
   upload.single("file") as any,
   (req: MReq, res: Response) => {
     if (!req.file) { res.status(400).json({ error: "No file received." }); return; }
@@ -189,6 +200,32 @@ router.post(
     const dest = path.join(playersDir, `${steamId}.png`);
     writeFileSafe(dest, req.file.buffer);
     res.json({ filename: `${steamId}.png` });
+  }
+);
+
+/** DELETE /image/player/:steam_id — supprime l'image d'un joueur dans public/img/players/ */
+router.delete(
+  "/player/:steam_id",
+  Utils.ensureAuthenticated,
+  requireCastOrAdmin,
+  (req: Request, res: Response) => {
+    const steamId = req.params.steam_id;
+    if (!/^\d{17}$/.test(steamId)) {
+      res.status(400).json({ error: "Invalid steam_id (must be 17 digits)." });
+      return;
+    }
+    const playersDir = path.join(process.cwd(), "public", "img", "players");
+    const extensions = ["png", "jpg", "jpeg", "webp"];
+    let deleted = false;
+    for (const ext of extensions) {
+      const filePath = path.join(playersDir, `${steamId}.${ext}`);
+      try {
+        fs.unlinkSync(filePath);
+        deleted = true;
+      } catch { /* file didn't exist for this extension */ }
+    }
+    if (!deleted) { res.status(404).json({ error: "Image not found." }); return; }
+    res.json({ message: "Image deleted." });
   }
 );
 

@@ -238,6 +238,66 @@ router.get("/unique", async (req, res, next) => {
 /**
  * @swagger
  *
+ * /playerstats/search:
+ *   get:
+ *     description: Search all distinct players who have appeared in matches, by name or Steam ID. Reserved to cast/admin users.
+ *     produces:
+ *       - application/json
+ *     parameters:
+ *       - name: search
+ *         description: Search term matched against player name or Steam ID.
+ *         required: false
+ *         schema:
+ *            type: string
+ *     tags:
+ *       - playerstats
+ *     responses:
+ *       200:
+ *         description: List of distinct players.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 players:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       steam_id:
+ *                         type: string
+ *                       name:
+ *                         type: string
+ *       403:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       500:
+ *         $ref: '#/components/responses/Error'
+ */
+router.get("/search", Utils.ensureAuthenticated, async (req, res) => {
+  try {
+    if (!req.user || (!Utils.castCheck(req.user) && !Utils.adminCheck(req.user))) {
+      res.status(403).json({ message: "Accès réservé aux utilisateurs avec le rôle cast." });
+      return;
+    }
+    const search = req.query.search as string | undefined;
+    let sql: string = "SELECT steam_id, MAX(name) as name FROM player_stats";
+    let params: any[] = [];
+    if (search) {
+      sql += " WHERE name LIKE ? OR steam_id LIKE ?";
+      params = [`%${search}%`, `%${search}%`];
+    }
+    sql += " GROUP BY steam_id ORDER BY name ASC";
+    const players: RowDataPacket[] = await db.query(sql, params);
+    res.json({ players });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: (err as Error).toString() });
+  }
+});
+
+/**
+ * @swagger
+ *
  * /playerstats/:steam_id:
  *   get:
  *     description: Player stats from a given Steam ID.
