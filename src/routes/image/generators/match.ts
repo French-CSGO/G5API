@@ -111,10 +111,10 @@ export async function generateMatchImage(
   if (ch.enabled) {
     const chFont = `${ch.bold ? "bold " : ""}${ch.size}px ${ch.font}`;
     const pairs: [string | undefined, number, number][] = [
-      [ch.kills_label,   m.kills_l.x,   m.kills_r.x],
-      [ch.assists_label, m.assists_l.x, m.assists_r.x],
-      [ch.deaths_label,  m.deaths_l.x,  m.deaths_r.x],
-      [ch.rating_label,  m.rating_l.x,  m.rating_r.x],
+      [ch.kills_label,   m.kills_l.x[0],   m.kills_r.x[0]],
+      [ch.assists_label, m.assists_l.x[0], m.assists_r.x[0]],
+      [ch.deaths_label,  m.deaths_l.x[0],  m.deaths_r.x[0]],
+      [ch.rating_label,  m.rating_l.x[0],  m.rating_r.x[0]],
     ];
     for (const [label, lx, rx] of pairs) {
       if (label) {
@@ -135,23 +135,24 @@ export async function generateMatchImage(
   const team2Players = players.filter(pl => pl.team_id === match.team2_id).slice(0, 5).map(withRating);
 
   for (let i = 0; i < 5; i++) {
-    const rowY = m.rows_y[i];
-    if (!rowY) continue;
+    // rows_y[i] == 0 désactive complètement la ligne (indépendamment de la
+    // position individuelle de chaque champ, qui reste dans son propre x[i]/y[i]).
+    if (!m.rows_y[i]) continue;
     const p1 = team1Players[i];
     if (p1) {
-      if (m.player_name_l.enabled) drawText(ctx, p1.name,            m.player_name_l.x, rowY, fieldFont(m.player_name_l), m.player_name_l.color);
-      if (m.kills_l.enabled)       drawText(ctx, String(p1.kills),   m.kills_l.x,       rowY, fieldFont(m.kills_l),       m.kills_l.color);
-      if (m.assists_l.enabled)     drawText(ctx, String(p1.assists), m.assists_l.x,     rowY, fieldFont(m.assists_l),     m.assists_l.color);
-      if (m.deaths_l.enabled)      drawText(ctx, String(p1.deaths),  m.deaths_l.x,      rowY, fieldFont(m.deaths_l),      m.deaths_l.color);
-      if (m.rating_l.enabled)      drawText(ctx, String(p1.rating),  m.rating_l.x,      rowY, fieldFont(m.rating_l),      m.rating_l.color);
+      if (m.player_name_l.enabled) drawText(ctx, p1.name,            m.player_name_l.x[i], m.player_name_l.y[i], fieldFont(m.player_name_l), m.player_name_l.color);
+      if (m.kills_l.enabled)       drawText(ctx, String(p1.kills),   m.kills_l.x[i],       m.kills_l.y[i],       fieldFont(m.kills_l),       m.kills_l.color);
+      if (m.assists_l.enabled)     drawText(ctx, String(p1.assists), m.assists_l.x[i],     m.assists_l.y[i],     fieldFont(m.assists_l),     m.assists_l.color);
+      if (m.deaths_l.enabled)      drawText(ctx, String(p1.deaths),  m.deaths_l.x[i],      m.deaths_l.y[i],      fieldFont(m.deaths_l),      m.deaths_l.color);
+      if (m.rating_l.enabled)      drawText(ctx, String(p1.rating),  m.rating_l.x[i],      m.rating_l.y[i],      fieldFont(m.rating_l),      m.rating_l.color);
     }
     const p2 = team2Players[i];
     if (p2) {
-      if (m.player_name_r.enabled) drawText(ctx, p2.name,            m.player_name_r.x, rowY, fieldFont(m.player_name_r), m.player_name_r.color);
-      if (m.kills_r.enabled)       drawText(ctx, String(p2.kills),   m.kills_r.x,       rowY, fieldFont(m.kills_r),       m.kills_r.color);
-      if (m.assists_r.enabled)     drawText(ctx, String(p2.assists), m.assists_r.x,     rowY, fieldFont(m.assists_r),     m.assists_r.color);
-      if (m.deaths_r.enabled)      drawText(ctx, String(p2.deaths),  m.deaths_r.x,      rowY, fieldFont(m.deaths_r),      m.deaths_r.color);
-      if (m.rating_r.enabled)      drawText(ctx, String(p2.rating),  m.rating_r.x,      rowY, fieldFont(m.rating_r),      m.rating_r.color);
+      if (m.player_name_r.enabled) drawText(ctx, p2.name,            m.player_name_r.x[i], m.player_name_r.y[i], fieldFont(m.player_name_r), m.player_name_r.color);
+      if (m.kills_r.enabled)       drawText(ctx, String(p2.kills),   m.kills_r.x[i],       m.kills_r.y[i],       fieldFont(m.kills_r),       m.kills_r.color);
+      if (m.assists_r.enabled)     drawText(ctx, String(p2.assists), m.assists_r.x[i],     m.assists_r.y[i],     fieldFont(m.assists_r),     m.assists_r.color);
+      if (m.deaths_r.enabled)      drawText(ctx, String(p2.deaths),  m.deaths_r.x[i],      m.deaths_r.y[i],      fieldFont(m.deaths_r),      m.deaths_r.color);
+      if (m.rating_r.enabled)      drawText(ctx, String(p2.rating),  m.rating_r.x[i],      m.rating_r.y[i],      fieldFont(m.rating_r),      m.rating_r.color);
     }
   }
 
