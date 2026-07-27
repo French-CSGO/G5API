@@ -367,12 +367,24 @@ function normalizeArr5(
   fallback: readonly number[],
   def: readonly number[],
 ): [number, number, number, number, number] {
+  const toFiniteNumber = (v: unknown): number | undefined => {
+    const n = typeof v === "number"
+      ? v
+      : (typeof v === "string" && v.trim() !== "" ? Number(v) : NaN);
+    return Number.isFinite(n) ? n : undefined;
+  };
+
   if (Array.isArray(val)) {
-    return [0, 1, 2, 3, 4].map(i => val[i] ?? fallback[i] ?? def[i]) as [number, number, number, number, number];
+    return [0, 1, 2, 3, 4].map(i =>
+      toFiniteNumber(val[i]) ?? fallback[i] ?? def[i]
+    ) as [number, number, number, number, number];
   }
-  if (typeof val === "number") {
-    return [val, val, val, val, val];
+
+  const n = toFiniteNumber(val);
+  if (n !== undefined) {
+    return [n, n, n, n, n];
   }
+
   return [0, 1, 2, 3, 4].map(i => fallback[i] ?? def[i]) as [number, number, number, number, number];
 }
 
