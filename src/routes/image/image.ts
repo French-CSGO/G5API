@@ -64,7 +64,7 @@ async function fetchTeamPlayers(matchId: number, teamId: number, mapStatsId: num
   const mapFilter = mapStatsId !== null ? "AND map_id = ?" : "";
   const args = mapStatsId !== null ? [matchId, teamId, mapStatsId] : [matchId, teamId];
   return await db.query(
-    `SELECT steam_id, name, team_id,
+    `SELECT steam_id, MAX(name) AS name, team_id,
        SUM(kills) AS kills, SUM(deaths) AS deaths, SUM(assists) AS assists,
        SUM(roundsplayed) AS roundsplayed,
        SUM(k1) AS k1, SUM(k2) AS k2, SUM(k3) AS k3, SUM(k4) AS k4, SUM(k5) AS k5
