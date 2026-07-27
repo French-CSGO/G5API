@@ -71,20 +71,16 @@ export interface PhotoRow {
 
 /** Étiquettes à gauche de chaque ligne de stat (X partagé, Y par ligne) */
 export interface TeamMatchRowLabels {
-  enabled:       boolean;
-  font:          string;
-  color:         string;
-  size:          number;
-  bold:          boolean;
-  x:             number;
-  kills_label:   string;
-  kills_y:       number;
-  assists_label: string;
-  assists_y:     number;
-  deaths_label:  string;
-  deaths_y:      number;
-  rating_label:  string;
-  rating_y:      number;
+  enabled:      boolean;
+  font:         string;
+  color:        string;
+  size:         number;
+  bold:         boolean;
+  x:            number;
+  kad_label:    string; // "K / A / D"
+  kad_y:        number;
+  rating_label: string;
+  rating_y:     number;
 }
 
 export interface ImageSettings {
@@ -406,9 +402,7 @@ export interface ImageSettings {
     team_name:   FC;
     photos:      PhotoRow;
     player_name: FX;
-    kills:       FX;
-    assists:     FX;
-    deaths:      FX;
+    kad:         FX; // texte combiné "K / A / D"
     rating:      FX;
     row_labels:  TeamMatchRowLabels;
   };

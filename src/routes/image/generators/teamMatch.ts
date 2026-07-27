@@ -6,7 +6,7 @@ import { tryLoadLogoOrFlag, tryLoadPlayerImage } from "./loaders.js";
 import type { ImageSettings, LogoConfig, PlayerStatRow, PlayerWithRating } from "../types.js";
 
 /** Image de stats d'une seule équipe pour un match (ou une map) donné :
- *  logo + nom d'équipe, photos des 5 titulaires, et un tableau kills/assists/deaths/rating. */
+ *  logo + nom d'équipe, photos des 5 titulaires, et un champ combiné "K / A / D" + rating. */
 export async function generateTeamMatchImage(
   teamName: string,
   teamLogo: string | null,
@@ -19,7 +19,7 @@ export async function generateTeamMatchImage(
   const H = s.canvas.height;
 
   tryRegisterFont(cfg.fontFile, [
-    cfg.team_name, cfg.player_name, cfg.kills, cfg.assists, cfg.deaths, cfg.rating,
+    cfg.team_name, cfg.player_name, cfg.kad, cfg.rating,
   ].map(f => f.font));
 
   const withRating = (row: PlayerStatRow): PlayerWithRating => ({
@@ -84,14 +84,9 @@ export async function generateTeamMatchImage(
     if (cfg.player_name.enabled) {
       drawText(ctx, p.name, cfg.player_name.x[i], cfg.player_name.y[i], fieldFont(cfg.player_name), cfg.player_name.color);
     }
-    if (cfg.kills.enabled) {
-      drawText(ctx, String(p.kills), cfg.kills.x[i], cfg.kills.y[i], fieldFont(cfg.kills), cfg.kills.color);
-    }
-    if (cfg.assists.enabled) {
-      drawText(ctx, String(p.assists), cfg.assists.x[i], cfg.assists.y[i], fieldFont(cfg.assists), cfg.assists.color);
-    }
-    if (cfg.deaths.enabled) {
-      drawText(ctx, String(p.deaths), cfg.deaths.x[i], cfg.deaths.y[i], fieldFont(cfg.deaths), cfg.deaths.color);
+    if (cfg.kad.enabled) {
+      const kad = `${p.kills} / ${p.assists} / ${p.deaths}`;
+      drawText(ctx, kad, cfg.kad.x[i], cfg.kad.y[i], fieldFont(cfg.kad), cfg.kad.color);
     }
     if (cfg.rating.enabled) {
       drawText(ctx, String(p.rating), cfg.rating.x[i], cfg.rating.y[i], fieldFont(cfg.rating), cfg.rating.color);
@@ -102,10 +97,8 @@ export async function generateTeamMatchImage(
   const rl = cfg.row_labels;
   if (rl.enabled) {
     const rlFont = `${rl.bold ? "bold " : ""}${rl.size}px ${rl.font}`;
-    if (rl.kills_label)   drawText(ctx, rl.kills_label,   rl.x, rl.kills_y,   rlFont, rl.color, "left");
-    if (rl.assists_label) drawText(ctx, rl.assists_label, rl.x, rl.assists_y, rlFont, rl.color, "left");
-    if (rl.deaths_label)  drawText(ctx, rl.deaths_label,  rl.x, rl.deaths_y,  rlFont, rl.color, "left");
-    if (rl.rating_label)  drawText(ctx, rl.rating_label,  rl.x, rl.rating_y,  rlFont, rl.color, "left");
+    if (rl.kad_label)    drawText(ctx, rl.kad_label,    rl.x, rl.kad_y,    rlFont, rl.color, "left");
+    if (rl.rating_label) drawText(ctx, rl.rating_label, rl.x, rl.rating_y, rlFont, rl.color, "left");
   }
 
   return canvas.toBuffer("image/png");
