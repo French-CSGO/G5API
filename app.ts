@@ -49,6 +49,9 @@ const app = express();
 // Trust reverse proxy (Caddy) so secure cookies and rate limiting work correctly
 app.set("trust proxy", 1);
 
+// Security defaults with helmet
+app.use(helmet());
+
 app.use(logger("dev"));
 app.use(express.raw({ type: "application/octet-stream", limit: "2gb" }));
 app.use(express.json({ limit: "512kb" }));
@@ -78,10 +81,6 @@ app.use(
     },
   })
 );
-
-
-// Security defaults with helmet
-app.use(helmet());
 
 let sessionType: any;
 if (config.get("server.useRedis")) {
