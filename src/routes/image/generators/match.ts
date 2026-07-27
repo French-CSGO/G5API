@@ -110,11 +110,13 @@ export async function generateMatchImage(
   const ch = m.column_headers;
   if (ch.enabled) {
     const chFont = `${ch.bold ? "bold " : ""}${ch.size}px ${ch.font}`;
+    const firstEnabledRowIndex = m.rows_y.findIndex(y => y > 0);
+    const headerRowIndex = firstEnabledRowIndex >= 0 ? firstEnabledRowIndex : 0;
     const pairs: [string | undefined, number, number][] = [
-      [ch.kills_label,   m.kills_l.x[0],   m.kills_r.x[0]],
-      [ch.assists_label, m.assists_l.x[0], m.assists_r.x[0]],
-      [ch.deaths_label,  m.deaths_l.x[0],  m.deaths_r.x[0]],
-      [ch.rating_label,  m.rating_l.x[0],  m.rating_r.x[0]],
+      [ch.kills_label,   m.kills_l.x[headerRowIndex],   m.kills_r.x[headerRowIndex]],
+      [ch.assists_label, m.assists_l.x[headerRowIndex], m.assists_r.x[headerRowIndex]],
+      [ch.deaths_label,  m.deaths_l.x[headerRowIndex],  m.deaths_r.x[headerRowIndex]],
+      [ch.rating_label,  m.rating_l.x[headerRowIndex],  m.rating_r.x[headerRowIndex]],
     ];
     for (const [label, lx, rx] of pairs) {
       if (label) {
