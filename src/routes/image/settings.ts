@@ -431,7 +431,14 @@ export function loadSettings(): ImageSettings {
         player_photo_r: mergePlayerPhoto(dm.player_photo_r, sm.player_photo_r, rows_y),
         team1_logo:     { ...dm.team1_logo, ...(sm.team1_logo ?? {}) },
         team2_logo:     { ...dm.team2_logo, ...(sm.team2_logo ?? {}) },
-        column_headers: { ...dm.column_headers, ...(sm.column_headers ?? {}) },
+        column_headers: (() => {
+          const saved = sm.column_headers ?? {};
+          const merged = { ...dm.column_headers, ...saved } as typeof dm.column_headers & Record<string, any>;
+          if (!("kad_label" in saved) && ("kills_label" in saved || "assists_label" in saved || "deaths_label" in saved)) {
+            merged.kad_label = [saved.kills_label ?? "K", saved.assists_label ?? "A", saved.deaths_label ?? "D"].join(" / ");
+          }
+          return merged;
+        })(),
         shapes: {
           ...dm.shapes,
           ...(sm.shapes ?? {}),
