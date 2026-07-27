@@ -24,6 +24,7 @@ import { ToornamentTokenResponse } from "../types/toornament/ToornamentTokenResp
 import { ToornamentMatch } from "../types/toornament/ToornamentMatch.js";
 
 import { getSetting } from "../services/settings.js";
+import { maxMapsFromFormat } from "../services/toornament.js";
 import {
   CHALLONGE_V2_BASE,
   challongeHeaders,
@@ -1066,11 +1067,23 @@ router.get("/:season_id/toornament/matches/:toornament_match_id/prefill", Utils.
       })
     );
 
-    // Determine max_maps from Toornament format (match → stage fallback)
+    // Determine max_maps: format explicite du match (Toornament) → défaut local du round → format du stage (Toornament) → 1
     let max_maps = 1;
     let fmt: any = tMatch.settings?.format;
+    let resolvedByRoundDefault = false;
 
-    if (!fmt && tMatch.stage_id) {
+    if (!fmt && tMatch.round_id) {
+      const roundFormatRows: RowDataPacket[] = await db.query(
+        "SELECT max_maps FROM season_round_format WHERE season_id = ? AND round_id = ?",
+        [seasonId, tMatch.round_id]
+      );
+      if (roundFormatRows[0]) {
+        max_maps = roundFormatRows[0].max_maps;
+        resolvedByRoundDefault = true;
+      }
+    }
+
+    if (!fmt && !resolvedByRoundDefault && tMatch.stage_id) {
       const stageResp = await fetch(
         `https://api.toornament.com/organizer/v2/stages?tournament_ids=${tournamentId}`,
         {
@@ -1089,10 +1102,9 @@ router.get("/:season_id/toornament/matches/:toornament_match_id/prefill", Utils.
       }
     }
 
-    if (fmt?.type === "best_of" && fmt.options?.nb_match_sets) {
-      max_maps = fmt.options.nb_match_sets;
-    } else if (fmt?.type === "single_set") {
-      max_maps = 1;
+    if (!resolvedByRoundDefault) {
+      const computed = maxMapsFromFormat(fmt);
+      if (computed !== null) max_maps = computed;
     }
 
     // Get available servers (not in use, accessible by user)
@@ -1175,6 +1187,66 @@ router.get("/:season_id/toornament/rounds", Utils.ensureAuthenticated, async (re
     }));
 
     res.json({ rounds: enriched });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: (err as Error).toString() });
+  }
+});
+
+/** GET /:season_id/toornament/round-formats — formats par défaut (BoX) définis localement pour les rounds d'une saison */
+router.get("/:season_id/toornament/round-formats", Utils.ensureAuthenticated, async (req, res, next) => {
+  try {
+    const seasonId = parseInt(req.params.season_id);
+    const rows: RowDataPacket[] = await db.query(
+      "SELECT round_id, max_maps FROM season_round_format WHERE season_id = ?",
+      [seasonId]
+    );
+    const formats: Record<string, number> = {};
+    for (const row of rows) formats[row.round_id] = row.max_maps;
+    res.json({ formats });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: (err as Error).toString() });
+  }
+});
+
+/** PUT /:season_id/toornament/rounds/:round_id/format — définir le format par défaut (nombre de maps) d'un round */
+router.put("/:season_id/toornament/rounds/:round_id/format", Utils.ensureAuthenticated, async (req, res, next) => {
+  try {
+    const seasonId = parseInt(req.params.season_id);
+    const roundId = req.params.round_id;
+    const maxMaps = parseInt(req.body.max_maps);
+
+    if (!Number.isInteger(maxMaps) || maxMaps < 1 || maxMaps > 9) {
+      res.status(400).json({ message: "max_maps doit être un entier entre 1 et 9." });
+      return;
+    }
+
+    await db.query(
+      "INSERT INTO season_round_format (season_id, round_id, max_maps) VALUES (?, ?, ?) " +
+      "ON DUPLICATE KEY UPDATE max_maps = VALUES(max_maps)",
+      [seasonId, roundId, maxMaps]
+    );
+
+    res.json({ message: "Format par défaut du round mis à jour.", round_id: roundId, max_maps: maxMaps });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: (err as Error).toString() });
+  }
+});
+
+/** DELETE /:season_id/toornament/rounds/:round_id/format — revenir au format automatique (Toornament) pour un round */
+router.delete("/:season_id/toornament/rounds/:round_id/format", Utils.ensureAuthenticated, async (req, res, next) => {
+  try {
+    const seasonId = parseInt(req.params.season_id);
+    const roundId = req.params.round_id;
+
+    await db.query(
+      "DELETE FROM season_round_format WHERE season_id = ? AND round_id = ?",
+      [seasonId, roundId]
+    );
+
+    res.json({ message: "Format par défaut du round réinitialisé (automatique)." });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: (err as Error).toString() });
@@ -1481,6 +1553,7 @@ async function enrichChallongeMatches(
       tournament_label: label,
       state: m.state,
       round: m.round,
+      group_id: m.group_id,
       suggested_play_order: m.suggested_play_order,
       scheduled_time: m.scheduled_time,
       scores_csv: m.scores_csv,
@@ -1579,6 +1652,84 @@ router.delete("/:season_id/challonge/tournaments/:tournament_id", Utils.ensureAu
   }
 });
 
+/** GET /:season_id/challonge/round-formats — formats par défaut (BoX) définis localement,
+ *  par bracket (slug) + groupe round-robin + numéro de round */
+router.get("/:season_id/challonge/round-formats", Utils.ensureAuthenticated, async (req, res) => {
+  try {
+    const seasonId = parseInt(req.params.season_id);
+    const rows: RowDataPacket[] = await db.query(
+      "SELECT challonge_slug, group_id, round, max_maps FROM season_challonge_round_format WHERE season_id = ?",
+      [seasonId]
+    );
+    res.json({ formats: rows });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: (err as Error).toString() });
+  }
+});
+
+/** PUT /:season_id/challonge/round-format — définir le format par défaut d'un (slug, groupe, round) */
+router.put("/:season_id/challonge/round-format", Utils.ensureAuthenticated, async (req, res) => {
+  try {
+    const seasonId = parseInt(req.params.season_id);
+    const { challonge_slug, round } = req.body;
+    const groupId = req.body.group_id || "none";
+    const maxMaps = parseInt(req.body.max_maps);
+
+    if (!challonge_slug || !/^[\w\-]+$/.test(challonge_slug)) {
+      res.status(400).json({ message: "Slug Challonge invalide." });
+      return;
+    }
+    if (!Number.isInteger(parseInt(round))) {
+      res.status(400).json({ message: "round invalide." });
+      return;
+    }
+    if (!Number.isInteger(maxMaps) || maxMaps < 1 || maxMaps > 9) {
+      res.status(400).json({ message: "max_maps doit être un entier entre 1 et 9." });
+      return;
+    }
+
+    const bracketRows: RowDataPacket[] = await db.query(
+      "SELECT id FROM season_challonge_tournament WHERE season_id = ? AND challonge_slug = ?",
+      [seasonId, challonge_slug]
+    );
+    if (!bracketRows.length) {
+      res.status(404).json({ message: "Bracket Challonge introuvable pour cette saison." });
+      return;
+    }
+
+    await db.query(
+      "INSERT INTO season_challonge_round_format (season_id, challonge_slug, group_id, round, max_maps) VALUES (?, ?, ?, ?, ?) " +
+      "ON DUPLICATE KEY UPDATE max_maps = VALUES(max_maps)",
+      [seasonId, challonge_slug, groupId, parseInt(round), maxMaps]
+    );
+
+    res.json({ message: "Format par défaut du round mis à jour.", max_maps: maxMaps });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: (err as Error).toString() });
+  }
+});
+
+/** DELETE /:season_id/challonge/round-format — revenir au format automatique pour un (slug, groupe, round) */
+router.delete("/:season_id/challonge/round-format", Utils.ensureAuthenticated, async (req, res) => {
+  try {
+    const seasonId = parseInt(req.params.season_id);
+    const { challonge_slug, round } = req.body;
+    const groupId = req.body.group_id || "none";
+
+    await db.query(
+      "DELETE FROM season_challonge_round_format WHERE season_id = ? AND challonge_slug = ? AND group_id = ? AND round = ?",
+      [seasonId, challonge_slug, groupId, parseInt(round)]
+    );
+
+    res.json({ message: "Format par défaut du round réinitialisé (automatique)." });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: (err as Error).toString() });
+  }
+});
+
 /** GET /:season_id/challonge/matches — tous les matchs de tous les brackets, enrichis */
 router.get("/:season_id/challonge/matches", Utils.ensureAuthenticated, async (req, res) => {
   try {
@@ -1632,28 +1783,42 @@ router.get("/:season_id/challonge/matches", Utils.ensureAuthenticated, async (re
   }
 });
 
-/** GET /:season_id/challonge/bulk-prefill — données partagées pour la création en masse */
+/** GET /:season_id/challonge/bulk-prefill — données partagées pour la création en masse.
+ *  Accepte optionnellement ?challonge_slug=&group_id=&round= pour reprendre le format par défaut du round. */
 router.get("/:season_id/challonge/bulk-prefill", Utils.ensureAuthenticated, async (req, res) => {
   try {
     const seasonId = parseInt(req.params.season_id);
-    const [seasonRows, availableServers] = await Promise.all([
+    const { challonge_slug, round } = req.query;
+    const groupId = (req.query.group_id as string) || "none";
+
+    const queries: Promise<RowDataPacket[]>[] = [
       db.query(
         "SELECT s.id, s.name, CONCAT('{', GROUP_CONCAT(DISTINCT CONCAT('\"',sc.cvar_name,'\": \"',sc.cvar_value,'\"')),'}') as cvars " +
         "FROM season s LEFT OUTER JOIN season_cvar sc ON s.id = sc.season_id WHERE s.id = ? GROUP BY s.id",
         [seasonId]
-      ) as Promise<RowDataPacket[]>,
+      ),
       db.query(
         "SELECT gs.id, gs.display_name, gs.ip_string, gs.port, gs.public_server, gs.flag " +
         "FROM game_server gs WHERE gs.in_use = 0 AND (gs.public_server = 1 OR gs.user_id = ?) ORDER BY gs.display_name",
         [req.user!.id]
-      ) as Promise<RowDataPacket[]>
-    ]);
+      )
+    ];
+    if (challonge_slug && round !== undefined) {
+      queries.push(
+        db.query(
+          "SELECT max_maps FROM season_challonge_round_format WHERE season_id = ? AND challonge_slug = ? AND group_id = ? AND round = ?",
+          [seasonId, challonge_slug, groupId, parseInt(round as string)]
+        )
+      );
+    }
+    const [seasonRows, availableServers, roundFormatRows] = await Promise.all(queries);
     const season = seasonRows[0];
     if (season?.cvars) season.cvars = JSON.parse(season.cvars);
     res.json({
       season_id: seasonId,
       season_name: season?.name ?? null,
       season_cvars: season?.cvars ?? null,
+      max_maps: roundFormatRows?.[0]?.max_maps ?? null,
       available_servers: availableServers
     });
   } catch (err) {
@@ -1720,19 +1885,27 @@ router.get("/:season_id/challonge/matches/:challonge_match_id/prefill", Utils.en
       [req.user!.id]
     );
 
+    // Format par défaut du round : (slug, groupe round-robin, round) → sinon BO1
+    const roundFormatRows: RowDataPacket[] = await db.query(
+      "SELECT max_maps FROM season_challonge_round_format WHERE season_id = ? AND challonge_slug = ? AND group_id = ? AND round = ?",
+      [seasonId, slug, m.group_id ?? "none", m.round]
+    );
+    const max_maps = roundFormatRows[0]?.max_maps ?? 1;
+
     res.json({
       season_id: seasonId,
       season_name: season?.name ?? null,
       season_cvars: season?.cvars ?? null,
       team1: player1?.local_team ?? null,
       team2: player2?.local_team ?? null,
-      max_maps: 1,
+      max_maps,
       challonge_match_id: challongeMatchId,
       challonge_match: {
         id: m.id,
         slug,
         state: m.state,
         round: m.round,
+        group_id: m.group_id,
         suggested_play_order: m.suggested_play_order,
         scheduled_time: m.scheduled_time, // mapped from v2.1 attributes
         player1,

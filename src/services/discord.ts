@@ -5,6 +5,7 @@ import config from "config";
 import { RowDataPacket } from "mysql2/typings/mysql";
 import GlobalEmitter from "../utility/emitter.js";
 import { CHALLONGE_V2_BASE, challongeHeaders, challongeFetch, parseV2Match, parseV2Participant } from "../utility/challongeV2.js";
+import { maxMapsFromFormat } from "./toornament.js";
 
 let client: Client | null = null;
 
@@ -424,12 +425,20 @@ export async function updateSchedule(): Promise<void> {
 
         if (!toShow.length) continue;
 
+        const roundFormatRows: RowDataPacket[] = await db.query(
+          "SELECT round_id, max_maps FROM season_round_format WHERE season_id = ?",
+          [season.id]
+        );
+        const roundFormats = new Map<string, number>(roundFormatRows.map((r: any) => [String(r.round_id), r.max_maps]));
+
         content += `**${season.name}**\n`;
         for (const { match, team1, team2 } of toShow) {
           const scheduled = match.scheduled_datetime
             ? new Date(match.scheduled_datetime).toLocaleString("fr-FR", { timeZone: "Europe/Paris", hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit" })
             : null;
+          const maxMaps = maxMapsFromFormat(match.settings?.format) ?? roundFormats.get(String(match.round_id)) ?? null;
           content += `• **${team1.name}** vs **${team2.name}**`;
+          if (maxMaps) content += ` — \`BO${maxMaps}\``;
           if (scheduled) content += ` — match prévu pour le \`${scheduled}\``;
           content += `\n`;
         }
@@ -457,6 +466,14 @@ export async function updateSchedule(): Promise<void> {
           [season.id]
         );
         const usedChallongeIds = new Set<number>(existingChallongeIds.map((r: any) => r.challonge_id));
+
+        const challongeRoundFormatRows: RowDataPacket[] = await db.query(
+          "SELECT challonge_slug, group_id, round, max_maps FROM season_challonge_round_format WHERE season_id = ?",
+          [season.id]
+        );
+        const challongeRoundFormats = new Map<string, number>(
+          challongeRoundFormatRows.map((r: any) => [`${r.challonge_slug}|${r.group_id}|${r.round}`, r.max_maps])
+        );
 
         let seasonHeader = false;
 
@@ -501,7 +518,8 @@ export async function updateSchedule(): Promise<void> {
           for (const m of toShow) {
             const team1Name = participantMap.get(m.player1_id!) ?? `#${m.player1_id}`;
             const team2Name = participantMap.get(m.player2_id!) ?? `#${m.player2_id}`;
-            content += `• **${team1Name}** vs **${team2Name}** — Ronde ${m.round}`;
+            const maxMaps = challongeRoundFormats.get(`${slug}|${m.group_id ?? "none"}|${m.round}`) ?? 1;
+            content += `• **${team1Name}** vs **${team2Name}** — Ronde ${m.round} — \`BO${maxMaps}\``;
             if (m.scheduled_time) {
               const scheduled = new Date(m.scheduled_time).toLocaleString("fr-FR", {
                 timeZone: "Europe/Paris", hour: "2-digit", minute: "2-digit",

@@ -31,6 +31,9 @@ export interface NormalisedMatch {
   id: number;
   state: string;
   round: number;
+  /** ID du groupe round-robin (Group Stage) auquel appartient ce match, sinon null.
+   *  Deux matchs de groupes différents peuvent partager le même numéro de round. */
+  group_id: string | null;
   suggested_play_order: number | null;
   scheduled_time: string | null;
   scores_csv: string | null;
@@ -65,10 +68,15 @@ export function parseV2Match(item: any): NormalisedMatch {
     return null;
   };
 
+  // Group Stage : group_id peut être une attribut plat (API v1) ou une relation JSON:API.
+  const rawGroupId = attr.group_id ?? rel.group?.data?.id ?? null;
+  const groupId = rawGroupId != null && rawGroupId !== "" ? String(rawGroupId) : null;
+
   return {
     id: parseInt(item.id, 10),
     state: attr.state ?? "pending",
     round: attr.round ?? 0,
+    group_id: groupId,
     suggested_play_order: attr.suggested_play_order ?? null,
     // scheduled_time may live under timestamps.scheduled_at in some versions
     scheduled_time: attr.scheduled_time ?? attr.timestamps?.scheduled_at ?? null,

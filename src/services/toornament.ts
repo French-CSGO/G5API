@@ -18,6 +18,15 @@ import { getSetting } from "./settings.js";
 import { ToornamentTokenResponse } from "../types/toornament/ToornamentTokenResponse.js";
 import { ToornamentMatch } from "../types/toornament/ToornamentMatch.js";
 
+/** Déduit le nombre de maps (max_maps) d'un objet `format` Toornament (match ou stage), sinon null. */
+export function maxMapsFromFormat(fmt: any): number | null {
+  if (fmt?.type === "best_of" && fmt.options?.nb_match_sets) {
+    return fmt.options.nb_match_sets;
+  } else if (fmt?.type === "single_set") {
+    return 1;
+  }
+  return null;
+}
 
 export default
     async function update_toornament_match(
