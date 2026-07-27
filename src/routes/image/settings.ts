@@ -383,9 +383,10 @@ export function loadSettings(): ImageSettings {
         map3:          mergeFC(dm.map3,          sm.map3),
         player_name_l: mergeFX(dm.player_name_l, sm.player_name_l, rows_y),
         player_name_r: mergeFX(dm.player_name_r, sm.player_name_r, rows_y),
-        kad_l:         mergeFX(dm.kad_l,    sm.kad_l,    rows_y),
+        // Compat avec les anciennes configs pré-fusion (kills_l/assists_l/deaths_l séparés)
+        kad_l:         mergeFX(dm.kad_l,    sm.kad_l ?? sm.kills_l ?? sm.assists_l ?? sm.deaths_l, rows_y),
         rating_l:      mergeFX(dm.rating_l, sm.rating_l, rows_y),
-        kad_r:         mergeFX(dm.kad_r,    sm.kad_r,    rows_y),
+        kad_r:         mergeFX(dm.kad_r,    sm.kad_r ?? sm.kills_r ?? sm.assists_r ?? sm.deaths_r, rows_y),
         rating_r:      mergeFX(dm.rating_r, sm.rating_r, rows_y),
         player_photo_l: mergePlayerPhoto(dm.player_photo_l, sm.player_photo_l, rows_y),
         player_photo_r: mergePlayerPhoto(dm.player_photo_r, sm.player_photo_r, rows_y),
