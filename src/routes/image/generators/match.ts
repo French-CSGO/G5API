@@ -57,11 +57,13 @@ export async function generateMatchImage(
   const team1Players = players.filter(pl => pl.team_id === match.team1_id).slice(0, 5).map(withRating);
   const team2Players = players.filter(pl => pl.team_id === match.team2_id).slice(0, 5).map(withRating);
 
+  const isSafeSteamId = (id: string): boolean => /^[0-9]{15,20}$/.test(id);
+
   const [logo1, logo2, photos1, photos2] = await Promise.all([
     tryLoadLogoOrFlag(match.team1_logo, match.team1_flag),
     tryLoadLogoOrFlag(match.team2_logo, match.team2_flag),
-    Promise.all(team1Players.map(p => (m.player_photo_l?.enabled ? tryLoadPlayerImage(p.steam_id) : Promise.resolve(null)))),
-    Promise.all(team2Players.map(p => (m.player_photo_r?.enabled ? tryLoadPlayerImage(p.steam_id) : Promise.resolve(null)))),
+    Promise.all(team1Players.map(p => (m.player_photo_l?.enabled && isSafeSteamId(p.steam_id) ? tryLoadPlayerImage(p.steam_id) : Promise.resolve(null)))),
+    Promise.all(team2Players.map(p => (m.player_photo_r?.enabled && isSafeSteamId(p.steam_id) ? tryLoadPlayerImage(p.steam_id) : Promise.resolve(null)))),
   ]);
 
   const canvas = createCanvas(W, H);
