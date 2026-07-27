@@ -20,7 +20,7 @@ export const logo = (enabled: boolean, x: number, y: number, size: number): Logo
 export const fxRow = (
   enabled: boolean, font: string, color: string, size: number, bold: boolean,
   xs: [number, number, number, number, number], y: number,
-): FX => ({ enabled, font, color, size, bold, x: [...xs], y: [y, y, y, y, y] });
+): FX => ({ enabled, font, color, size, bold, x: [...xs] as [number, number, number, number, number], y: [y, y, y, y, y] });
 
 const PLAYER_COLUMNS_X: [number, number, number, number, number] = [320, 640, 960, 1280, 1600];
 
