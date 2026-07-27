@@ -87,6 +87,17 @@ function computeMvpPlayer(players: PlayerStatExtended[]): PlayerStatExtended {
   return players.reduce((best, p) => playerRating(p) > playerRating(best) ? p : best);
 }
 
+/**
+ * Live preview support: a POST request may carry unsaved settings in its body
+ * (`{ settings: ImageSettings }`) so the panel can render a real preview of
+ * in-progress edits without writing them to disk first. GET requests (and any
+ * POST without a body) fall back to the persisted settings as before.
+ */
+function settingsFromRequest(req: Request): ImageSettings {
+  const provided = (req.body as { settings?: ImageSettings } | undefined)?.settings;
+  return provided ?? loadSettings();
+}
+
 // ─── Settings routes ──────────────────────────────────────────────────────────
 
 /** GET /image/fonts — liste les fichiers de police dans public/fonts/ */
@@ -249,14 +260,26 @@ router.post(
 router.get("/match/:match_id", async (req: Request, res: Response) => {
   await renderMatchImage(req, res, null, "full");
 });
+/** POST /image/match/:match_id/preview — même rendu, à partir de settings non sauvegardés (body: { settings }) */
+router.post("/match/:match_id/preview", async (req: Request, res: Response) => {
+  await renderMatchImage(req, res, null, "full");
+});
 
 /** GET /image/match/:match_id/map — current (latest) map stats */
 router.get("/match/:match_id/map", async (req: Request, res: Response) => {
   await renderMatchImage(req, res, null, "latest");
 });
+router.post("/match/:match_id/map/preview", async (req: Request, res: Response) => {
+  await renderMatchImage(req, res, null, "latest");
+});
 
 /** GET /image/match/:match_id/map/:map_number — stats by map number (1, 2, 3...) */
 router.get("/match/:match_id/map/:map_number", async (req: Request, res: Response) => {
+  const mapNumber = parseInt(req.params.map_number);
+  if (isNaN(mapNumber) || mapNumber < 1) { res.status(400).json({ error: "Invalid map number" }); return; }
+  await renderMatchImage(req, res, mapNumber, "byNumber");
+});
+router.post("/match/:match_id/map/:map_number/preview", async (req: Request, res: Response) => {
   const mapNumber = parseInt(req.params.map_number);
   if (isNaN(mapNumber) || mapNumber < 1) { res.status(400).json({ error: "Invalid map number" }); return; }
   await renderMatchImage(req, res, mapNumber, "byNumber");
@@ -341,7 +364,7 @@ async function renderMatchImage(req: Request, res: Response, mapParam: number | 
       playerArgs
     ) as PlayerStatRow[];
 
-    const png = await generateMatchImage(match, mapRow, allMaps, players, loadSettings(), mapSlots, plannedMaps, currentSlotIndex);
+    const png = await generateMatchImage(match, mapRow, allMaps, players, settingsFromRequest(req), mapSlots, plannedMaps, currentSlotIndex);
     res.setHeader("Content-Type", "image/png");
     res.setHeader("Cache-Control", "no-cache, no-store");
     res.send(png);
@@ -357,9 +380,15 @@ async function renderMatchImage(req: Request, res: Response, mapParam: number | 
 router.get("/match/:match_id/mvp", async (req: Request, res: Response) => {
   await renderFullMatchMvpImage(req, res);
 });
+router.post("/match/:match_id/mvp/preview", async (req: Request, res: Response) => {
+  await renderFullMatchMvpImage(req, res);
+});
 
 /** GET /image/match/:match_id/map/:map_number/mvp — image MVP de la map */
 router.get("/match/:match_id/map/:map_number/mvp", async (req: Request, res: Response) => {
+  await renderMvpImage(req, res);
+});
+router.post("/match/:match_id/map/:map_number/mvp/preview", async (req: Request, res: Response) => {
   await renderMvpImage(req, res);
 });
 
@@ -392,7 +421,7 @@ async function renderFullMatchMvpImage(req: Request, res: Response) {
     if (!players?.length) { res.status(404).json({ error: "No player stats found for this match" }); return; }
 
     const mvpPlayer = computeMvpPlayer(players);
-    const base = loadSettings();
+    const base = settingsFromRequest(req);
     // Don't mutate the loaded settings object — build a derived copy
     const settings = { ...base, mvp: { ...base.mvp, map_image: { enabled: false } } };
 
@@ -441,7 +470,7 @@ async function renderMvpImage(req: Request, res: Response) {
     const currentSlotIndex = totalMaps === 1 ? 1 : mapNumber - 1;
 
     const mvpPlayer = computeMvpPlayer(players);
-    const png = await generateMapMvpImage(match, mapRow, mvpPlayer, loadSettings(), allMaps, plannedMaps, currentSlotIndex);
+    const png = await generateMapMvpImage(match, mapRow, mvpPlayer, settingsFromRequest(req), allMaps, plannedMaps, currentSlotIndex);
     res.setHeader("Content-Type", "image/png");
     res.setHeader("Cache-Control", "no-cache, no-store");
     res.send(png);
@@ -457,9 +486,17 @@ async function renderMvpImage(req: Request, res: Response) {
 router.get("/match/:match_id/player/:steam_id", async (req: Request, res: Response) => {
   await renderPlayerImage(req, res, null);
 });
+router.post("/match/:match_id/player/:steam_id/preview", async (req: Request, res: Response) => {
+  await renderPlayerImage(req, res, null);
+});
 
 /** GET /image/match/:match_id/map/:map_number/player/:steam_id — stats joueur sur une map (par numéro 1, 2, 3...) */
 router.get("/match/:match_id/map/:map_number/player/:steam_id", async (req: Request, res: Response) => {
+  const mapNumber = parseInt(req.params.map_number);
+  if (isNaN(mapNumber) || mapNumber < 1) { res.status(400).json({ error: "Invalid map number" }); return; }
+  await renderPlayerImage(req, res, mapNumber);
+});
+router.post("/match/:match_id/map/:map_number/player/:steam_id/preview", async (req: Request, res: Response) => {
   const mapNumber = parseInt(req.params.map_number);
   if (isNaN(mapNumber) || mapNumber < 1) { res.status(400).json({ error: "Invalid map number" }); return; }
   await renderPlayerImage(req, res, mapNumber);
@@ -505,7 +542,7 @@ async function renderPlayerImage(req: Request, res: Response, mapNumber: number 
     const myTeam    = isTeam1 ? team1Name : team2Name;
     const opp       = isTeam1 ? team2Name : team1Name;
 
-    const png = await generatePlayerImage(myTeam, opp, player, loadSettings());
+    const png = await generatePlayerImage(myTeam, opp, player, settingsFromRequest(req));
     res.setHeader("Content-Type", "image/png");
     res.setHeader("Cache-Control", "no-cache, no-store");
     res.send(png);
@@ -523,9 +560,17 @@ async function renderPlayerImage(req: Request, res: Response, mapNumber: number 
 router.get("/match/:match_id/team/:team_number", async (req: Request, res: Response) => {
   await renderTeamMatchImage(req, res, null);
 });
+router.post("/match/:match_id/team/:team_number/preview", async (req: Request, res: Response) => {
+  await renderTeamMatchImage(req, res, null);
+});
 
 /** GET /image/match/:match_id/map/:map_number/team/:team_number — stats d'une map précise */
 router.get("/match/:match_id/map/:map_number/team/:team_number", async (req: Request, res: Response) => {
+  const mapNumber = parseInt(req.params.map_number);
+  if (isNaN(mapNumber) || mapNumber < 1) { res.status(400).json({ error: "Invalid map number" }); return; }
+  await renderTeamMatchImage(req, res, mapNumber);
+});
+router.post("/match/:match_id/map/:map_number/team/:team_number/preview", async (req: Request, res: Response) => {
   const mapNumber = parseInt(req.params.map_number);
   if (isNaN(mapNumber) || mapNumber < 1) { res.status(400).json({ error: "Invalid map number" }); return; }
   await renderTeamMatchImage(req, res, mapNumber);
@@ -560,7 +605,7 @@ async function renderTeamMatchImage(req: Request, res: Response, mapNumber: numb
     const players = await fetchTeamPlayers(matchId, teamId, mapStatsId);
     if (!players?.length) { res.status(404).json({ error: "No player stats found for this team" }); return; }
 
-    const png = await generateTeamMatchImage(teamName, teamLogo, teamFlag, players, loadSettings());
+    const png = await generateTeamMatchImage(teamName, teamLogo, teamFlag, players, settingsFromRequest(req));
     res.setHeader("Content-Type", "image/png");
     res.setHeader("Cache-Control", "no-cache, no-store");
     res.send(png);
@@ -572,8 +617,7 @@ async function renderTeamMatchImage(req: Request, res: Response, mapNumber: numb
 
 // ─── Team season image route ──────────────────────────────────────────────────
 
-/** GET /image/season/:season_id/team/:team_id */
-router.get("/season/:season_id/team/:team_id", async (req: Request, res: Response) => {
+async function renderTeamSeasonImage(req: Request, res: Response) {
   try {
     const seasonId = parseInt(req.params.season_id);
     const teamId   = parseInt(req.params.team_id);
@@ -652,7 +696,7 @@ router.get("/season/:season_id/team/:team_id", async (req: Request, res: Respons
       roundsRows[0]    ?? { rounds_won: 0, rounds_lost: 0 } as RoundsRow,
       winsRows[0]      ?? { wins: 0, losses: 0 } as WinsRow,
       bestMap,
-      loadSettings()
+      settingsFromRequest(req)
     );
     res.setHeader("Content-Type", "image/png");
     res.setHeader("Cache-Control", "no-cache, no-store");
@@ -661,6 +705,11 @@ router.get("/season/:season_id/team/:team_id", async (req: Request, res: Respons
     console.error("[image/team-season] Error:", err);
     res.status(500).json({ error: "Failed to generate team season image" });
   }
-});
+}
+
+/** GET /image/season/:season_id/team/:team_id */
+router.get("/season/:season_id/team/:team_id", renderTeamSeasonImage);
+/** POST /image/season/:season_id/team/:team_id/preview — settings non sauvegardés (body: { settings }) */
+router.post("/season/:season_id/team/:team_id/preview", renderTeamSeasonImage);
 
 export default router;
