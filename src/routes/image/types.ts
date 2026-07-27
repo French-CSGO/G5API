@@ -59,6 +59,34 @@ export interface LogoConfig {
   size:    number;   // taille (largeur = hauteur)
 }
 
+/** 5 photos joueurs (une par titulaire), positionnables individuellement */
+export interface PhotoRow {
+  enabled: boolean;
+  width:   number;
+  height:  number;
+  circle:  boolean;
+  x:       [number, number, number, number, number];
+  y:       [number, number, number, number, number];
+}
+
+/** Étiquettes à gauche de chaque ligne de stat (X partagé, Y par ligne) */
+export interface TeamMatchRowLabels {
+  enabled:       boolean;
+  font:          string;
+  color:         string;
+  size:          number;
+  bold:          boolean;
+  x:             number;
+  kills_label:   string;
+  kills_y:       number;
+  assists_label: string;
+  assists_y:     number;
+  deaths_label:  string;
+  deaths_y:      number;
+  rating_label:  string;
+  rating_y:      number;
+}
+
 export interface ImageSettings {
   canvas: { width: number; height: number };
 
@@ -368,6 +396,21 @@ export interface ImageSettings {
         height:       number;
       };
     };
+  };
+
+  /** Stats d'une seule équipe pour un match donné (photos + logo + stats) */
+  team_match: {
+    background:  string;
+    fontFile:    string;
+    team_logo:   LogoConfig;
+    team_name:   FC;
+    photos:      PhotoRow;
+    player_name: FX;
+    kills:       FX;
+    assists:     FX;
+    deaths:      FX;
+    rating:      FX;
+    row_labels:  TeamMatchRowLabels;
   };
 }
 
