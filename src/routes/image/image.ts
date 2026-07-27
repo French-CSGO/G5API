@@ -141,8 +141,24 @@ function computeMvpPlayer(players: PlayerStatExtended[]): PlayerStatExtended {
  * POST without a body) fall back to the persisted settings as before.
  */
 function settingsFromRequest(req: Request): ImageSettings {
-  const provided = (req.body as { settings?: ImageSettings } | undefined)?.settings;
-  return provided ?? loadSettings();
+  const provided = (req.body as { settings?: unknown } | undefined)?.settings;
+  if (!provided || typeof provided !== "object") return loadSettings();
+
+  const s = provided as ImageSettings;
+
+  // Clamp canvas dimensions to avoid memory/CPU DoS via createCanvas()
+  s.canvas = s.canvas ?? { width: 1920, height: 1080 };
+  s.canvas.width = Math.min(4096, Math.max(1, Number(s.canvas.width) || 1920));
+  s.canvas.height = Math.min(4096, Math.max(1, Number(s.canvas.height) || 1080));
+
+  // Prevent path traversal via filenames used by drawBackground()/tryRegisterFont()
+  const sanitize = (x: any) => {
+    if (x?.background) x.background = path.basename(String(x.background));
+    if (x?.fontFile) x.fontFile = path.basename(String(x.fontFile));
+  };
+  ["match", "player", "team_season", "mvp", "team_match"].forEach(k => sanitize((s as any)[k]));
+
+  return s;
 }
 
 // ─── Settings routes ──────────────────────────────────────────────────────────
