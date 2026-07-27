@@ -22,16 +22,23 @@ export interface FX {
 }
 
 export interface MatchColumnHeaders {
-  enabled:       boolean;
-  y:             number;
-  font:          string;
-  color:         string;
-  size:          number;
-  bold:          boolean;
-  kills_label:   string;
-  assists_label: string;
-  deaths_label:  string;
-  rating_label:  string;
+  enabled:      boolean;
+  y:            number;
+  font:         string;
+  color:        string;
+  size:         number;
+  bold:         boolean;
+  kad_label:    string; // "K / A / D"
+  rating_label: string;
+}
+
+/** Position + taille d'une photo joueur pour une colonne du match (X partagé, Y = rows_y) */
+export interface PlayerPhotoConfig {
+  enabled: boolean;
+  x:       number;
+  width:   number;
+  height:  number;
+  circle:  boolean;
 }
 
 export interface PlayerColumnHeaders {
@@ -74,14 +81,12 @@ export interface ImageSettings {
     map3:          FC;
     player_name_l: FX;
     player_name_r: FX;
-    kills_l:   FX;
-    assists_l: FX;
-    deaths_l:  FX;
+    kad_l:     FX; // texte combiné "K / A / D"
     rating_l:  FX;
-    kills_r:   FX;
-    assists_r: FX;
-    deaths_r:  FX;
+    kad_r:     FX;
     rating_r:  FX;
+    player_photo_l: PlayerPhotoConfig;
+    player_photo_r: PlayerPhotoConfig;
     team1_logo: LogoConfig;
     team2_logo: LogoConfig;
     column_headers: MatchColumnHeaders;
