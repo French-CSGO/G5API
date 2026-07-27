@@ -10,7 +10,7 @@ import path from "path";
 import fs from "fs";
 
 import { db } from "../../services/db.js";
-import { upload, writeFileSafe } from "./helpers.js";
+import { upload, writeFileSafe, compressImageKeepingAlpha } from "./helpers.js";
 import { loadSettings, saveSettings } from "./settings.js";
 import Utils from "../../utility/utils.js";
 import { generateMatchImage } from "./generators/match.js";
@@ -273,17 +273,26 @@ router.post(
   Utils.ensureAuthenticated,
   requireCastOrAdmin,
   upload.single("file") as any,
-  (req: MReq, res: Response) => {
+  async (req: MReq, res: Response) => {
     if (!req.file) { res.status(400).json({ error: "No file received." }); return; }
     const steamId = (req as any).body?.steam_id as string | undefined;
     if (!steamId || !/^\d{17}$/.test(steamId)) {
       res.status(400).json({ error: "Invalid or missing steam_id (must be 17 digits)." });
       return;
     }
+    let compressed: Buffer;
+    try {
+      // Redimensionne et recompresse en PNG en conservant la transparence.
+      compressed = await compressImageKeepingAlpha(req.file.buffer);
+    } catch (err) {
+      console.error("[image/upload/player] Error:", err);
+      res.status(400).json({ error: "Invalid image file." });
+      return;
+    }
     const playersDir = path.join(process.cwd(), "public", "img", "players");
     if (!fs.existsSync(playersDir)) fs.mkdirSync(playersDir, { recursive: true });
     const dest = path.join(playersDir, `${steamId}.png`);
-    writeFileSafe(dest, req.file.buffer);
+    writeFileSafe(dest, compressed);
     res.json({ filename: `${steamId}.png` });
   }
 );
