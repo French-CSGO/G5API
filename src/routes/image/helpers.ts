@@ -91,6 +91,42 @@ export function drawLogoCentered(
   ctx.drawImage(img as any, cfg.x - half, cfg.y - half, cfg.size, cfg.size);
 }
 
+/**
+ * Draws an image (e.g. a player photo) scaled up/down so it exactly fills the
+ * target height (no vertical squish), then center-crops the width to fit —
+ * never stretches the image out of its aspect ratio. Equivalent to CSS
+ * `object-fit: cover` driven by height. Draws nothing if img is null.
+ */
+export function drawImageCover(
+  ctx: CanvasRenderingContext2D,
+  img: CanvasImage | null,
+  x: number, y: number, width: number, height: number,
+  circle = false
+): void {
+  if (!img) return;
+  const scale = height / img.height;
+  const srcH = img.height;
+  const srcW = Math.min(width / scale, img.width);
+  const srcX = Math.max(0, (img.width - srcW) / 2);
+  const srcY = 0;
+  const dx = x - width / 2;
+  const dy = y - height / 2;
+  if (circle) {
+    const r = Math.min(width, height) / 2;
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.closePath();
+    ctx.clip();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ctx.drawImage(img as any, srcX, srcY, srcW, srcH, dx, dy, width, height);
+    ctx.restore();
+  } else {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ctx.drawImage(img as any, srcX, srcY, srcW, srcH, dx, dy, width, height);
+  }
+}
+
 /** Draws a background image; fills with fallbackColor if the image fails to load */
 export async function drawBackground(
   ctx: CanvasRenderingContext2D,

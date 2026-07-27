@@ -1,10 +1,11 @@
 import path from "path";
 import fs from "fs";
-import type { FC, FX, LogoConfig, PlayerPhotoConfig, ImageSettings } from "./types.js";
+import type { FC, FX, LogoConfig, PlayerPhotoConfig, TeamMatchRowLabels, ImageSettings } from "./types.js";
 
 export const SETTINGS_PATH = path.join(process.cwd(), "public", "image-settings.json");
 
 const ROWS_Y_DEFAULT: [number, number, number, number, number] = [485, 625, 770, 0, 0];
+const PLAYER_COLUMNS_X: [number, number, number, number, number] = [320, 640, 960, 1280, 1600];
 
 export const fc = (enabled: boolean, font: string, color: string, size: number, bold: boolean, x: number, y: number): FC =>
   ({ enabled, font, color, size, bold, x, y });
@@ -17,6 +18,17 @@ export const logo = (enabled: boolean, x: number, y: number, size: number): Logo
 
 export const playerPhoto = (enabled: boolean, x: number, width: number, height: number, circle: boolean): PlayerPhotoConfig =>
   ({ enabled, x: [x, x, x, x, x], y: [...ROWS_Y_DEFAULT] as [number, number, number, number, number], width, height, circle });
+
+// Champ FX avec un X différent par joueur (colonne) mais un Y partagé (ligne) —
+// l'inverse de fx() ci-dessus, pour une mise en page "colonnes joueurs" (team_match).
+export const fxCols = (
+  enabled: boolean, font: string, color: string, size: number, bold: boolean,
+  xs: [number, number, number, number, number], y: number,
+): FX => ({ enabled, font, color, size, bold, x: [...xs], y: [y, y, y, y, y] });
+
+export const photoCols = (
+  enabled: boolean, xs: [number, number, number, number, number], width: number, height: number, circle: boolean, y: number,
+): PlayerPhotoConfig => ({ enabled, x: [...xs], y: [y, y, y, y, y], width, height, circle });
 
 export const DEFAULT_SETTINGS: ImageSettings = {
   canvas: { width: 1920, height: 1080 },
@@ -303,6 +315,24 @@ export const DEFAULT_SETTINGS: ImageSettings = {
       },
     },
   },
+
+  team_match: {
+    background:  "marble.png",
+    fontFile:    "",
+    team_logo:   logo(true, 960, 130, 120),
+    team_name:   fc(true, "Arial", "#1a1a2e", 46, true, 960, 230),
+    photos:      photoCols(true, PLAYER_COLUMNS_X, 220, 220, true, 380),
+    player_name: fxCols(true, "Arial", "#1a1a2e", 24, true, PLAYER_COLUMNS_X, 520),
+    kad:         fxCols(true, "Arial", "#1a1a2e", 26, false, PLAYER_COLUMNS_X, 590),
+    rating:      fxCols(true, "Arial", "#1a1a2e", 26, false, PLAYER_COLUMNS_X, 650),
+    row_labels: {
+      enabled: true,
+      font: "Arial", color: "#888888", size: 20, bold: true,
+      x: 80,
+      kad_label:    "K / A / D", kad_y:    590,
+      rating_label: "Rating",    rating_y: 650,
+    },
+  },
 };
 
 export function mergeFC(def: FC, saved: Partial<FC> | undefined): FC {
@@ -355,6 +385,13 @@ export function mergePlayerPhoto(
   };
 }
 
+export function mergeRowLabels(
+  def: TeamMatchRowLabels,
+  saved: Partial<TeamMatchRowLabels> | undefined,
+): TeamMatchRowLabels {
+  return { ...def, ...(saved ?? {}) };
+}
+
 export function loadSettings(): ImageSettings {
   try {
     const raw = fs.readFileSync(SETTINGS_PATH, "utf-8");
@@ -363,10 +400,12 @@ export function loadSettings(): ImageSettings {
     const dp  = DEFAULT_SETTINGS.player;
     const dt  = DEFAULT_SETTINGS.team_season;
     const dv  = DEFAULT_SETTINGS.mvp;
+    const dtm = DEFAULT_SETTINGS.team_match;
     const sm  = p.match       ?? {};
     const sp  = p.player      ?? {};
     const st  = p.team_season ?? {};
     const sv  = p.mvp         ?? {};
+    const stm = p.team_match  ?? {};
     const rows_y: readonly number[] = sm.rows_y ?? dm.rows_y;
     return {
       canvas: { ...DEFAULT_SETTINGS.canvas, ...(p.canvas ?? {}) },
@@ -484,6 +523,17 @@ export function loadSettings(): ImageSettings {
           player_pill:      { ...dt.shapes.player_pill,      ...(st.shapes?.player_pill      ?? {}) },
           stats_background: { ...dt.shapes.stats_background, ...(st.shapes?.stats_background ?? {}) },
         },
+      },
+      team_match: {
+        background:  stm.background ?? dtm.background,
+        fontFile:    stm.fontFile   ?? dtm.fontFile,
+        team_logo:   { ...dtm.team_logo, ...(stm.team_logo ?? {}) },
+        team_name:   mergeFC(dtm.team_name, stm.team_name),
+        photos:      mergePlayerPhoto(dtm.photos, stm.photos),
+        player_name: mergeFX(dtm.player_name, stm.player_name),
+        kad:         mergeFX(dtm.kad,    stm.kad),
+        rating:      mergeFX(dtm.rating, stm.rating),
+        row_labels:  mergeRowLabels(dtm.row_labels, stm.row_labels),
       },
     };
   } catch (err) {

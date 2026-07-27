@@ -1,28 +1,12 @@
 import { createCanvas } from "canvas";
 import type { CanvasRenderingContext2D, Image as CanvasImage } from "canvas";
 import Utils from "../../../utility/utils.js";
-import { drawText, drawRoundRect, drawLogoCentered, drawBackground, fieldFont, tryRegisterFont } from "../helpers.js";
+import { drawText, drawRoundRect, drawLogoCentered, drawBackground, drawImageCover, fieldFont, tryRegisterFont } from "../helpers.js";
 import { tryLoadLogoOrFlag, tryLoadPlayerImage, stripMapPrefix } from "./loaders.js";
 import type { ImageSettings, LogoConfig, MatchRow, MapStatRow, PlayerStatRow, PlayerWithRating, PlayerPhotoConfig } from "../types.js";
 
 function drawPlayerPhoto(ctx: CanvasRenderingContext2D, img: CanvasImage | null, cfg: PlayerPhotoConfig, x: number, y: number): void {
-  if (!img) return;
-  const halfW = cfg.width / 2;
-  const halfH = cfg.height / 2;
-  if (cfg.circle) {
-    const r = Math.min(cfg.width, cfg.height) / 2;
-    ctx.save();
-    ctx.beginPath();
-    ctx.arc(x, y, r, 0, Math.PI * 2);
-    ctx.closePath();
-    ctx.clip();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    ctx.drawImage(img as any, x - halfW, y - halfH, cfg.width, cfg.height);
-    ctx.restore();
-  } else {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    ctx.drawImage(img as any, x - halfW, y - halfH, cfg.width, cfg.height);
-  }
+  drawImageCover(ctx, img, x, y, cfg.width, cfg.height, cfg.circle);
 }
 
 export async function generateMatchImage(

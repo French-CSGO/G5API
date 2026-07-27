@@ -67,6 +67,20 @@ export interface LogoConfig {
   size:    number;   // taille (largeur = hauteur)
 }
 
+/** Étiquettes à gauche des lignes de stat de l'image team_match (X partagé, Y par ligne) */
+export interface TeamMatchRowLabels {
+  enabled:      boolean;
+  font:         string;
+  color:        string;
+  size:         number;
+  bold:         boolean;
+  x:            number;
+  kad_label:    string; // "K / A / D"
+  kad_y:        number;
+  rating_label: string;
+  rating_y:     number;
+}
+
 export interface ImageSettings {
   canvas: { width: number; height: number };
 
@@ -374,6 +388,19 @@ export interface ImageSettings {
         height:       number;
       };
     };
+  };
+
+  /** Stats d'une seule équipe pour un match donné (photos + logo + stats) */
+  team_match: {
+    background:  string;
+    fontFile:    string;
+    team_logo:   LogoConfig;
+    team_name:   FC;
+    photos:      PlayerPhotoConfig;
+    player_name: FX;
+    kad:         FX; // texte combiné "K / A / D"
+    rating:      FX;
+    row_labels:  TeamMatchRowLabels;
   };
 }
 
