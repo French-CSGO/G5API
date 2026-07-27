@@ -900,4 +900,66 @@ async function renderSeasonVersusImage(req: Request, res: Response) {
   }
 }
 
+// ─── OBS Slot routes ───────────────────────────────────────────────────────────
+// Un "slot" (voir /obs-slots) est un lien fixe (identifié par un slug opaque)
+// que le panel peut réassigner à un match différent sans jamais changer l'URL
+// configurée côté OBS Studio. Plusieurs slots indépendants peuvent chacun
+// pointer vers un match différent, pour supporter plusieurs streams en
+// parallèle. Ces routes délèguent aux mêmes fonctions que /match/:match_id/**
+// une fois le slug résolu en match_id.
+
+async function resolveSlotMatchId(req: Request, res: Response, next: NextFunction) {
+  try {
+    const slug = req.params.slot_id;
+    const rows = await db.query(
+      "SELECT match_id FROM obs_slot WHERE slug = ?",
+      [slug]
+    ) as Array<{ match_id: number | null }>;
+    if (!rows.length) { res.status(404).json({ error: "Slot not found." }); return; }
+    if (rows[0].match_id == null) { res.status(404).json({ error: "No match assigned to this slot." }); return; }
+    req.params.match_id = String(rows[0].match_id);
+    next();
+  } catch (err) {
+    console.error("[image/slot] Error:", err);
+    res.status(500).json({ error: "Failed to resolve slot." });
+  }
+}
+
+router.get("/slot/:slot_id/match", resolveSlotMatchId, async (req: Request, res: Response) => {
+  await renderMatchImage(req, res, null, "full");
+});
+router.get("/slot/:slot_id/match/map", resolveSlotMatchId, async (req: Request, res: Response) => {
+  await renderMatchImage(req, res, null, "latest");
+});
+router.get("/slot/:slot_id/match/map/:map_number", resolveSlotMatchId, async (req: Request, res: Response) => {
+  const mapNumber = parseInt(req.params.map_number);
+  if (isNaN(mapNumber) || mapNumber < 1) { res.status(400).json({ error: "Invalid map number" }); return; }
+  await renderMatchImage(req, res, mapNumber, "byNumber");
+});
+
+router.get("/slot/:slot_id/mvp", resolveSlotMatchId, async (req: Request, res: Response) => {
+  await renderFullMatchMvpImage(req, res);
+});
+router.get("/slot/:slot_id/map/:map_number/mvp", resolveSlotMatchId, async (req: Request, res: Response) => {
+  await renderMvpImage(req, res);
+});
+
+router.get("/slot/:slot_id/player/:steam_id", resolveSlotMatchId, async (req: Request, res: Response) => {
+  await renderPlayerImage(req, res, null);
+});
+router.get("/slot/:slot_id/map/:map_number/player/:steam_id", resolveSlotMatchId, async (req: Request, res: Response) => {
+  const mapNumber = parseInt(req.params.map_number);
+  if (isNaN(mapNumber) || mapNumber < 1) { res.status(400).json({ error: "Invalid map number" }); return; }
+  await renderPlayerImage(req, res, mapNumber);
+});
+
+router.get("/slot/:slot_id/team/:team_number", resolveSlotMatchId, async (req: Request, res: Response) => {
+  await renderTeamMatchImage(req, res, null);
+});
+router.get("/slot/:slot_id/map/:map_number/team/:team_number", resolveSlotMatchId, async (req: Request, res: Response) => {
+  const mapNumber = parseInt(req.params.map_number);
+  if (isNaN(mapNumber) || mapNumber < 1) { res.status(400).json({ error: "Invalid map number" }); return; }
+  await renderTeamMatchImage(req, res, mapNumber);
+});
+
 export default router;

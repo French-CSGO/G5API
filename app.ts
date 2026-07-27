@@ -40,6 +40,7 @@ import { router as v2BackupRouter } from "./src/routes/v2/backupapi.js";
 import { router as v2DemoAdminRouter } from "./src/routes/v2/demoadmin.js";
 import settingsRouter from "./src/routes/settings.js";
 import imageRouter from "./src/routes/image/image.js";
+import obsSlotsRouter from "./src/routes/obsSlots.js";
 // End Route Files
 
 
@@ -204,6 +205,7 @@ app.use("/v2/backup", v2BackupRouter);
 app.use("/v2/demoadmin", v2DemoAdminRouter);
 app.use("/settings", settingsRouter);
 app.use("/image", imageRouter);
+app.use("/obs-slots", obsSlotsRouter);
 // END ROUTES
 
 // Steam API Calls.
