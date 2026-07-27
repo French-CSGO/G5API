@@ -60,7 +60,24 @@ app.use("/static/img/logos", express.static("public/img/logos"));
 app.use("/resource/flash/econ/tournaments/teams", express.static("public/img/logos"));
 app.use("/materials/panorama/images/tournaments/teams", express.static("public/img/logos"));
 app.use("/static/img/players", express.static("public/img/players"));
-app.use("/static/img", express.static("public/img"));
+app.use(
+  "/static/img",
+  (req, res, next) => {
+    // Only serve common raster image types to avoid exposing arbitrary uploaded content
+    if (!/\.(png|jpe?g|webp|gif|ico)$/i.test(req.path)) {
+      res.sendStatus(404);
+      return;
+    }
+    next();
+  },
+  express.static("public/img", {
+    dotfiles: "deny",
+    fallthrough: false,
+    setHeaders: (res) => {
+      res.setHeader("X-Content-Type-Options", "nosniff");
+    },
+  })
+);
 
 
 // Security defaults with helmet
