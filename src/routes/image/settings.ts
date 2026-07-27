@@ -1,17 +1,22 @@
 import path from "path";
 import fs from "fs";
-import type { FC, FX, LogoConfig, ImageSettings } from "./types.js";
+import type { FC, FX, LogoConfig, PlayerPhotoConfig, ImageSettings } from "./types.js";
 
 export const SETTINGS_PATH = path.join(process.cwd(), "public", "image-settings.json");
+
+const ROWS_Y_DEFAULT: [number, number, number, number, number] = [485, 625, 770, 0, 0];
 
 export const fc = (enabled: boolean, font: string, color: string, size: number, bold: boolean, x: number, y: number): FC =>
   ({ enabled, font, color, size, bold, x, y });
 
 export const fx = (enabled: boolean, font: string, color: string, size: number, bold: boolean, x: number): FX =>
-  ({ enabled, font, color, size, bold, x });
+  ({ enabled, font, color, size, bold, x: [x, x, x, x, x], y: [...ROWS_Y_DEFAULT] as [number, number, number, number, number] });
 
 export const logo = (enabled: boolean, x: number, y: number, size: number): LogoConfig =>
   ({ enabled, x, y, size });
+
+export const playerPhoto = (enabled: boolean, x: number, width: number, height: number, circle: boolean): PlayerPhotoConfig =>
+  ({ enabled, x: [x, x, x, x, x], y: [...ROWS_Y_DEFAULT] as [number, number, number, number, number], width, height, circle });
 
 export const DEFAULT_SETTINGS: ImageSettings = {
   canvas: { width: 1920, height: 1080 },
@@ -19,7 +24,7 @@ export const DEFAULT_SETTINGS: ImageSettings = {
   match: {
     background:    "marble.png",
     fontFile:      "",
-    rows_y:        [485, 625, 770, 0, 0],
+    rows_y:        [...ROWS_Y_DEFAULT],
     team1_name:    fc(true, "Arial", "#1a1a2e", 30, true, 415,  302),
     team1_score:   fc(true, "Arial", "#1a1a2e", 30, true, 806,  302),
     team2_score:   fc(true, "Arial", "#1a1a2e", 30, true, 1114, 302),
@@ -33,8 +38,8 @@ export const DEFAULT_SETTINGS: ImageSettings = {
     rating_l:      fx(true, "Arial", "#1a1a2e", 20, false, 890),
     kad_r:         fx(true, "Arial", "#1a1a2e", 20, false, 1120),
     rating_r:      fx(true, "Arial", "#1a1a2e", 20, false, 1280),
-    player_photo_l: { enabled: true, x: 110,  width: 56, height: 56, circle: true },
-    player_photo_r: { enabled: true, x: 1520, width: 56, height: 56, circle: true },
+    player_photo_l: playerPhoto(true, 110,  56, 56, true),
+    player_photo_r: playerPhoto(true, 1520, 56, 56, true),
     team1_logo: logo(true,  310, 302, 60),
     team2_logo: logo(true, 1610, 302, 60),
     column_headers: {
@@ -304,8 +309,50 @@ export function mergeFC(def: FC, saved: Partial<FC> | undefined): FC {
   return { ...def, ...(saved ?? {}) };
 }
 
-export function mergeFX(def: FX, saved: Partial<FX> | undefined): FX {
-  return { ...def, ...(saved ?? {}) };
+// Ramène une valeur sauvegardée (ancien scalaire, nouveau tableau, ou absente)
+// à un tableau de 5 positions, une par ligne joueur.
+function normalizeArr5(
+  val: unknown,
+  fallback: readonly number[],
+  def: readonly number[],
+): [number, number, number, number, number] {
+  if (Array.isArray(val)) {
+    return [0, 1, 2, 3, 4].map(i => val[i] ?? fallback[i] ?? def[i]) as [number, number, number, number, number];
+  }
+  if (typeof val === "number") {
+    return [val, val, val, val, val];
+  }
+  return [0, 1, 2, 3, 4].map(i => fallback[i] ?? def[i]) as [number, number, number, number, number];
+}
+
+export function mergeFX(
+  def: FX,
+  saved: (Partial<FX> & { x?: unknown; y?: unknown }) | undefined,
+  rowsYFallback: readonly number[] = def.y,
+): FX {
+  const s = saved ?? {};
+  return {
+    ...def,
+    ...s,
+    x: normalizeArr5(s.x, def.x, def.x),
+    // Anciennes configs : pas de Y sauvegardé → on part des rows_y déjà en place
+    // (pour ne pas déplacer les champs déjà positionnés par l'admin).
+    y: normalizeArr5(s.y, rowsYFallback, def.y),
+  };
+}
+
+export function mergePlayerPhoto(
+  def: PlayerPhotoConfig,
+  saved: (Partial<PlayerPhotoConfig> & { x?: unknown; y?: unknown }) | undefined,
+  rowsYFallback: readonly number[] = def.y,
+): PlayerPhotoConfig {
+  const s = saved ?? {};
+  return {
+    ...def,
+    ...s,
+    x: normalizeArr5(s.x, def.x, def.x),
+    y: normalizeArr5(s.y, rowsYFallback, def.y),
+  };
 }
 
 export function loadSettings(): ImageSettings {
@@ -320,6 +367,7 @@ export function loadSettings(): ImageSettings {
     const sp  = p.player      ?? {};
     const st  = p.team_season ?? {};
     const sv  = p.mvp         ?? {};
+    const rows_y: readonly number[] = sm.rows_y ?? dm.rows_y;
     return {
       canvas: { ...DEFAULT_SETTINGS.canvas, ...(p.canvas ?? {}) },
       match: {
@@ -333,14 +381,14 @@ export function loadSettings(): ImageSettings {
         map1:          mergeFC(dm.map1,          sm.map1),
         map2:          mergeFC(dm.map2,          sm.map2),
         map3:          mergeFC(dm.map3,          sm.map3),
-        player_name_l: mergeFX(dm.player_name_l, sm.player_name_l),
-        player_name_r: mergeFX(dm.player_name_r, sm.player_name_r),
-        kad_l:         mergeFX(dm.kad_l,    sm.kad_l),
-        rating_l:      mergeFX(dm.rating_l, sm.rating_l),
-        kad_r:         mergeFX(dm.kad_r,    sm.kad_r),
-        rating_r:      mergeFX(dm.rating_r, sm.rating_r),
-        player_photo_l: { ...dm.player_photo_l, ...(sm.player_photo_l ?? {}) },
-        player_photo_r: { ...dm.player_photo_r, ...(sm.player_photo_r ?? {}) },
+        player_name_l: mergeFX(dm.player_name_l, sm.player_name_l, rows_y),
+        player_name_r: mergeFX(dm.player_name_r, sm.player_name_r, rows_y),
+        kad_l:         mergeFX(dm.kad_l,    sm.kad_l,    rows_y),
+        rating_l:      mergeFX(dm.rating_l, sm.rating_l, rows_y),
+        kad_r:         mergeFX(dm.kad_r,    sm.kad_r,    rows_y),
+        rating_r:      mergeFX(dm.rating_r, sm.rating_r, rows_y),
+        player_photo_l: mergePlayerPhoto(dm.player_photo_l, sm.player_photo_l, rows_y),
+        player_photo_r: mergePlayerPhoto(dm.player_photo_r, sm.player_photo_r, rows_y),
         team1_logo:     { ...dm.team1_logo, ...(sm.team1_logo ?? {}) },
         team2_logo:     { ...dm.team2_logo, ...(sm.team2_logo ?? {}) },
         column_headers: { ...dm.column_headers, ...(sm.column_headers ?? {}) },

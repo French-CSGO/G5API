@@ -11,14 +11,15 @@ export interface FC {
   y:       number;
 }
 
-/** Champ sans Y — colonnes du match (le Y vient de rows_y) */
+/** Champ positionnable individuellement pour chacune des 5 lignes joueurs */
 export interface FX {
   enabled: boolean;
   font:    string;
   color:   string;
   size:    number;
   bold:    boolean;
-  x:       number;
+  x:       [number, number, number, number, number];
+  y:       [number, number, number, number, number];
 }
 
 export interface MatchColumnHeaders {
@@ -32,10 +33,11 @@ export interface MatchColumnHeaders {
   rating_label: string;
 }
 
-/** Position + taille d'une photo joueur pour une colonne du match (X partagé, Y = rows_y) */
+/** Photo joueur du match, positionnable individuellement pour chacune des 5 lignes */
 export interface PlayerPhotoConfig {
   enabled: boolean;
-  x:       number;
+  x:       [number, number, number, number, number];
+  y:       [number, number, number, number, number];
   width:   number;
   height:  number;
   circle:  boolean;

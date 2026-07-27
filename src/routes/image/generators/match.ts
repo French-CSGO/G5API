@@ -5,7 +5,7 @@ import { drawText, drawRoundRect, drawLogoCentered, drawBackground, fieldFont, t
 import { tryLoadLogoOrFlag, tryLoadPlayerImage, stripMapPrefix } from "./loaders.js";
 import type { ImageSettings, LogoConfig, MatchRow, MapStatRow, PlayerStatRow, PlayerWithRating, PlayerPhotoConfig } from "../types.js";
 
-function drawPlayerPhoto(ctx: CanvasRenderingContext2D, img: CanvasImage | null, cfg: PlayerPhotoConfig, y: number): void {
+function drawPlayerPhoto(ctx: CanvasRenderingContext2D, img: CanvasImage | null, cfg: PlayerPhotoConfig, x: number, y: number): void {
   if (!img) return;
   const halfW = cfg.width / 2;
   const halfH = cfg.height / 2;
@@ -13,15 +13,15 @@ function drawPlayerPhoto(ctx: CanvasRenderingContext2D, img: CanvasImage | null,
     const r = Math.min(cfg.width, cfg.height) / 2;
     ctx.save();
     ctx.beginPath();
-    ctx.arc(cfg.x, y, r, 0, Math.PI * 2);
+    ctx.arc(x, y, r, 0, Math.PI * 2);
     ctx.closePath();
     ctx.clip();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    ctx.drawImage(img as any, cfg.x - halfW, y - halfH, cfg.width, cfg.height);
+    ctx.drawImage(img as any, x - halfW, y - halfH, cfg.width, cfg.height);
     ctx.restore();
   } else {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    ctx.drawImage(img as any, cfg.x - halfW, y - halfH, cfg.width, cfg.height);
+    ctx.drawImage(img as any, x - halfW, y - halfH, cfg.width, cfg.height);
   }
 }
 
@@ -144,8 +144,8 @@ export async function generateMatchImage(
   if (ch.enabled) {
     const chFont = `${ch.bold ? "bold " : ""}${ch.size}px ${ch.font}`;
     const pairs: [string | undefined, number, number][] = [
-      [ch.kad_label,    m.kad_l.x,    m.kad_r.x],
-      [ch.rating_label, m.rating_l.x, m.rating_r.x],
+      [ch.kad_label,    m.kad_l.x[0],    m.kad_r.x[0]],
+      [ch.rating_label, m.rating_l.x[0], m.rating_r.x[0]],
     ];
     for (const [label, lx, rx] of pairs) {
       if (label) {
@@ -156,21 +156,22 @@ export async function generateMatchImage(
   }
 
   for (let i = 0; i < 5; i++) {
-    const rowY = m.rows_y[i];
-    if (!rowY) continue;
+    // rows_y[i] == 0 désactive complètement la ligne (indépendamment de la
+    // position individuelle de chaque champ, qui reste dans son propre x[i]/y[i]).
+    if (!m.rows_y[i]) continue;
     const p1 = team1Players[i];
     if (p1) {
-      if (m.player_photo_l?.enabled) drawPlayerPhoto(ctx, photos1[i], m.player_photo_l, rowY);
-      if (m.player_name_l.enabled)   drawText(ctx, p1.name,                                  m.player_name_l.x, rowY, fieldFont(m.player_name_l), m.player_name_l.color);
-      if (m.kad_l.enabled)           drawText(ctx, `${p1.kills} / ${p1.assists} / ${p1.deaths}`, m.kad_l.x,      rowY, fieldFont(m.kad_l),          m.kad_l.color);
-      if (m.rating_l.enabled)        drawText(ctx, String(p1.rating),                        m.rating_l.x,      rowY, fieldFont(m.rating_l),       m.rating_l.color);
+      if (m.player_photo_l?.enabled) drawPlayerPhoto(ctx, photos1[i], m.player_photo_l, m.player_photo_l.x[i], m.player_photo_l.y[i]);
+      if (m.player_name_l.enabled)   drawText(ctx, p1.name,                                  m.player_name_l.x[i], m.player_name_l.y[i], fieldFont(m.player_name_l), m.player_name_l.color);
+      if (m.kad_l.enabled)           drawText(ctx, `${p1.kills} / ${p1.assists} / ${p1.deaths}`, m.kad_l.x[i],      m.kad_l.y[i],         fieldFont(m.kad_l),          m.kad_l.color);
+      if (m.rating_l.enabled)        drawText(ctx, String(p1.rating),                        m.rating_l.x[i],      m.rating_l.y[i],      fieldFont(m.rating_l),       m.rating_l.color);
     }
     const p2 = team2Players[i];
     if (p2) {
-      if (m.player_photo_r?.enabled) drawPlayerPhoto(ctx, photos2[i], m.player_photo_r, rowY);
-      if (m.player_name_r.enabled)   drawText(ctx, p2.name,                                  m.player_name_r.x, rowY, fieldFont(m.player_name_r), m.player_name_r.color);
-      if (m.kad_r.enabled)           drawText(ctx, `${p2.kills} / ${p2.assists} / ${p2.deaths}`, m.kad_r.x,      rowY, fieldFont(m.kad_r),          m.kad_r.color);
-      if (m.rating_r.enabled)        drawText(ctx, String(p2.rating),                        m.rating_r.x,      rowY, fieldFont(m.rating_r),       m.rating_r.color);
+      if (m.player_photo_r?.enabled) drawPlayerPhoto(ctx, photos2[i], m.player_photo_r, m.player_photo_r.x[i], m.player_photo_r.y[i]);
+      if (m.player_name_r.enabled)   drawText(ctx, p2.name,                                  m.player_name_r.x[i], m.player_name_r.y[i], fieldFont(m.player_name_r), m.player_name_r.color);
+      if (m.kad_r.enabled)           drawText(ctx, `${p2.kills} / ${p2.assists} / ${p2.deaths}`, m.kad_r.x[i],      m.kad_r.y[i],         fieldFont(m.kad_r),          m.kad_r.color);
+      if (m.rating_r.enabled)        drawText(ctx, String(p2.rating),                        m.rating_r.x[i],      m.rating_r.y[i],      fieldFont(m.rating_r),       m.rating_r.color);
     }
   }
 
