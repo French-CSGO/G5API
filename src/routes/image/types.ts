@@ -11,15 +11,14 @@ export interface FC {
   y:       number;
 }
 
-/** Champ positionnable individuellement pour chacune des 5 lignes joueurs */
+/** Champ sans Y — colonnes du match (le Y vient de rows_y) */
 export interface FX {
   enabled: boolean;
   font:    string;
   color:   string;
   size:    number;
   bold:    boolean;
-  x:       [number, number, number, number, number];
-  y:       [number, number, number, number, number];
+  x:       number;
 }
 
 export interface MatchColumnHeaders {
@@ -57,30 +56,6 @@ export interface LogoConfig {
   x:       number;   // centre X
   y:       number;   // centre Y
   size:    number;   // taille (largeur = hauteur)
-}
-
-/** 5 photos joueurs (une par titulaire), positionnables individuellement */
-export interface PhotoRow {
-  enabled: boolean;
-  width:   number;
-  height:  number;
-  circle:  boolean;
-  x:       [number, number, number, number, number];
-  y:       [number, number, number, number, number];
-}
-
-/** Étiquettes à gauche de chaque ligne de stat (X partagé, Y par ligne) */
-export interface TeamMatchRowLabels {
-  enabled:      boolean;
-  font:         string;
-  color:        string;
-  size:         number;
-  bold:         boolean;
-  x:            number;
-  kad_label:    string; // "K / A / D"
-  kad_y:        number;
-  rating_label: string;
-  rating_y:     number;
 }
 
 export interface ImageSettings {
@@ -392,19 +367,6 @@ export interface ImageSettings {
         height:       number;
       };
     };
-  };
-
-  /** Stats d'une seule équipe pour un match donné (photos + logo + stats) */
-  team_match: {
-    background:  string;
-    fontFile:    string;
-    team_logo:   LogoConfig;
-    team_name:   FC;
-    photos:      PhotoRow;
-    player_name: FX;
-    kad:         FX; // texte combiné "K / A / D"
-    rating:      FX;
-    row_labels:  TeamMatchRowLabels;
   };
 }
 

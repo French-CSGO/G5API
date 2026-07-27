@@ -17,7 +17,6 @@ import { generateMatchImage } from "./generators/match.js";
 import { generatePlayerImage } from "./generators/player.js";
 import { generateTeamSeasonImage } from "./generators/teamSeason.js";
 import { generateMapMvpImage } from "./generators/mvp.js";
-import { generateTeamMatchImage } from "./generators/teamMatch.js";
 import type { ImageSettings } from "./types.js";
 import type {
   MatchRow, MapStatRow, PlayerStatRow,
@@ -57,23 +56,6 @@ async function fetchVetoPicks(matchId: number): Promise<string[]> {
     [matchId]
   ) as Array<{ map: string }>;
   return rows.map(r => r.map);
-}
-
-/** Stats agrégées (ou pour une map précise si mapStatsId est fourni) d'une seule équipe. */
-async function fetchTeamPlayers(matchId: number, teamId: number, mapStatsId: number | null): Promise<PlayerStatRow[]> {
-  const mapFilter = mapStatsId !== null ? "AND map_id = ?" : "";
-  const args = mapStatsId !== null ? [matchId, teamId, mapStatsId] : [matchId, teamId];
-  return await db.query(
-    `SELECT steam_id, name, team_id,
-       SUM(kills) AS kills, SUM(deaths) AS deaths, SUM(assists) AS assists,
-       SUM(roundsplayed) AS roundsplayed,
-       SUM(k1) AS k1, SUM(k2) AS k2, SUM(k3) AS k3, SUM(k4) AS k4, SUM(k5) AS k5
-     FROM player_stats
-     WHERE match_id = ? AND team_id = ? ${mapFilter}
-     GROUP BY steam_id, team_id
-     ORDER BY kills DESC`,
-    args
-  ) as PlayerStatRow[];
 }
 
 function playerRating(p: PlayerStatExtended): number {
@@ -512,61 +494,6 @@ async function renderPlayerImage(req: Request, res: Response, mapNumber: number 
   } catch (err) {
     console.error("[image/player] Error:", err);
     res.status(500).json({ error: "Failed to generate player image" });
-  }
-}
-
-// ─── Team match image routes ───────────────────────────────────────────────────
-// Stats d'une seule équipe (team_number 1 ou 2) pour un match : logo, photos et
-// stats des 5 titulaires. Utile pour un visuel par équipe plutôt que le match entier.
-
-/** GET /image/match/:match_id/team/:team_number — stats agrégées du match complet */
-router.get("/match/:match_id/team/:team_number", async (req: Request, res: Response) => {
-  await renderTeamMatchImage(req, res, null);
-});
-
-/** GET /image/match/:match_id/map/:map_number/team/:team_number — stats d'une map précise */
-router.get("/match/:match_id/map/:map_number/team/:team_number", async (req: Request, res: Response) => {
-  const mapNumber = parseInt(req.params.map_number);
-  if (isNaN(mapNumber) || mapNumber < 1) { res.status(400).json({ error: "Invalid map number" }); return; }
-  await renderTeamMatchImage(req, res, mapNumber);
-});
-
-async function renderTeamMatchImage(req: Request, res: Response, mapNumber: number | null) {
-  try {
-    const matchId    = parseInt(req.params.match_id);
-    const teamNumber = parseInt(req.params.team_number);
-    if (isNaN(matchId)) { res.status(400).json({ error: "Invalid match ID" }); return; }
-    if (teamNumber !== 1 && teamNumber !== 2) { res.status(400).json({ error: "team_number must be 1 or 2" }); return; }
-
-    const match = await fetchMatchRow(matchId);
-    if (!match) { res.status(404).json({ error: "Match not found" }); return; }
-
-    let mapStatsId: number | null = null;
-    if (mapNumber !== null) {
-      const allMaps = await fetchAllMaps(matchId);
-      // map_number is 1-indexed from the user; DB stores 0-indexed
-      const mapRow = allMaps[mapNumber - 1] ?? null;
-      if (!mapRow) { res.status(404).json({ error: `Map ${mapNumber} not found for this match` }); return; }
-      mapStatsId = mapRow.id;
-    }
-
-    const isTeam1   = teamNumber === 1;
-    const teamId    = isTeam1 ? match.team1_id   : match.team2_id;
-    const teamName  = isTeam1 ? (match.team1_string || match.team1_name || "Team 1")
-                               : (match.team2_string || match.team2_name || "Team 2");
-    const teamLogo  = isTeam1 ? match.team1_logo : match.team2_logo;
-    const teamFlag  = isTeam1 ? match.team1_flag : match.team2_flag;
-
-    const players = await fetchTeamPlayers(matchId, teamId, mapStatsId);
-    if (!players?.length) { res.status(404).json({ error: "No player stats found for this team" }); return; }
-
-    const png = await generateTeamMatchImage(teamName, teamLogo, teamFlag, players, loadSettings());
-    res.setHeader("Content-Type", "image/png");
-    res.setHeader("Cache-Control", "no-cache, no-store");
-    res.send(png);
-  } catch (err) {
-    console.error("[image/team-match] Error:", err);
-    res.status(500).json({ error: "Failed to generate team match image" });
   }
 }
 

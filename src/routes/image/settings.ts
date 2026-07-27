@@ -1,33 +1,17 @@
 import path from "path";
 import fs from "fs";
-import type { FC, FX, LogoConfig, PhotoRow, TeamMatchRowLabels, ImageSettings } from "./types.js";
+import type { FC, FX, LogoConfig, ImageSettings } from "./types.js";
 
 export const SETTINGS_PATH = path.join(process.cwd(), "public", "image-settings.json");
-
-const ROWS_Y_DEFAULT: [number, number, number, number, number] = [485, 625, 770, 0, 0];
 
 export const fc = (enabled: boolean, font: string, color: string, size: number, bold: boolean, x: number, y: number): FC =>
   ({ enabled, font, color, size, bold, x, y });
 
 export const fx = (enabled: boolean, font: string, color: string, size: number, bold: boolean, x: number): FX =>
-  ({ enabled, font, color, size, bold, x: [x, x, x, x, x], y: [...ROWS_Y_DEFAULT] as [number, number, number, number, number] });
+  ({ enabled, font, color, size, bold, x });
 
 export const logo = (enabled: boolean, x: number, y: number, size: number): LogoConfig =>
   ({ enabled, x, y, size });
-
-// Champ FX avec un X différent par joueur (colonne) mais un Y partagé (ligne) —
-// l'inverse de fx() ci-dessus, utile pour une mise en page "colonnes joueurs".
-export const fxRow = (
-  enabled: boolean, font: string, color: string, size: number, bold: boolean,
-  xs: [number, number, number, number, number], y: number,
-): FX => ({ enabled, font, color, size, bold, x: [...xs] as [number, number, number, number, number], y: [y, y, y, y, y] });
-
-const PLAYER_COLUMNS_X: [number, number, number, number, number] = [320, 640, 960, 1280, 1600];
-
-export const photoRow = (
-  enabled: boolean, width: number, height: number, circle: boolean,
-  xs: [number, number, number, number, number], y: number,
-): PhotoRow => ({ enabled, width, height, circle, x: [...xs], y: [y, y, y, y, y] });
 
 export const DEFAULT_SETTINGS: ImageSettings = {
   canvas: { width: 1920, height: 1080 },
@@ -35,7 +19,7 @@ export const DEFAULT_SETTINGS: ImageSettings = {
   match: {
     background:    "marble.png",
     fontFile:      "",
-    rows_y:        [...ROWS_Y_DEFAULT] as [number, number, number, number, number],
+    rows_y:        [485, 625, 770, 0, 0],
     team1_name:    fc(true, "Arial", "#1a1a2e", 30, true, 415,  302),
     team1_score:   fc(true, "Arial", "#1a1a2e", 30, true, 806,  302),
     team2_score:   fc(true, "Arial", "#1a1a2e", 30, true, 1114, 302),
@@ -316,92 +300,14 @@ export const DEFAULT_SETTINGS: ImageSettings = {
       },
     },
   },
-
-  team_match: {
-    background:  "marble.png",
-    fontFile:    "",
-    team_logo:   logo(true, 960, 130, 120),
-    team_name:   fc(true, "Arial", "#1a1a2e", 46, true, 960, 230),
-    photos:      photoRow(true, 220, 220, true, PLAYER_COLUMNS_X, 380),
-    player_name: fxRow(true, "Arial", "#1a1a2e", 24, true, PLAYER_COLUMNS_X, 520),
-    kad:         fxRow(true, "Arial", "#1a1a2e", 26, false, PLAYER_COLUMNS_X, 590),
-    rating:      fxRow(true, "Arial", "#1a1a2e", 26, false, PLAYER_COLUMNS_X, 650),
-    row_labels: {
-      enabled: true,
-      font: "Arial", color: "#888888", size: 20, bold: true,
-      x: 80,
-      kad_label:    "K / A / D", kad_y:    590,
-      rating_label: "Rating",    rating_y: 650,
-    },
-  },
 };
 
 export function mergeFC(def: FC, saved: Partial<FC> | undefined): FC {
   return { ...def, ...(saved ?? {}) };
 }
 
-export function mergePhotoRow(
-  def: PhotoRow,
-  saved: (Partial<PhotoRow> & { x?: unknown; y?: unknown }) | undefined,
-): PhotoRow {
-  const s = saved ?? {};
-  return {
-    ...def,
-    ...s,
-    x: normalizeArr5(s.x, def.x, def.x),
-    y: normalizeArr5(s.y, def.y, def.y),
-  };
-}
-
-export function mergeRowLabels(
-  def: TeamMatchRowLabels,
-  saved: Partial<TeamMatchRowLabels> | undefined,
-): TeamMatchRowLabels {
+export function mergeFX(def: FX, saved: Partial<FX> | undefined): FX {
   return { ...def, ...(saved ?? {}) };
-}
-
-// Ramène une valeur sauvegardée (ancien scalaire, nouveau tableau, ou absente)
-// à un tableau de 5 positions, une par ligne joueur.
-function normalizeArr5(
-  val: unknown,
-  fallback: readonly number[],
-  def: readonly number[],
-): [number, number, number, number, number] {
-  const toFiniteNumber = (v: unknown): number | undefined => {
-    const n = typeof v === "number"
-      ? v
-      : (typeof v === "string" && v.trim() !== "" ? Number(v) : NaN);
-    return Number.isFinite(n) ? n : undefined;
-  };
-
-  if (Array.isArray(val)) {
-    return [0, 1, 2, 3, 4].map(i =>
-      toFiniteNumber(val[i]) ?? fallback[i] ?? def[i]
-    ) as [number, number, number, number, number];
-  }
-
-  const n = toFiniteNumber(val);
-  if (n !== undefined) {
-    return [n, n, n, n, n];
-  }
-
-  return [0, 1, 2, 3, 4].map(i => fallback[i] ?? def[i]) as [number, number, number, number, number];
-}
-
-export function mergeFX(
-  def: FX,
-  saved: (Partial<FX> & { x?: unknown; y?: unknown }) | undefined,
-  rowsYFallback: readonly number[] = def.y,
-): FX {
-  const s = saved ?? {};
-  return {
-    ...def,
-    ...s,
-    x: normalizeArr5(s.x, def.x, def.x),
-    // Anciennes configs : pas de Y sauvegardé → on part des rows_y déjà en place
-    // (pour ne pas déplacer les champs déjà positionnés par l'admin).
-    y: normalizeArr5(s.y, rowsYFallback, def.y),
-  };
 }
 
 export function loadSettings(): ImageSettings {
@@ -412,13 +318,10 @@ export function loadSettings(): ImageSettings {
     const dp  = DEFAULT_SETTINGS.player;
     const dt  = DEFAULT_SETTINGS.team_season;
     const dv  = DEFAULT_SETTINGS.mvp;
-    const dtm = DEFAULT_SETTINGS.team_match;
     const sm  = p.match       ?? {};
     const sp  = p.player      ?? {};
     const st  = p.team_season ?? {};
     const sv  = p.mvp         ?? {};
-    const stm = p.team_match  ?? {};
-    const rows_y: readonly number[] = sm.rows_y ?? dm.rows_y;
     return {
       canvas: { ...DEFAULT_SETTINGS.canvas, ...(p.canvas ?? {}) },
       match: {
@@ -432,16 +335,16 @@ export function loadSettings(): ImageSettings {
         map1:          mergeFC(dm.map1,          sm.map1),
         map2:          mergeFC(dm.map2,          sm.map2),
         map3:          mergeFC(dm.map3,          sm.map3),
-        player_name_l: mergeFX(dm.player_name_l, sm.player_name_l, rows_y),
-        player_name_r: mergeFX(dm.player_name_r, sm.player_name_r, rows_y),
-        kills_l:       mergeFX(dm.kills_l,       sm.kills_l,       rows_y),
-        assists_l:     mergeFX(dm.assists_l,     sm.assists_l,     rows_y),
-        deaths_l:      mergeFX(dm.deaths_l,      sm.deaths_l,      rows_y),
-        rating_l:      mergeFX(dm.rating_l,      sm.rating_l,      rows_y),
-        kills_r:       mergeFX(dm.kills_r,       sm.kills_r,       rows_y),
-        assists_r:     mergeFX(dm.assists_r,     sm.assists_r,     rows_y),
-        deaths_r:      mergeFX(dm.deaths_r,      sm.deaths_r,      rows_y),
-        rating_r:      mergeFX(dm.rating_r,      sm.rating_r,      rows_y),
+        player_name_l: mergeFX(dm.player_name_l, sm.player_name_l),
+        player_name_r: mergeFX(dm.player_name_r, sm.player_name_r),
+        kills_l:       mergeFX(dm.kills_l,       sm.kills_l),
+        assists_l:     mergeFX(dm.assists_l,      sm.assists_l),
+        deaths_l:      mergeFX(dm.deaths_l,       sm.deaths_l),
+        rating_l:      mergeFX(dm.rating_l,       sm.rating_l),
+        kills_r:        mergeFX(dm.kills_r,        sm.kills_r),
+        assists_r:      mergeFX(dm.assists_r,      sm.assists_r),
+        deaths_r:       mergeFX(dm.deaths_r,       sm.deaths_r),
+        rating_r:       mergeFX(dm.rating_r,       sm.rating_r),
         team1_logo:     { ...dm.team1_logo, ...(sm.team1_logo ?? {}) },
         team2_logo:     { ...dm.team2_logo, ...(sm.team2_logo ?? {}) },
         column_headers: { ...dm.column_headers, ...(sm.column_headers ?? {}) },
@@ -536,17 +439,6 @@ export function loadSettings(): ImageSettings {
           player_pill:      { ...dt.shapes.player_pill,      ...(st.shapes?.player_pill      ?? {}) },
           stats_background: { ...dt.shapes.stats_background, ...(st.shapes?.stats_background ?? {}) },
         },
-      },
-      team_match: {
-        background:  stm.background ?? dtm.background,
-        fontFile:    stm.fontFile   ?? dtm.fontFile,
-        team_logo:   { ...dtm.team_logo, ...(stm.team_logo ?? {}) },
-        team_name:   mergeFC(dtm.team_name, stm.team_name),
-        photos:      mergePhotoRow(dtm.photos, stm.photos),
-        player_name: mergeFX(dtm.player_name, stm.player_name),
-        kad:         mergeFX(dtm.kad,    stm.kad),
-        rating:      mergeFX(dtm.rating, stm.rating),
-        row_labels:  mergeRowLabels(dtm.row_labels, stm.row_labels),
       },
     };
   } catch (err) {
