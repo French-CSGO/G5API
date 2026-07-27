@@ -441,3 +441,6 @@ export interface RoundsRow   extends RowDataPacket { rounds_won: number; rounds_
 export interface WinsRow     extends RowDataPacket { wins: number; losses: number; }
 export interface TeamNameRow extends RowDataPacket { name: string; }
 export interface BestMapRow  extends RowDataPacket { map_name: string; wins: number; }
+export interface TeamNameLogoRow extends RowDataPacket {
+  id: number; name: string; logo: string | null; flag: string | null;
+}

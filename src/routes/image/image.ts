@@ -22,7 +22,7 @@ import type { ImageSettings } from "./types.js";
 import type {
   MatchRow, MapStatRow, PlayerStatRow,
   PlayerStatExtended, TeamSeasonRow, RoundsRow, WinsRow,
-  TeamNameRow, BestMapRow,
+  TeamNameRow, BestMapRow, TeamNameLogoRow,
 } from "./types.js";
 
 const router = Router();
@@ -74,6 +74,53 @@ async function fetchTeamPlayers(matchId: number, teamId: number, mapStatsId: num
      ORDER BY kills DESC`,
     args
   ) as PlayerStatRow[];
+}
+
+/** Top 5 joueurs (agrégés sur toute la saison) d'une seule équipe. */
+async function fetchSeasonTeamPlayers(seasonId: number, teamId: number): Promise<PlayerStatRow[]> {
+  return await db.query(
+    `SELECT ps.steam_id, ps.name, ps.team_id,
+       SUM(ps.kills) AS kills, SUM(ps.deaths) AS deaths, SUM(ps.assists) AS assists,
+       SUM(ps.roundsplayed) AS roundsplayed,
+       SUM(ps.k1) AS k1, SUM(ps.k2) AS k2, SUM(ps.k3) AS k3, SUM(ps.k4) AS k4, SUM(ps.k5) AS k5
+     FROM player_stats ps
+     JOIN \`match\` m ON m.id = ps.match_id
+     WHERE m.season_id = ? AND ps.team_id = ?
+     GROUP BY ps.steam_id, ps.team_id
+     ORDER BY SUM(ps.kills) DESC
+     LIMIT 5`,
+    [seasonId, teamId]
+  ) as PlayerStatRow[];
+}
+
+/** Top joueurs (agrégés sur la saison) des deux équipes, pour l'image "versus" de saison. */
+async function fetchSeasonVersusPlayers(seasonId: number, team1Id: number, team2Id: number): Promise<PlayerStatRow[]> {
+  return await db.query(
+    `SELECT ps.steam_id, ps.name, ps.team_id,
+       SUM(ps.kills) AS kills, SUM(ps.deaths) AS deaths, SUM(ps.assists) AS assists,
+       SUM(ps.roundsplayed) AS roundsplayed,
+       SUM(ps.k1) AS k1, SUM(ps.k2) AS k2, SUM(ps.k3) AS k3, SUM(ps.k4) AS k4, SUM(ps.k5) AS k5
+     FROM player_stats ps
+     JOIN \`match\` m ON m.id = ps.match_id
+     WHERE m.season_id = ? AND ps.team_id IN (?, ?)
+     GROUP BY ps.steam_id, ps.team_id
+     ORDER BY ps.team_id, SUM(ps.kills) DESC`,
+    [seasonId, team1Id, team2Id]
+  ) as PlayerStatRow[];
+}
+
+/** Maps jouées cette saison entre ces deux équipes précises, scores normalisés du point de vue de team1Id. */
+async function fetchSeasonHeadToHeadMaps(seasonId: number, team1Id: number, team2Id: number): Promise<MapStatRow[]> {
+  return await db.query(
+    `SELECT ms.id, ms.map_name, ms.map_number,
+       CASE WHEN m.team1_id = ? THEN ms.team1_score ELSE ms.team2_score END AS team1_score,
+       CASE WHEN m.team1_id = ? THEN ms.team2_score ELSE ms.team1_score END AS team2_score
+     FROM map_stats ms
+     JOIN \`match\` m ON m.id = ms.match_id
+     WHERE m.season_id = ? AND ((m.team1_id = ? AND m.team2_id = ?) OR (m.team1_id = ? AND m.team2_id = ?))
+     ORDER BY ms.id ASC`,
+    [team1Id, team1Id, seasonId, team1Id, team2Id, team2Id, team1Id]
+  ) as MapStatRow[];
 }
 
 function playerRating(p: PlayerStatExtended): number {
@@ -711,5 +758,91 @@ async function renderTeamSeasonImage(req: Request, res: Response) {
 router.get("/season/:season_id/team/:team_id", renderTeamSeasonImage);
 /** POST /image/season/:season_id/team/:team_id/preview — settings non sauvegardés (body: { settings }) */
 router.post("/season/:season_id/team/:team_id/preview", renderTeamSeasonImage);
+
+// ─── Season "match style" image routes ─────────────────────────────────────
+// Réutilisent exactement les mêmes gabarits (mêmes positions) que les images
+// de match : generateTeamMatchImage (une équipe) et generateMatchImage (versus
+// deux équipes), mais avec des stats agrégées sur toute la saison au lieu
+// d'un seul match/map.
+
+/** GET /image/season/:season_id/team/:team_id/roster — même gabarit que /match/:id/team/:n, agrégé sur la saison */
+router.get("/season/:season_id/team/:team_id/roster", async (req: Request, res: Response) => {
+  await renderSeasonTeamRosterImage(req, res);
+});
+/** POST .../roster/preview — settings non sauvegardés (body: { settings }) */
+router.post("/season/:season_id/team/:team_id/roster/preview", async (req: Request, res: Response) => {
+  await renderSeasonTeamRosterImage(req, res);
+});
+
+async function renderSeasonTeamRosterImage(req: Request, res: Response) {
+  try {
+    const seasonId = parseInt(req.params.season_id);
+    const teamId   = parseInt(req.params.team_id);
+    if (isNaN(seasonId) || isNaN(teamId)) { res.status(400).json({ error: "Invalid ID" }); return; }
+
+    const teamRows = await db.query(`SELECT id, name, logo, flag FROM team WHERE id = ?`, [teamId]) as TeamNameLogoRow[];
+    if (!teamRows?.length) { res.status(404).json({ error: "Team not found" }); return; }
+
+    const players = await fetchSeasonTeamPlayers(seasonId, teamId);
+    if (!players?.length) { res.status(404).json({ error: "No player stats found for this team this season" }); return; }
+
+    const team = teamRows[0];
+    const png = await generateTeamMatchImage(team.name, team.logo, team.flag, players, settingsFromRequest(req));
+    res.setHeader("Content-Type", "image/png");
+    res.setHeader("Cache-Control", "no-cache, no-store");
+    res.send(png);
+  } catch (err) {
+    console.error("[image/season-team-roster] Error:", err);
+    res.status(500).json({ error: "Failed to generate season team roster image" });
+  }
+}
+
+/** GET /image/season/:season_id/versus/:team1_id/:team2_id — même gabarit que /match/:id, agrégé sur la saison */
+router.get("/season/:season_id/versus/:team1_id/:team2_id", async (req: Request, res: Response) => {
+  await renderSeasonVersusImage(req, res);
+});
+/** POST .../preview — settings non sauvegardés (body: { settings }) */
+router.post("/season/:season_id/versus/:team1_id/:team2_id/preview", async (req: Request, res: Response) => {
+  await renderSeasonVersusImage(req, res);
+});
+
+async function renderSeasonVersusImage(req: Request, res: Response) {
+  try {
+    const seasonId = parseInt(req.params.season_id);
+    const team1Id  = parseInt(req.params.team1_id);
+    const team2Id  = parseInt(req.params.team2_id);
+    if (isNaN(seasonId) || isNaN(team1Id) || isNaN(team2Id)) { res.status(400).json({ error: "Invalid ID" }); return; }
+
+    const teamRows = await db.query(
+      `SELECT id, name, logo, flag FROM team WHERE id IN (?, ?)`,
+      [team1Id, team2Id]
+    ) as TeamNameLogoRow[];
+    const team1 = teamRows.find(t => t.id === team1Id);
+    const team2 = teamRows.find(t => t.id === team2Id);
+    if (!team1 || !team2) { res.status(404).json({ error: "Team not found" }); return; }
+
+    const match = {
+      team1_id: team1Id, team2_id: team2Id,
+      team1_string: team1.name, team2_string: team2.name,
+      team1_name: team1.name,   team2_name: team2.name,
+      team1_logo: team1.logo,   team2_logo: team2.logo,
+      team1_flag: team1.flag,   team2_flag: team2.flag,
+    } as MatchRow;
+
+    const [players, headToHeadMaps] = await Promise.all([
+      fetchSeasonVersusPlayers(seasonId, team1Id, team2Id),
+      fetchSeasonHeadToHeadMaps(seasonId, team1Id, team2Id),
+    ]);
+    if (!players?.length) { res.status(404).json({ error: "No player stats found for these teams this season" }); return; }
+
+    const png = await generateMatchImage(match, null, headToHeadMaps, players, settingsFromRequest(req), [], [], -1);
+    res.setHeader("Content-Type", "image/png");
+    res.setHeader("Cache-Control", "no-cache, no-store");
+    res.send(png);
+  } catch (err) {
+    console.error("[image/season-versus] Error:", err);
+    res.status(500).json({ error: "Failed to generate season versus image" });
+  }
+}
 
 export default router;
