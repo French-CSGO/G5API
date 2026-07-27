@@ -78,7 +78,8 @@ app.use(
     fallthrough: false,
     setHeaders: (res) => {
       res.setHeader("X-Content-Type-Options", "nosniff");
-    },
+      res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+    }
   })
 );
 
