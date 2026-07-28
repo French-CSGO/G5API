@@ -60,21 +60,6 @@ app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
 app.use("/demo", express.static("public/demos"));
 app.use("/backups", express.static("public/backups"));
-app.use(
-  "/tools",
-  (req, res, next) => {
-    // This is a single self-contained static HTML page (inline <script>/<style>,
-    // no third-party resources) — helmet's default CSP (script-src 'self') blocks
-    // inline scripts outright, which silently no-ops the whole tool. Relax just
-    // enough for this path instead of weakening CSP for the rest of the API.
-    res.setHeader(
-      "Content-Security-Policy",
-      "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; object-src 'none'"
-    );
-    next();
-  },
-  express.static("public/tools")
-);
 app.use("/static/img/logos", express.static("public/img/logos"));
 app.use("/resource/flash/econ/tournaments/teams", express.static("public/img/logos"));
 app.use("/materials/panorama/images/tournaments/teams", express.static("public/img/logos"));
