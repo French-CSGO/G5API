@@ -60,6 +60,7 @@ app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
 app.use("/demo", express.static("public/demos"));
 app.use("/backups", express.static("public/backups"));
+app.use("/tools", express.static("public/tools"));
 app.use("/static/img/logos", express.static("public/img/logos"));
 app.use("/resource/flash/econ/tournaments/teams", express.static("public/img/logos"));
 app.use("/materials/panorama/images/tournaments/teams", express.static("public/img/logos"));

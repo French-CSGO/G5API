@@ -232,41 +232,6 @@ export const DEFAULT_SETTINGS: ImageSettings = {
     },
   },
 
-  swiss: {
-    background: "marble.png",
-    fontFile:   "",
-    box: {
-      width:        340,
-      height:       110,
-      radius:       12,
-      fill_default: "#000000",
-      fill_win:     "#1b5e20",
-      fill_lose:    "#7f0000",
-      alpha:        0.55,
-      border:       "#ffffff",
-      border_alpha: 0.25,
-      border_width: 1.5,
-    },
-    logo: {
-      enabled: true,
-      size:    48,
-    },
-    team_name: {
-      enabled: true,
-      font:  "Arial",
-      color: "#ffffff",
-      size:  16,
-      bold:  false,
-    },
-    score: {
-      font:  "Arial",
-      color: "#ffffff",
-      size:  18,
-      bold:  true,
-    },
-    vs_label: { enabled: true, text: "VS", color: "#cccccc", size: 16 },
-  },
-
   team_season: {
     background:    "marble.png",
     fontFile:      "",
@@ -436,13 +401,11 @@ export function loadSettings(): ImageSettings {
     const dt  = DEFAULT_SETTINGS.team_season;
     const dv  = DEFAULT_SETTINGS.mvp;
     const dtm = DEFAULT_SETTINGS.team_match;
-    const dw  = DEFAULT_SETTINGS.swiss;
     const sm  = p.match       ?? {};
     const sp  = p.player      ?? {};
     const st  = p.team_season ?? {};
     const sv  = p.mvp         ?? {};
     const stm = p.team_match  ?? {};
-    const sw  = p.swiss       ?? {};
     const rows_y: readonly number[] = sm.rows_y ?? dm.rows_y;
     return {
       canvas: { ...DEFAULT_SETTINGS.canvas, ...(p.canvas ?? {}) },
@@ -539,15 +502,6 @@ export function loadSettings(): ImageSettings {
           stats_bar:   { ...dv.shapes.stats_bar,   ...(sv.shapes?.stats_bar   ?? {}) },
           map_pill:    { ...dv.shapes.map_pill,    ...(sv.shapes?.map_pill    ?? {}) },
         },
-      },
-      swiss: {
-        background: sw.background ?? dw.background,
-        fontFile:   sw.fontFile   ?? dw.fontFile,
-        box:        { ...dw.box,        ...(sw.box        ?? {}) },
-        logo:       { ...dw.logo,       ...(sw.logo       ?? {}) },
-        team_name:  { ...dw.team_name,  ...(sw.team_name  ?? {}) },
-        score:      { ...dw.score,      ...(sw.score      ?? {}) },
-        vs_label:   { ...dw.vs_label,   ...(sw.vs_label   ?? {}) },
       },
       team_season: {
         background:    st.background ?? dt.background,

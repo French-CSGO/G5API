@@ -300,41 +300,6 @@ export interface ImageSettings {
     };
   };
 
-  swiss: {
-    background: string;
-    fontFile:   string;
-    box: {
-      width:        number;
-      height:       number;
-      radius:       number;
-      fill_default: string;
-      fill_win:     string;
-      fill_lose:    string;
-      alpha:        number;
-      border:       string;
-      border_alpha: number;
-      border_width: number;
-    };
-    logo: {
-      enabled: boolean;
-      size:    number;
-    };
-    team_name: {
-      enabled: boolean;
-      font:  string;
-      color: string;
-      size:  number;
-      bold:  boolean;
-    };
-    score: {
-      font:  string;
-      color: string;
-      size:  number;
-      bold:  boolean;
-    };
-    vs_label: { enabled: boolean; text: string; color: string; size: number; };
-  };
-
   team_season: {
     background: string;
     fontFile:   string;
@@ -478,21 +443,4 @@ export interface TeamNameRow extends RowDataPacket { name: string; }
 export interface BestMapRow  extends RowDataPacket { map_name: string; wins: number; }
 export interface TeamNameLogoRow extends RowDataPacket {
   id: number; name: string; logo: string | null; flag: string | null;
-}
-
-/** Position enregistrée (click & drop) d'un match Challonge sur l'image swiss */
-export interface SwissPositionRow extends RowDataPacket {
-  challonge_match_id: number;
-  x: number;
-  y: number;
-}
-
-/** Sous-ensemble des champs d'un match Challonge enrichi (voir seasons.ts::enrichChallongeMatches) utile au rendu */
-export interface SwissMatch {
-  id: number;
-  state: string;
-  round: number;
-  score_in_sets: number[][] | null;
-  player1: { id: number; name: string; local_team: { logo: string | null } | null } | null;
-  player2: { id: number; name: string; local_team: { logo: string | null } | null } | null;
 }

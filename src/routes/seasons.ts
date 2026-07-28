@@ -1433,14 +1433,14 @@ router.delete("/:season_id/teams/:team_id", Utils.ensureAuthenticated, async (re
 
 // ─── Challonge match import ──────────────────────────────────────────────────
 
-export function getChallongeAPIKey(): string {
+function getChallongeAPIKey(): string {
   const key = getSetting("challonge.apiKey");
   if (!key) throw new Error("Clé API Challonge non configurée dans les paramètres administrateur.");
   return key;
 }
 
 /** Retourne tous les brackets Challonge d'une saison (depuis season_challonge_tournament) */
-export async function getSeasonChallongeTournaments(seasonId: number): Promise<RowDataPacket[]> {
+async function getSeasonChallongeTournaments(seasonId: number): Promise<RowDataPacket[]> {
   const rows: RowDataPacket[] = await db.query(
     "SELECT id, challonge_slug, label, display_order FROM season_challonge_tournament WHERE season_id = ? ORDER BY display_order ASC, id ASC",
     [seasonId]
@@ -1473,7 +1473,7 @@ async function getSlugForMatch(seasonId: number, challongeMatchId: number, apiKe
 }
 
 /** Helper partagé : enrichit les matchs d'un slug avec local_team + g5_match_id (v2.1) */
-export async function enrichChallongeMatches(
+async function enrichChallongeMatches(
   slug: string,
   label: string,
   apiKey: string,
@@ -1777,95 +1777,6 @@ router.get("/:season_id/challonge/matches", Utils.ensureAuthenticated, async (re
     );
 
     res.json({ tournaments, matches: results.flat() });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: (err as Error).toString() });
-  }
-});
-
-/** GET /:season_id/challonge/tournaments/:tournament_id/positions — positions enregistrées pour l'image swiss */
-router.get("/:season_id/challonge/tournaments/:tournament_id/positions", Utils.ensureAuthenticated, async (req, res) => {
-  try {
-    const seasonId = parseInt(req.params.season_id);
-    const tournamentId = parseInt(req.params.tournament_id);
-    if (isNaN(seasonId) || isNaN(tournamentId)) { res.status(400).json({ message: "ID invalide." }); return; }
-
-    const rows: RowDataPacket[] = await db.query(
-      "SELECT scmp.challonge_match_id, scmp.x, scmp.y " +
-      "FROM season_challonge_match_position scmp " +
-      "JOIN season_challonge_tournament sct ON sct.id = scmp.tournament_id " +
-      "WHERE scmp.tournament_id = ? AND sct.season_id = ?",
-      [tournamentId, seasonId]
-    );
-    res.json({ positions: rows });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: (err as Error).toString() });
-  }
-});
-
-/** PUT /:season_id/challonge/tournaments/:tournament_id/positions — enregistre/déplace une ou plusieurs positions */
-router.put("/:season_id/challonge/tournaments/:tournament_id/positions", Utils.ensureAuthenticated, async (req, res) => {
-  try {
-    const seasonId = parseInt(req.params.season_id);
-    const tournamentId = parseInt(req.params.tournament_id);
-    if (isNaN(seasonId) || isNaN(tournamentId)) { res.status(400).json({ message: "ID invalide." }); return; }
-
-    const seasonRows: RowDataPacket[] = await db.query("SELECT user_id FROM season WHERE id = ?", [seasonId]);
-    if (!seasonRows.length) { res.status(404).json({ message: "Saison introuvable." }); return; }
-    if (seasonRows[0].user_id !== req.user!.id && !Utils.superAdminCheck(req.user!)) {
-      res.status(403).json({ message: "Non autorisé." }); return;
-    }
-    const tournamentRows: RowDataPacket[] = await db.query(
-      "SELECT id FROM season_challonge_tournament WHERE id = ? AND season_id = ?",
-      [tournamentId, seasonId]
-    );
-    if (!tournamentRows.length) { res.status(404).json({ message: "Bracket introuvable pour cette saison." }); return; }
-
-    const positions = Array.isArray(req.body?.positions) ? req.body.positions : [];
-    if (!positions.length) { res.status(400).json({ message: "Aucune position fournie." }); return; }
-
-    for (const p of positions) {
-      const challongeMatchId = parseInt(p.challonge_match_id);
-      const x = parseInt(p.x);
-      const y = parseInt(p.y);
-      if (isNaN(challongeMatchId) || isNaN(x) || isNaN(y)) continue;
-      await db.query(
-        "INSERT INTO season_challonge_match_position (tournament_id, challonge_match_id, x, y) VALUES (?, ?, ?, ?) " +
-        "ON DUPLICATE KEY UPDATE x = VALUES(x), y = VALUES(y)",
-        [tournamentId, challongeMatchId, x, y]
-      );
-    }
-    res.json({ message: "Positions enregistrées." });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: (err as Error).toString() });
-  }
-});
-
-/** DELETE /:season_id/challonge/tournaments/:tournament_id/positions/:challonge_match_id — retire un match du board */
-router.delete("/:season_id/challonge/tournaments/:tournament_id/positions/:challonge_match_id", Utils.ensureAuthenticated, async (req, res) => {
-  try {
-    const seasonId = parseInt(req.params.season_id);
-    const tournamentId = parseInt(req.params.tournament_id);
-    const challongeMatchId = parseInt(req.params.challonge_match_id);
-    if (isNaN(seasonId) || isNaN(tournamentId) || isNaN(challongeMatchId)) {
-      res.status(400).json({ message: "ID invalide." }); return;
-    }
-
-    const seasonRows: RowDataPacket[] = await db.query("SELECT user_id FROM season WHERE id = ?", [seasonId]);
-    if (!seasonRows.length) { res.status(404).json({ message: "Saison introuvable." }); return; }
-    if (seasonRows[0].user_id !== req.user!.id && !Utils.superAdminCheck(req.user!)) {
-      res.status(403).json({ message: "Non autorisé." }); return;
-    }
-
-    await db.query(
-      "DELETE scmp FROM season_challonge_match_position scmp " +
-      "JOIN season_challonge_tournament sct ON sct.id = scmp.tournament_id " +
-      "WHERE scmp.tournament_id = ? AND scmp.challonge_match_id = ? AND sct.season_id = ?",
-      [tournamentId, challongeMatchId, seasonId]
-    );
-    res.json({ message: "Position supprimée." });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: (err as Error).toString() });
