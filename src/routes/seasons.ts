@@ -1431,6 +1431,58 @@ router.delete("/:season_id/teams/:team_id", Utils.ensureAuthenticated, async (re
   }
 });
 
+// ─── Swiss board persistence ───────────────────────────────────────────────────
+// Server-side save for the Swiss stage generator (SwissGenerator.vue in G5V):
+// one JSON blob per season holding the whole board (teams, placements,
+// results, style), so it survives across sessions/machines instead of only
+// living in a downloaded project file.
+
+/** GET /:season_id/swiss-board — état sauvegardé du générateur Swiss (ou null) */
+router.get("/:season_id/swiss-board", Utils.ensureAuthenticated, async (req, res) => {
+  try {
+    const seasonId = parseInt(req.params.season_id);
+    if (isNaN(seasonId)) { res.status(400).json({ message: "ID invalide." }); return; }
+    const rows: RowDataPacket[] = await db.query(
+      "SELECT data, updated_at FROM swiss_board WHERE season_id = ?",
+      [seasonId]
+    );
+    if (!rows.length) { res.json({ board: null }); return; }
+    let data: unknown;
+    try { data = JSON.parse(rows[0].data as string); } catch { data = null; }
+    res.json({ board: data, updated_at: rows[0].updated_at });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: (err as Error).toString() });
+  }
+});
+
+/** PUT /:season_id/swiss-board — enregistre l'état complet du générateur Swiss */
+router.put("/:season_id/swiss-board", Utils.ensureAuthenticated, async (req, res) => {
+  try {
+    const seasonId = parseInt(req.params.season_id);
+    if (isNaN(seasonId)) { res.status(400).json({ message: "ID invalide." }); return; }
+
+    const seasonRows: RowDataPacket[] = await db.query("SELECT user_id FROM season WHERE id = ?", [seasonId]);
+    if (!seasonRows.length) { res.status(404).json({ message: "Saison introuvable." }); return; }
+    if (seasonRows[0].user_id !== req.user!.id && !Utils.superAdminCheck(req.user!)) {
+      res.status(403).json({ message: "Non autorisé." }); return;
+    }
+
+    const board = req.body?.board;
+    if (!board || typeof board !== "object") { res.status(400).json({ message: "Données invalides." }); return; }
+    const data = JSON.stringify(board);
+
+    await db.query(
+      "INSERT INTO swiss_board (season_id, data) VALUES (?, ?) ON DUPLICATE KEY UPDATE data = VALUES(data)",
+      [seasonId, data]
+    );
+    res.json({ message: "Générateur Swiss enregistré." });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: (err as Error).toString() });
+  }
+});
+
 // ─── Challonge match import ──────────────────────────────────────────────────
 
 function getChallongeAPIKey(): string {
