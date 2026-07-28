@@ -1,5 +1,6 @@
 import { createCanvas } from "canvas";
-import { drawText, drawRoundRect, drawBackground, tryRegisterFont, stripAccents } from "../helpers.js";
+import { drawText, drawRoundRect, drawBackground, drawLogoCentered, tryRegisterFont, stripAccents } from "../helpers.js";
+import { tryLoadLogo } from "./loaders.js";
 import type { ImageSettings, SwissMatch, SwissPositionRow } from "../types.js";
 
 function setScore(m: SwissMatch): [number, number] | null {
@@ -29,6 +30,10 @@ export async function generateSwissImage(
   const matchById = new Map(matches.map(m => [m.id, m]));
   const box = cfg.box;
 
+  const nameFont  = `${cfg.team_name.bold ? "bold " : ""}${cfg.team_name.size}px ${cfg.team_name.font}`;
+  const scoreFont = `${cfg.score.bold   ? "bold " : ""}${cfg.score.size}px ${cfg.score.font}`;
+  const vsFont    = `${cfg.vs_label.size}px ${cfg.team_name.font}`;
+
   for (const pos of positions) {
     const m = matchById.get(pos.challonge_match_id);
     if (!m) continue;
@@ -36,36 +41,44 @@ export async function generateSwissImage(
     const x = pos.x - box.width / 2;
     const y = pos.y - box.height / 2;
 
-    drawRoundRect(
-      ctx, x, y, box.width, box.height, box.radius,
-      box.fill, box.alpha, box.border, box.border_alpha, box.border_width
-    );
+    const captionH = cfg.team_name.enabled ? Math.round(box.height * 0.22) : 0;
+    const slotSize = box.height - captionH;
+    const x2 = x + box.width - slotSize;
 
     const score = setScore(m);
     const isComplete = m.state === "complete" && score !== null;
     const team1Won = isComplete && score![0] > score![1];
     const team2Won = isComplete && score![1] > score![0];
 
-    const name1 = m.player1 ? m.player1.name : "TBD";
-    const name2 = m.player2 ? m.player2.name : "TBD";
+    const slot1Fill = team1Won ? box.fill_win : team2Won ? box.fill_lose : box.fill_default;
+    const slot2Fill = team2Won ? box.fill_win : team1Won ? box.fill_lose : box.fill_default;
 
-    const nameFont  = `${cfg.team_name.bold ? "bold " : ""}${cfg.team_name.size}px ${cfg.team_name.font}`;
-    const scoreFont = `${cfg.score.bold   ? "bold " : ""}${cfg.score.size}px ${cfg.score.font}`;
+    drawRoundRect(ctx, x,  y, slotSize, slotSize, box.radius, slot1Fill, box.alpha, box.border, box.border_alpha, box.border_width);
+    drawRoundRect(ctx, x2, y, slotSize, slotSize, box.radius, slot2Fill, box.alpha, box.border, box.border_alpha, box.border_width);
 
-    const rowH = box.height / 2;
-    const nameX = x + 14;
-    const scoreX = x + box.width - 14;
+    if (cfg.logo.enabled) {
+      const [logo1, logo2] = await Promise.all([
+        tryLoadLogo(m.player1?.local_team?.logo),
+        tryLoadLogo(m.player2?.local_team?.logo),
+      ]);
+      drawLogoCentered(ctx, logo1, { x: x  + slotSize / 2, y: y + slotSize / 2, size: cfg.logo.size });
+      drawLogoCentered(ctx, logo2, { x: x2 + slotSize / 2, y: y + slotSize / 2, size: cfg.logo.size });
+    }
 
-    drawText(ctx, stripAccents(name1), nameX, y + rowH * 0.5, nameFont,
-      team1Won ? cfg.team_name.winner_color : cfg.team_name.color, "left");
-    drawText(ctx, stripAccents(name2), nameX, y + rowH * 1.5, nameFont,
-      team2Won ? cfg.team_name.winner_color : cfg.team_name.color, "left");
-
+    const midX = x + box.width / 2;
+    const midY = y + slotSize / 2;
     if (isComplete) {
-      drawText(ctx, String(score![0]), scoreX, y + rowH * 0.5, scoreFont, cfg.score.color, "right");
-      drawText(ctx, String(score![1]), scoreX, y + rowH * 1.5, scoreFont, cfg.score.color, "right");
+      drawText(ctx, `${score![0]} - ${score![1]}`, midX, midY, scoreFont, cfg.score.color, "center");
     } else if (cfg.vs_label.enabled) {
-      drawText(ctx, cfg.vs_label.text, scoreX, y + rowH, `${cfg.vs_label.size}px ${cfg.team_name.font}`, cfg.vs_label.color, "right");
+      drawText(ctx, cfg.vs_label.text, midX, midY, vsFont, cfg.vs_label.color, "center");
+    }
+
+    if (cfg.team_name.enabled) {
+      const name1 = m.player1 ? m.player1.name : "TBD";
+      const name2 = m.player2 ? m.player2.name : "TBD";
+      const captionY = y + slotSize + captionH / 2;
+      drawText(ctx, stripAccents(name1), x  + slotSize / 2, captionY, nameFont, cfg.team_name.color, "center");
+      drawText(ctx, stripAccents(name2), x2 + slotSize / 2, captionY, nameFont, cfg.team_name.color, "center");
     }
   }
 

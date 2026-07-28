@@ -237,20 +237,26 @@ export const DEFAULT_SETTINGS: ImageSettings = {
     fontFile:   "",
     box: {
       width:        340,
-      height:       80,
+      height:       110,
       radius:       12,
-      fill:         "#000000",
-      alpha:        0.45,
+      fill_default: "#000000",
+      fill_win:     "#1b5e20",
+      fill_lose:    "#7f0000",
+      alpha:        0.55,
       border:       "#ffffff",
       border_alpha: 0.25,
       border_width: 1.5,
     },
+    logo: {
+      enabled: true,
+      size:    48,
+    },
     team_name: {
+      enabled: true,
       font:  "Arial",
       color: "#ffffff",
-      size:  18,
+      size:  16,
       bold:  false,
-      winner_color: "#4caf50",
     },
     score: {
       font:  "Arial",
@@ -258,7 +264,7 @@ export const DEFAULT_SETTINGS: ImageSettings = {
       size:  18,
       bold:  true,
     },
-    vs_label: { enabled: false, text: "vs", color: "#888888", size: 14 },
+    vs_label: { enabled: true, text: "VS", color: "#cccccc", size: 16 },
   },
 
   team_season: {
@@ -538,6 +544,7 @@ export function loadSettings(): ImageSettings {
         background: sw.background ?? dw.background,
         fontFile:   sw.fontFile   ?? dw.fontFile,
         box:        { ...dw.box,        ...(sw.box        ?? {}) },
+        logo:       { ...dw.logo,       ...(sw.logo       ?? {}) },
         team_name:  { ...dw.team_name,  ...(sw.team_name  ?? {}) },
         score:      { ...dw.score,      ...(sw.score      ?? {}) },
         vs_label:   { ...dw.vs_label,   ...(sw.vs_label   ?? {}) },

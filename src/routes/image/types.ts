@@ -307,18 +307,24 @@ export interface ImageSettings {
       width:        number;
       height:       number;
       radius:       number;
-      fill:         string;
+      fill_default: string;
+      fill_win:     string;
+      fill_lose:    string;
       alpha:        number;
       border:       string;
       border_alpha: number;
       border_width: number;
     };
+    logo: {
+      enabled: boolean;
+      size:    number;
+    };
     team_name: {
+      enabled: boolean;
       font:  string;
       color: string;
       size:  number;
       bold:  boolean;
-      winner_color: string;
     };
     score: {
       font:  string;
@@ -487,6 +493,6 @@ export interface SwissMatch {
   state: string;
   round: number;
   score_in_sets: number[][] | null;
-  player1: { id: number; name: string } | null;
-  player2: { id: number; name: string } | null;
+  player1: { id: number; name: string; local_team: { logo: string | null } | null } | null;
+  player2: { id: number; name: string; local_team: { logo: string | null } | null } | null;
 }
