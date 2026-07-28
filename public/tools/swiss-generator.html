@@ -377,7 +377,7 @@ function draw() {
 
 function renderTeams() {
   const root = document.getElementById("teamList");
-  root.innerHTML = "";
+  root.replaceChildren();
   const filteredTeams = teams.filter(team => team.name.toLowerCase().includes(teamSearch.toLowerCase()));
 
   if (!filteredTeams.length) {
