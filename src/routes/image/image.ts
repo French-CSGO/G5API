@@ -897,4 +897,37 @@ router.get("/season/:season_id/swiss/:tournament_id", async (req: Request, res: 
   }
 });
 
+// ─── OBS slot image routes ─────────────────────────────────────────────────────
+// Stable /image/slot/:slug/... links that resolve to whichever match is
+// currently assigned to that OBS slot, so browser sources never need updating.
+
+async function resolveSlotMatchId(slug: string): Promise<number | null> {
+  const rows = await db.query(
+    "SELECT match_id FROM obs_slot WHERE slug = ?",
+    [slug]
+  ) as { match_id: number | null }[];
+  return rows?.[0]?.match_id ?? null;
+}
+
+function slotRedirect(subPath: string, buildTarget: (req: Request) => string) {
+  router.get(`/slot/:slug${subPath}`, async (req: Request, res: Response) => {
+    try {
+      const matchId = await resolveSlotMatchId(req.params.slug);
+      if (matchId === null) { res.status(404).json({ error: "Slot not found or no match assigned" }); return; }
+      res.redirect(302, `/image${buildTarget(req)}`.replace(":match_id", String(matchId)));
+    } catch (err) {
+      console.error("[image/slot] Error:", err);
+      res.status(500).json({ error: "Failed to resolve OBS slot" });
+    }
+  });
+}
+
+slotRedirect("/match", () => "/match/:match_id");
+slotRedirect("/match/map", () => "/match/:match_id/map");
+slotRedirect("/match/map/:map_number", req => `/match/:match_id/map/${req.params.map_number}`);
+slotRedirect("/mvp", () => "/match/:match_id/mvp");
+slotRedirect("/map/:map_number/mvp", req => `/match/:match_id/map/${req.params.map_number}/mvp`);
+slotRedirect("/team/:team_number", req => `/match/:match_id/team/${req.params.team_number}`);
+slotRedirect("/map/:map_number/team/:team_number", req => `/match/:match_id/map/${req.params.map_number}/team/${req.params.team_number}`);
+
 export default router;

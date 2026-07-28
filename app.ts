@@ -40,6 +40,7 @@ import { router as v2BackupRouter } from "./src/routes/v2/backupapi.js";
 import { router as v2DemoAdminRouter } from "./src/routes/v2/demoadmin.js";
 import settingsRouter from "./src/routes/settings.js";
 import imageRouter from "./src/routes/image/image.js";
+import obsSlotsRouter from "./src/routes/obsslots.js";
 // End Route Files
 
 
@@ -187,6 +188,7 @@ app.use("/users", usersRouter);
 app.use("/teams", teamsRouter);
 app.use("/servers", serversRouter);
 app.use("/vetoes", vetoesRouter);
+app.use("/obs-slots", obsSlotsRouter);
 app.use("/vetosides", vetosidesRouter);
 app.use("/prevetoes", prevetoesRouter);
 app.use("/matches", matchesRouter, matchServerRouter);
