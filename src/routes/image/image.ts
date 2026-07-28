@@ -898,8 +898,10 @@ router.get("/season/:season_id/swiss/:tournament_id", async (req: Request, res: 
 });
 
 // ─── OBS slot image routes ─────────────────────────────────────────────────────
-// Stable /image/slot/:slug/... links that resolve to whichever match is
-// currently assigned to that OBS slot, so browser sources never need updating.
+// Stable /image/slot/:slug/... links that render whichever match is currently
+// assigned to that OBS slot, so browser sources never need updating. This renders
+// the image in-process (rather than 302-redirecting to /image/match/:id/...) so
+// OBS/browsers can never cache a stale redirect target after the slot is reassigned.
 
 async function resolveSlotMatchId(slug: string): Promise<number | null> {
   const rows = await db.query(
@@ -909,12 +911,13 @@ async function resolveSlotMatchId(slug: string): Promise<number | null> {
   return rows?.[0]?.match_id ?? null;
 }
 
-function slotRedirect(subPath: string, buildTarget: (req: Request) => string) {
+function mountSlotRoute(subPath: string, handler: (req: Request, res: Response) => Promise<void>) {
   router.get(`/slot/:slug${subPath}`, async (req: Request, res: Response) => {
     try {
       const matchId = await resolveSlotMatchId(req.params.slug);
       if (matchId === null) { res.status(404).json({ error: "Slot not found or no match assigned" }); return; }
-      res.redirect(302, `/image${buildTarget(req)}`.replace(":match_id", String(matchId)));
+      req.params.match_id = String(matchId);
+      await handler(req, res);
     } catch (err) {
       console.error("[image/slot] Error:", err);
       res.status(500).json({ error: "Failed to resolve OBS slot" });
@@ -922,12 +925,20 @@ function slotRedirect(subPath: string, buildTarget: (req: Request) => string) {
   });
 }
 
-slotRedirect("/match", () => "/match/:match_id");
-slotRedirect("/match/map", () => "/match/:match_id/map");
-slotRedirect("/match/map/:map_number", req => `/match/:match_id/map/${req.params.map_number}`);
-slotRedirect("/mvp", () => "/match/:match_id/mvp");
-slotRedirect("/map/:map_number/mvp", req => `/match/:match_id/map/${req.params.map_number}/mvp`);
-slotRedirect("/team/:team_number", req => `/match/:match_id/team/${req.params.team_number}`);
-slotRedirect("/map/:map_number/team/:team_number", req => `/match/:match_id/map/${req.params.map_number}/team/${req.params.team_number}`);
+mountSlotRoute("/match", (req, res) => renderMatchImage(req, res, null, "full"));
+mountSlotRoute("/match/map", (req, res) => renderMatchImage(req, res, null, "latest"));
+mountSlotRoute("/match/map/:map_number", async (req, res) => {
+  const mapNumber = parseInt(req.params.map_number);
+  if (isNaN(mapNumber) || mapNumber < 1) { res.status(400).json({ error: "Invalid map number" }); return; }
+  await renderMatchImage(req, res, mapNumber, "byNumber");
+});
+mountSlotRoute("/mvp", renderFullMatchMvpImage);
+mountSlotRoute("/map/:map_number/mvp", renderMvpImage);
+mountSlotRoute("/team/:team_number", (req, res) => renderTeamMatchImage(req, res, null));
+mountSlotRoute("/map/:map_number/team/:team_number", async (req, res) => {
+  const mapNumber = parseInt(req.params.map_number);
+  if (isNaN(mapNumber) || mapNumber < 1) { res.status(400).json({ error: "Invalid map number" }); return; }
+  await renderTeamMatchImage(req, res, mapNumber);
+});
 
 export default router;
