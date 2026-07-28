@@ -392,15 +392,35 @@ function renderTeams() {
   filteredTeams.forEach(team => {
     const el = document.createElement("div");
     el.className = "team" + (team.id===selectedTeamId ? " active" : "");
-    const badge = team.g5Id != null ? ' <span style="color:#6fa0ff;font-size:10px;">G5</span>' : "";
-    el.innerHTML = `<img src="${team.src}"><span title="${team.name}">${team.name}${badge}</span><button class="x" title="Supprimer">×</button>`;
+
+    const img = document.createElement("img");
+    img.src = team.src;
+
+    const nameSpan = document.createElement("span");
+    nameSpan.title = team.name;
+    nameSpan.textContent = team.name;
+    if (team.g5Id != null) {
+      const badge = document.createElement("span");
+      badge.textContent = " G5";
+      badge.style.color = "#6fa0ff";
+      badge.style.fontSize = "10px";
+      nameSpan.appendChild(badge);
+    }
+
+    const delBtn = document.createElement("button");
+    delBtn.className = "x";
+    delBtn.title = "Supprimer";
+    delBtn.textContent = "×";
+
+    el.append(img, nameSpan, delBtn);
+
     el.addEventListener("click", e => {
       if (e.target.classList.contains("x")) return;
       selectedTeamId = team.id;
       document.getElementById("status").textContent = "Équipe sélectionnée : " + team.name;
       renderTeams();
     });
-    el.querySelector(".x").addEventListener("click", e => {
+    delBtn.addEventListener("click", e => {
       e.stopPropagation();
       pushHistory();
       teams = teams.filter(t => t.id !== team.id);
