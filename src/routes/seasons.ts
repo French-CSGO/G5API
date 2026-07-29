@@ -1606,6 +1606,7 @@ async function enrichChallongeMatches(
       state: m.state,
       round: m.round,
       group_id: m.group_id,
+      identifier: m.identifier,
       suggested_play_order: m.suggested_play_order,
       scheduled_time: m.scheduled_time,
       scores_csv: m.scores_csv,

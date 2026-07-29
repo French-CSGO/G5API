@@ -34,6 +34,9 @@ export interface NormalisedMatch {
   /** ID du groupe round-robin (Group Stage) auquel appartient ce match, sinon null.
    *  Deux matchs de groupes différents peuvent partager le même numéro de round. */
   group_id: string | null;
+  /** Court identifiant alphabétique du match dans le tournoi (A, B, C... AA, AB...),
+   *  attribué par Challonge dans l'ordre de création/affichage des matchs. */
+  identifier: string | null;
   suggested_play_order: number | null;
   scheduled_time: string | null;
   scores_csv: string | null;
@@ -77,6 +80,7 @@ export function parseV2Match(item: any): NormalisedMatch {
     state: attr.state ?? "pending",
     round: attr.round ?? 0,
     group_id: groupId,
+    identifier: attr.identifier ?? null,
     suggested_play_order: attr.suggested_play_order ?? null,
     // scheduled_time may live under timestamps.scheduled_at in some versions
     scheduled_time: attr.scheduled_time ?? attr.timestamps?.scheduled_at ?? null,
