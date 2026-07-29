@@ -1437,8 +1437,12 @@ router.delete("/:season_id/teams/:team_id", Utils.ensureAuthenticated, async (re
 // results, style), so it survives across sessions/machines instead of only
 // living in a downloaded project file.
 
-/** GET /:season_id/swiss-board — état sauvegardé du générateur Swiss (ou null) */
-router.get("/:season_id/swiss-board", Utils.ensureAuthenticated, async (req, res) => {
+/** GET /:season_id/swiss-board — état sauvegardé du générateur Swiss (ou null).
+ *  Public (pas de ensureAuthenticated) : consommé par l'overlay OBS en lecture
+ *  seule, qui tourne dans le navigateur embarqué d'OBS sans session connectée.
+ *  Le payload ne contient que des données déjà publiques (noms/logos d'équipes,
+ *  placements) ; l'écriture (PUT ci-dessous) reste protégée. */
+router.get("/:season_id/swiss-board", async (req, res) => {
   try {
     const seasonId = parseInt(req.params.season_id);
     if (isNaN(seasonId)) { res.status(400).json({ message: "ID invalide." }); return; }
