@@ -94,13 +94,21 @@ export function parseV2Match(item: any): NormalisedMatch {
   };
 }
 
-/** Parse a single v2.1 participant item. */
-export function parseV2Participant(item: any): { id: number; display_name: string; name: string } {
+/** Parse a single v2.1 participant item.
+ *  group_player_ids: alternate IDs Challonge uses to reference this same
+ *  participant inside group-stage/swiss matches — distinct from the
+ *  participant's own id, which is what's normally stored as
+ *  team.challonge_team_id on the G5 side. */
+export function parseV2Participant(item: any): { id: number; display_name: string; name: string; group_player_ids: number[] } {
   const attr = item.attributes ?? {};
+  const rawGroupIds = Array.isArray(attr.group_player_ids) ? attr.group_player_ids : [];
   return {
     id: parseInt(item.id, 10),
     display_name: attr.name ?? "",
-    name: attr.name ?? ""
+    name: attr.name ?? "",
+    group_player_ids: rawGroupIds
+      .map((gid: any) => parseInt(String(gid), 10))
+      .filter((gid: number) => !isNaN(gid))
   };
 }
 

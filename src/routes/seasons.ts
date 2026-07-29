@@ -1554,20 +1554,34 @@ async function enrichChallongeMatches(
   const partBody: any = partResp.ok ? await partResp.json() : {};
   const rawParts: any[] = Array.isArray(partBody?.data) ? partBody.data : [];
   // Map: challongeId (number) → participant { id, display_name, name }
-  const partMap = new Map<number, any>(
-    rawParts.map((item: any) => {
-      const p = parseV2Participant(item);
-      return [p.id, p];
-    })
-  );
+  const partMap = new Map<number, any>();
+  // Map: group-stage/swiss-scoped id → the participant's own (normal) id.
+  // Challonge references players in group/swiss matches by these alternate
+  // ids, not by the participant id that's stored as team.challonge_team_id.
+  const groupIdToParticipantId = new Map<number, number>();
+  rawParts.forEach((item: any) => {
+    const p = parseV2Participant(item);
+    partMap.set(p.id, p);
+    p.group_player_ids.forEach((gid: number) => groupIdToParticipantId.set(gid, p.id));
+  });
+
+  // Resolves any id a match might reference (normal participant id, or a
+  // group/swiss-scoped id) back to the participant's own normal id.
+  const normalizeParticipantId = (pid: number | null): number | null => {
+    if (pid === null) return null;
+    if (partMap.has(pid)) return pid;
+    return groupIdToParticipantId.get(pid) ?? pid;
+  };
 
   const challongeIds = rawParts.map((item: any) => parseInt(item.id, 10));
 
   // Inclure aussi les IDs de participants qui apparaissent directement dans les matchs
-  // (les endpoints participants et matches peuvent retourner des ensembles d'IDs différents)
+  // (les endpoints participants et matches peuvent retourner des ensembles d'IDs différents),
+  // normalisés vers l'id participant normal pour matcher team.challonge_team_id.
   const matchPlayerIds = rawMatches.flatMap((item: any) => {
     const m = parseV2Match(item);
-    return [m.player1_id, m.player2_id].filter((id): id is number => id !== null);
+    return [normalizeParticipantId(m.player1_id), normalizeParticipantId(m.player2_id)]
+      .filter((id): id is number => id !== null);
   });
   const allLookupIds = [...new Set([...challongeIds, ...matchPlayerIds])];
 
@@ -1583,14 +1597,15 @@ async function enrichChallongeMatches(
   return rawMatches.map((item: any) => {
     const m = parseV2Match(item);
 
-    // Résolution participant : cherche d'abord dans la map principale.
-    // Pour les matchs de phase de groupes, l'ID Challonge peut être différent de
-    // l'ID participant principal → fallback avec un objet minimal pour que le match reste visible.
+    // Résolution participant : normalise d'abord l'id (les matchs de phase
+    // de groupe/swiss référencent un id alternatif, voir group_player_ids
+    // ci-dessus), puis cherche dans la map principale — fallback avec un
+    // objet minimal si le participant reste introuvable (ex: "Bye").
     const resolveParticipant = (pid: number | null) => {
       if (pid === null) return null;
-      const found = partMap.get(pid);
+      const normalized = normalizeParticipantId(pid);
+      const found = normalized !== null ? partMap.get(normalized) : undefined;
       if (found) return found;
-      // Participant non trouvé (phase de groupes avec IDs internes) : retourne un placeholder
       return { id: pid, display_name: `#${pid}`, name: `#${pid}` };
     };
 
@@ -1608,7 +1623,7 @@ async function enrichChallongeMatches(
       slug,
       tournament_label: label,
       state: m.state,
-      winner_id: m.winner_id,
+      winner_id: normalizeParticipantId(m.winner_id),
       round: m.round,
       group_id: m.group_id,
       identifier: m.identifier,
