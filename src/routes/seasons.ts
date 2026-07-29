@@ -1608,6 +1608,7 @@ async function enrichChallongeMatches(
       slug,
       tournament_label: label,
       state: m.state,
+      winner_id: m.winner_id,
       round: m.round,
       group_id: m.group_id,
       identifier: m.identifier,
