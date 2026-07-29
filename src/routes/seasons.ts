@@ -1574,7 +1574,7 @@ async function enrichChallongeMatches(
   let localTeams: RowDataPacket[] = [];
   if (allLookupIds.length > 0) {
     localTeams = await db.query(
-      `SELECT id, name, logo, challonge_team_id FROM team WHERE challonge_team_id IN (${allLookupIds.map(() => "?").join(",")})`,
+      `SELECT id, name, tag, logo, challonge_team_id FROM team WHERE challonge_team_id IN (${allLookupIds.map(() => "?").join(",")})`,
       allLookupIds.map(String)
     );
   }
