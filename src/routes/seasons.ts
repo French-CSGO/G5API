@@ -1392,7 +1392,7 @@ router.get("/:season_id/teams", Utils.ensureAuthenticated, async (req, res, next
   try {
     const seasonId = parseInt(req.params.season_id);
     const sql =
-      "SELECT t.id, t.name, t.tag, t.logo, t.public_team FROM team t " +
+      "SELECT t.id, t.name, t.tag, t.logo, t.public_team, t.challonge_team_id FROM team t " +
       "INNER JOIN teams_seasons ts ON ts.teams_id = t.id WHERE ts.season_id = ?";
     const teams: RowDataPacket[] = await db.query(sql, [seasonId]);
     res.json({ teams });
@@ -1644,6 +1644,79 @@ router.get("/:season_id/challonge/tournaments", Utils.ensureAuthenticated, async
     const seasonId = parseInt(req.params.season_id);
     const tournaments = await getSeasonChallongeTournaments(seasonId);
     res.json({ tournaments });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: (err as Error).toString() });
+  }
+});
+
+/** GET /:season_id/challonge/tournaments/:tournament_id/participants —
+ *  liste brute des participants Challonge d'un bracket (id, name), pour le
+ *  synchroniseur d'ID d'équipe côté G5V (SwissTeamSync.vue). */
+router.get("/:season_id/challonge/tournaments/:tournament_id/participants", Utils.ensureAuthenticated, async (req, res) => {
+  try {
+    const seasonId = parseInt(req.params.season_id);
+    const tournamentId = parseInt(req.params.tournament_id);
+    const apiKey = getChallongeAPIKey();
+    const tournaments = await getSeasonChallongeTournaments(seasonId);
+    const tournament = tournaments.find(t => t.id === tournamentId);
+    if (!tournament) { res.status(404).json({ message: "Bracket Challonge introuvable pour cette saison." }); return; }
+
+    const cHeaders = challongeHeaders(apiKey);
+    const partResp = await challongeFetch(
+      `${CHALLONGE_V2_BASE}/tournaments/${tournament.challonge_slug}/participants.json?per_page=500`,
+      { headers: cHeaders }
+    );
+    if (!partResp.ok) { res.status(502).json({ message: "Impossible de récupérer les participants Challonge." }); return; }
+    const partBody: any = await partResp.json();
+    const rawParts: any[] = Array.isArray(partBody?.data) ? partBody.data : [];
+    const participants = rawParts
+      .map((item: any) => parseV2Participant(item))
+      .map((p) => ({ id: p.id, name: p.name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    res.json({ participants });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: (err as Error).toString() });
+  }
+});
+
+/** PUT /:season_id/challonge/team-sync — enregistre en masse l'association
+ *  team.challonge_team_id pour des équipes de la saison. Chaque entrée est
+ *  vérifiée comme appartenant bien à la saison (teams_seasons) avant écriture. */
+router.put("/:season_id/challonge/team-sync", Utils.ensureAuthenticated, async (req, res) => {
+  try {
+    const seasonId = parseInt(req.params.season_id);
+    if (isNaN(seasonId)) { res.status(400).json({ message: "ID invalide." }); return; }
+
+    const seasonRows: RowDataPacket[] = await db.query("SELECT user_id FROM season WHERE id = ?", [seasonId]);
+    if (!seasonRows.length) { res.status(404).json({ message: "Saison introuvable." }); return; }
+    if (seasonRows[0].user_id !== req.user!.id && !Utils.superAdminCheck(req.user!)) {
+      res.status(403).json({ message: "Non autorisé." }); return;
+    }
+
+    const associations: { team_id: number; challonge_team_id: string | null }[] = req.body?.associations;
+    if (!Array.isArray(associations) || !associations.length) {
+      res.status(400).json({ message: "Aucune association fournie." }); return;
+    }
+
+    const seasonTeamRows: RowDataPacket[] = await db.query(
+      "SELECT teams_id FROM teams_seasons WHERE season_id = ?",
+      [seasonId]
+    );
+    const seasonTeamIds = new Set(seasonTeamRows.map(r => r.teams_id));
+
+    let updated = 0;
+    for (const assoc of associations) {
+      const teamId = parseInt(String(assoc.team_id), 10);
+      if (isNaN(teamId) || !seasonTeamIds.has(teamId)) continue;
+      await db.query(
+        "UPDATE team SET challonge_team_id = ? WHERE id = ?",
+        [assoc.challonge_team_id || null, teamId]
+      );
+      updated++;
+    }
+    res.json({ message: `${updated} équipe(s) synchronisée(s).`, updated });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: (err as Error).toString() });
