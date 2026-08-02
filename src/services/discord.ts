@@ -153,6 +153,17 @@ export async function initDiscord(): Promise<void> {
         new SlashCommandBuilder()
           .setName("purge")
           .setDescription("Supprime tous les messages du channel actuel")
+          .toJSON(),
+        new SlashCommandBuilder()
+          .setName("test-pings")
+          .setDescription("Envoie un message taguant toutes les équipes d'une saison pour vérifier les pings")
+          .addStringOption(option =>
+            option
+              .setName("saison")
+              .setDescription("Saison à tester")
+              .setRequired(true)
+              .setAutocomplete(true)
+          )
           .toJSON()
       ];
       const rest = new REST().setToken(token);
@@ -170,11 +181,82 @@ export async function initDiscord(): Promise<void> {
     });
 
     client.on("interactionCreate", async (interaction) => {
+      if (interaction.isAutocomplete()) {
+        if (interaction.commandName === "test-pings") {
+          const focused = interaction.options.getFocused();
+          const seasons: RowDataPacket[] = await db.query(
+            "SELECT id, name FROM season WHERE name LIKE ? ORDER BY id DESC LIMIT 25",
+            [`%${focused}%`]
+          );
+          await interaction.respond(
+            seasons.map(s => ({ name: s.name as string, value: String(s.id) }))
+          );
+        }
+        return;
+      }
       if (!interaction.isChatInputCommand()) return;
       if (interaction.commandName === "refresh-schedule") {
         await interaction.deferReply({ ephemeral: true });
         await updateSchedule();
         await interaction.editReply("✅ Schedule rafraîchi.");
+      }
+      if (interaction.commandName === "test-pings") {
+        await interaction.deferReply({ ephemeral: true });
+        try {
+          const seasonId = parseInt(interaction.options.getString("saison", true), 10);
+          const seasonRows: RowDataPacket[] = await db.query(
+            "SELECT id, name FROM season WHERE id = ?",
+            [seasonId]
+          );
+          if (!seasonRows.length) {
+            await interaction.editReply("❌ Saison introuvable.");
+            return;
+          }
+
+          const teamRows: RowDataPacket[] = await db.query(
+            "SELECT t.id, t.name FROM team t " +
+            "INNER JOIN teams_seasons ts ON ts.teams_id = t.id WHERE ts.season_id = ? ORDER BY t.name ASC",
+            [seasonId]
+          );
+          if (!teamRows.length) {
+            await interaction.editReply(`❌ Aucune équipe associée à la saison **${seasonRows[0].name}**.`);
+            return;
+          }
+
+          const channelIds = getChannels("discord.channels.default");
+          if (!channelIds.length) {
+            await interaction.editReply("❌ Aucun salon configuré (discord.channels.default).");
+            return;
+          }
+
+          let sentTo = 0;
+          for (const channelId of channelIds) {
+            try {
+              const channel = await client!.channels.fetch(channelId) as TextChannel;
+              const guild = channel.guild;
+              const mentions = teamRows.map(t => {
+                const norm = normalizeRoleName(t.name);
+                const role = guild.roles.cache.find(r => normalizeRoleName(r.name) === norm);
+                return role ? `<@&${role.id}>` : `**${t.name}**`;
+              });
+              await channel.send(
+                `🔔 **Test de ping — Saison ${seasonRows[0].name}**\n${mentions.join(" ")}`
+              );
+              sentTo++;
+            } catch (err) {
+              console.error(`Discord test-pings [${channelId}]:`, (err as Error).message);
+            }
+          }
+
+          await interaction.editReply(
+            sentTo
+              ? `✅ Message envoyé dans ${sentTo} salon(s) pour ${teamRows.length} équipe(s) de la saison **${seasonRows[0].name}**.`
+              : "❌ Échec de l'envoi dans tous les salons configurés."
+          );
+        } catch (err) {
+          console.error("Discord test-pings error:", (err as Error).message);
+          await interaction.editReply("❌ Erreur lors de l'envoi du test de ping.");
+        }
       }
       if (interaction.commandName === "purge") {
         await interaction.deferReply({ ephemeral: true });
