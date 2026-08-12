@@ -77,19 +77,22 @@ function normalizeRoleName(s: string): string {
 }
 
 // Supporte channel ID (bot) et webhook URL — pour les types one-shot
-async function sendEmbedToTargets(targets: string[], embed: EmbedBuilder): Promise<void> {
+// `content` est envoyé en dehors de l'embed : Discord ne notifie les mentions
+// (<@id>, <@&roleId>) que si elles sont dans le texte du message, jamais
+// depuis un champ d'embed.
+async function sendEmbedToTargets(targets: string[], embed: EmbedBuilder, content?: string): Promise<void> {
   for (const target of targets) {
     try {
       if (target.startsWith("https://discord.com/api/webhooks/")) {
         await fetch(target, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ embeds: [embed.toJSON()] }),
+          body: JSON.stringify({ content, embeds: [embed.toJSON()] }),
         });
       } else {
         if (!client?.isReady()) continue;
         const ch = await client.channels.fetch(target) as TextChannel;
-        await ch.send({ embeds: [embed] });
+        await ch.send({ content, embeds: [embed] });
       }
     } catch (err) {
       console.error(`Discord sendEmbedToTargets [${target.slice(0, 60)}]:`, (err as Error).message);
@@ -178,6 +181,8 @@ export async function initDiscord(): Promise<void> {
       updateScoreboard();
       updateSchedule();
       setInterval(updateSchedule, 60 * 1000);
+      checkStalledMatches();
+      setInterval(checkStalledMatches, 60 * 1000);
     });
 
     client.on("interactionCreate", async (interaction) => {
@@ -850,5 +855,100 @@ export async function sendGotvMatchEmbed(data: {
     await sendEmbedToTargets(channelIds, embed);
   } catch (err) {
     console.error("Discord sendGotvMatchEmbed error:", (err as Error).message);
+  }
+}
+
+// ─── Stalled Match Reminders ────────────────────────────────────────────────
+// Pings admins in discord.channels.default when a match looks stuck:
+//  - veto not started 5 minutes after match creation → force veto
+//  - match not started at all 10 minutes after creation → force start
+//  - in a BO3, the next map not started 10 minutes after the previous one
+//    ended → force start
+// Each occurrence is tracked via the settings key/value store so it only
+// fires once (mirrors discord.msgid.* persistence used for scoreboard/schedule).
+
+const STALLED_MATCH_ADMIN_IDS = ["286256551994458113", "1171449591833579557"];
+
+function buildMatchUrl(matchId: number): string {
+  const hostname: string = config.get("server.hostname");
+  return `${hostname.replace(/\/$/, "")}/match/${matchId}`;
+}
+
+function alreadyNotified(key: string): boolean {
+  return getSetting(key) === "1";
+}
+
+async function notifyStalledMatch(matchId: number, title: string, description: string): Promise<void> {
+  const channelIds = getChannels("discord.channels.default");
+  if (!channelIds.length) return;
+  const matchUrl = buildMatchUrl(matchId);
+  const content = STALLED_MATCH_ADMIN_IDS.map((id) => `<@${id}>`).join(" ");
+  const embed = new EmbedBuilder()
+    .setColor(0xe74c3c)
+    .setTitle(title)
+    .setURL(matchUrl)
+    .setDescription(description)
+    .addFields({ name: "Match", value: `[#${matchId}](${matchUrl})`, inline: true })
+    .setTimestamp();
+  await sendEmbedToTargets(channelIds, embed, content);
+}
+
+async function checkStalledMatches(): Promise<void> {
+  if (!isDiscordEnabled() || !client?.isReady()) return;
+  try {
+    const pendingVetoMatches: RowDataPacket[] = await db.query(
+      "SELECT id FROM `match` WHERE cancelled = 0 AND forfeit = 0 AND end_time IS NULL " +
+        "AND pending_veto = 1 AND start_time IS NOT NULL AND start_time <= NOW() - INTERVAL 5 MINUTE",
+      []
+    );
+    for (const m of pendingVetoMatches) {
+      const key = `discord.notified.forceveto.${m.id}`;
+      if (alreadyNotified(key)) continue;
+      await notifyStalledMatch(
+        m.id,
+        "⏳ Véto non démarré",
+        "Le véto n'a pas démarré 5 minutes après la création du match — pensez à **forcer le véto**."
+      );
+      await setSetting(key, "1");
+    }
+
+    const notStartedMatches: RowDataPacket[] = await db.query(
+      "SELECT m.id FROM `match` m WHERE m.cancelled = 0 AND m.forfeit = 0 AND m.end_time IS NULL " +
+        "AND m.start_time IS NOT NULL AND m.start_time <= NOW() - INTERVAL 10 MINUTE " +
+        "AND NOT EXISTS (SELECT 1 FROM map_stats ms WHERE ms.match_id = m.id)",
+      []
+    );
+    for (const m of notStartedMatches) {
+      const key = `discord.notified.forcestart.${m.id}`;
+      if (alreadyNotified(key)) continue;
+      await notifyStalledMatch(
+        m.id,
+        "⏳ Match non démarré",
+        "Le match n'a pas démarré 10 minutes après sa création — pensez à **forcer le lancement**."
+      );
+      await setSetting(key, "1");
+    }
+
+    const staleBo3Maps: RowDataPacket[] = await db.query(
+      "SELECT ms.id AS map_stats_id, ms.match_id FROM map_stats ms " +
+        "INNER JOIN (SELECT match_id, MAX(id) AS max_id FROM map_stats GROUP BY match_id) latest " +
+        "  ON latest.match_id = ms.match_id AND latest.max_id = ms.id " +
+        "INNER JOIN `match` m ON m.id = ms.match_id " +
+        "WHERE m.max_maps = 3 AND m.cancelled = 0 AND m.forfeit = 0 AND m.end_time IS NULL " +
+        "AND ms.end_time IS NOT NULL AND ms.end_time <= NOW() - INTERVAL 10 MINUTE",
+      []
+    );
+    for (const row of staleBo3Maps) {
+      const key = `discord.notified.forcestart.map.${row.map_stats_id}`;
+      if (alreadyNotified(key)) continue;
+      await notifyStalledMatch(
+        row.match_id,
+        "⏳ Map suivante non démarrée",
+        "La map suivante n'a pas démarré 10 minutes après la fin de la précédente — pensez à **forcer le lancement**."
+      );
+      await setSetting(key, "1");
+    }
+  } catch (err) {
+    console.error("Discord checkStalledMatches error:", (err as Error).message);
   }
 }
