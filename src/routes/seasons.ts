@@ -1582,6 +1582,34 @@ async function getSlugForMatch(seasonId: number, challongeMatchId: number, apiKe
 }
 
 /** Helper partagé : enrichit les matchs d'un slug avec local_team + g5_match_id (v2.1) */
+/** Le endpoint v2.1 /matches.json n'expose pas group_id sur l'attribut du
+ *  match pour les tournois "group stage" (constaté empiriquement — aucun
+ *  champ ni relation ne le porte dans attributes/relationships, alors que
+ *  l'ancienne API v1 l'expose bien en clair). Les IDs de match sont
+ *  identiques entre v1 et v2.1 pour un même tournoi (contrairement aux IDs
+ *  de participants, qui diffèrent), donc on interroge v1 en complément et on
+ *  fusionne group_id par match id. */
+async function fetchV1GroupIds(slug: string, apiKey: string): Promise<Map<number, string>> {
+  const groupIds = new Map<number, string>();
+  try {
+    const resp = await challongeFetch(
+      `https://api.challonge.com/v1/tournaments/${slug}/matches.json?api_key=${encodeURIComponent(apiKey)}`
+    );
+    if (!resp.ok) return groupIds;
+    const body: any = await resp.json();
+    const items: any[] = Array.isArray(body) ? body : [];
+    for (const item of items) {
+      const m = item?.match;
+      if (m?.id != null && m?.group_id != null) {
+        groupIds.set(Number(m.id), String(m.group_id));
+      }
+    }
+  } catch {
+    // Best-effort : si l'API v1 échoue, group_id reste absent pour ce bracket.
+  }
+  return groupIds;
+}
+
 async function enrichChallongeMatches(
   slug: string,
   label: string,
@@ -1595,9 +1623,10 @@ async function enrichChallongeMatches(
   // v2.1 — matches + participants en parallèle (économise 1 RTT par bracket)
   let matchUrl = `${CHALLONGE_V2_BASE}/tournaments/${slug}/matches.json?per_page=500`;
   if (state) matchUrl += `&state=${state}`;
-  const [resp, partResp] = await Promise.all([
+  const [resp, partResp, v1GroupIds] = await Promise.all([
     challongeFetch(matchUrl, { headers: cHeaders }),
-    challongeFetch(`${CHALLONGE_V2_BASE}/tournaments/${slug}/participants.json?per_page=500`, { headers: cHeaders })
+    challongeFetch(`${CHALLONGE_V2_BASE}/tournaments/${slug}/participants.json?per_page=500`, { headers: cHeaders }),
+    fetchV1GroupIds(slug, apiKey)
   ]);
   if (!resp.ok) return [];
   const rawBody: any = await resp.json();
@@ -1678,7 +1707,7 @@ async function enrichChallongeMatches(
       state: m.state,
       winner_id: normalizeParticipantId(m.winner_id),
       round: m.round,
-      group_id: m.group_id,
+      group_id: m.group_id ?? v1GroupIds.get(m.id) ?? null,
       identifier: m.identifier,
       suggested_play_order: m.suggested_play_order,
       scheduled_time: m.scheduled_time,
@@ -1686,11 +1715,7 @@ async function enrichChallongeMatches(
       score_in_sets: m.score_in_sets,
       player1: p1 ? { id: p1.id, name: p1.display_name, local_team: local1 } : null,
       player2: p2 ? { id: p2.id, name: p2.display_name, local_team: local2 } : null,
-      g5_match_id,
-      // TEMP DEBUG — diagnosing group_id extraction from the v2.1 payload,
-      // remove once fixed.
-      _raw_attributes: item.attributes ?? null,
-      _raw_relationships: item.relationships ?? null,
+      g5_match_id
     };
   });
 }
