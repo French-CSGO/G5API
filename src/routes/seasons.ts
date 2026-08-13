@@ -1487,6 +1487,59 @@ router.put("/:season_id/swiss-board", Utils.ensureAuthenticated, async (req, res
   }
 });
 
+// ─── Round robin board persistence ─────────────────────────────────────────────
+// Même principe que le générateur Swiss ci-dessus, mais pour le générateur de
+// poules round robin (RoundRobinGenerator.vue dans G5V) : un JSON par saison
+// contenant les poules, les affectations d'équipes et les résultats.
+
+/** GET /:season_id/round-robin-board — état sauvegardé du générateur Round Robin
+ *  (ou null). Public (pas de ensureAuthenticated), même raison que swiss-board. */
+router.get("/:season_id/round-robin-board", async (req, res) => {
+  try {
+    const seasonId = parseInt(req.params.season_id);
+    if (isNaN(seasonId)) { res.status(400).json({ message: "ID invalide." }); return; }
+    const rows: RowDataPacket[] = await db.query(
+      "SELECT data, updated_at FROM round_robin_board WHERE season_id = ?",
+      [seasonId]
+    );
+    if (!rows.length) { res.json({ board: null }); return; }
+    let data: unknown;
+    try { data = JSON.parse(rows[0].data as string); } catch { data = null; }
+    res.json({ board: data, updated_at: rows[0].updated_at });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: (err as Error).toString() });
+  }
+});
+
+/** PUT /:season_id/round-robin-board — enregistre l'état complet du générateur
+ *  Round Robin. */
+router.put("/:season_id/round-robin-board", Utils.ensureAuthenticated, async (req, res) => {
+  try {
+    const seasonId = parseInt(req.params.season_id);
+    if (isNaN(seasonId)) { res.status(400).json({ message: "ID invalide." }); return; }
+
+    const seasonRows: RowDataPacket[] = await db.query("SELECT user_id FROM season WHERE id = ?", [seasonId]);
+    if (!seasonRows.length) { res.status(404).json({ message: "Saison introuvable." }); return; }
+    if (seasonRows[0].user_id !== req.user!.id && !Utils.superAdminCheck(req.user!)) {
+      res.status(403).json({ message: "Non autorisé." }); return;
+    }
+
+    const board = req.body?.board;
+    if (!board || typeof board !== "object") { res.status(400).json({ message: "Données invalides." }); return; }
+    const data = JSON.stringify(board);
+
+    await db.query(
+      "INSERT INTO round_robin_board (season_id, data) VALUES (?, ?) ON DUPLICATE KEY UPDATE data = VALUES(data)",
+      [seasonId, data]
+    );
+    res.json({ message: "Générateur Round Robin enregistré." });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: (err as Error).toString() });
+  }
+});
+
 // ─── Challonge match import ──────────────────────────────────────────────────
 
 function getChallongeAPIKey(): string {
