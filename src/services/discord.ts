@@ -859,9 +859,13 @@ export async function sendGotvMatchEmbed(data: {
 }
 
 // ─── Stalled Match Reminders ────────────────────────────────────────────────
-// Pings admins in discord.channels.default when a match looks stuck:
-//  - veto not started 5 minutes after match creation → force veto
-//  - match not started at all 10 minutes after creation → force start
+// Pings admins in discord.channels.default when a match looks stuck. Both
+// "not started" rules key off the same signal — no map_stats row for the
+// match yet — since pending_veto only reflects the opt-in pre-match/lobby
+// veto flow (veto_before_match=true at creation) and stays 0 for the
+// standard in-game veto used by most matches:
+//  - no map started 5 minutes after match creation → force veto
+//  - still no map started 10 minutes after creation → force start
 //  - in a BO3, the next map not started 10 minutes after the previous one
 //    ended → force start
 // Each occurrence is tracked via the settings key/value store so it only
@@ -897,8 +901,9 @@ async function checkStalledMatches(): Promise<void> {
   if (!isDiscordEnabled() || !client?.isReady()) return;
   try {
     const pendingVetoMatches: RowDataPacket[] = await db.query(
-      "SELECT id FROM `match` WHERE cancelled = 0 AND forfeit = 0 AND end_time IS NULL " +
-        "AND pending_veto = 1 AND start_time IS NOT NULL AND start_time <= NOW() - INTERVAL 5 MINUTE",
+      "SELECT m.id FROM `match` m WHERE m.cancelled = 0 AND m.forfeit = 0 AND m.end_time IS NULL " +
+        "AND m.start_time IS NOT NULL AND m.start_time <= NOW() - INTERVAL 5 MINUTE " +
+        "AND NOT EXISTS (SELECT 1 FROM map_stats ms WHERE ms.match_id = m.id)",
       []
     );
     for (const m of pendingVetoMatches) {
