@@ -1686,7 +1686,11 @@ async function enrichChallongeMatches(
       score_in_sets: m.score_in_sets,
       player1: p1 ? { id: p1.id, name: p1.display_name, local_team: local1 } : null,
       player2: p2 ? { id: p2.id, name: p2.display_name, local_team: local2 } : null,
-      g5_match_id
+      g5_match_id,
+      // TEMP DEBUG — diagnosing group_id extraction from the v2.1 payload,
+      // remove once fixed.
+      _raw_attributes: item.attributes ?? null,
+      _raw_relationships: item.relationships ?? null,
     };
   });
 }
