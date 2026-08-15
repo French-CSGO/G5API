@@ -304,7 +304,13 @@ export async function initDiscord(): Promise<void> {
 export async function announceNewMatch(matchId: number): Promise<void> {
   if (!isDiscordEnabled()) return;
   const channelIds = getChannelsOrDefault("discord.channels.announce");
-  if (!client?.isReady() || !channelIds.length) return;
+  if (!channelIds.length) {
+    console.warn(
+      `Discord announceNewMatch: no channel configured (discord.channels.announce / discord.channels.default), match ${matchId} not announced.`
+    );
+    return;
+  }
+  if (!client?.isReady()) return;
   try {
     const sql =
       "SELECT m.team1_string, m.team2_string, gs.ip_string, gs.port " +
