@@ -24,8 +24,15 @@ async function getChallongeBracketData(slug: string, headers: Record<string, str
   const cached = challongeBracketCache.get(slug);
   if (cached && cached.expiresAt > Date.now()) return cached.data;
 
+  // Pas de filtre state=open ici : certains types de bracket (ex. une
+  // "Bracket Consolante" alimentée par les perdants d'un autre bracket) ne
+  // font jamais transiter leurs matchs en state "open" côté Challonge tant
+  // que le round précédent n'est pas entièrement finalisé, même quand les
+  // deux participants sont déjà connus — ça les faisait disparaître du
+  // planning. On filtre plutôt côté appelant sur player1_id/player2_id
+  // (participants connus) et state !== "complete" (pas déjà joué).
   const mRes = await challongeFetch(
-    `${CHALLONGE_V2_BASE}/tournaments/${slug}/matches.json?state=open&per_page=500`,
+    `${CHALLONGE_V2_BASE}/tournaments/${slug}/matches.json?per_page=500`,
     { headers }
   ).catch(() => null);
   const mData: any = mRes?.ok ? await mRes.json().catch(() => null) : null;
@@ -586,7 +593,7 @@ export async function updateSchedule(): Promise<void> {
 
           const allBracketMatches = rawMatches
             .map(m => parseV2Match(m))
-            .filter(m => m.player1_id && m.player2_id)
+            .filter(m => m.player1_id && m.player2_id && m.state !== "complete")
             .sort((a, b) => (a.round - b.round) || ((a.suggested_play_order ?? 999) - (b.suggested_play_order ?? 999)));
 
           const seenParticipants = new Set<number>();
