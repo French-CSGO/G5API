@@ -205,7 +205,7 @@ router.post("/", basicRateLimit, async (req, res) => {
         break;
       case "player_connect": {
         const connectEvent = req.body as Get5_OnPlayerConnect;
-        ConnectedPlayersService.onConnect(connectEvent.matchid, connectEvent.player);
+        await ConnectedPlayersService.onConnect(connectEvent.matchid, connectEvent.player);
         res.status(200).send({ message: "Success" });
         break;
       }
