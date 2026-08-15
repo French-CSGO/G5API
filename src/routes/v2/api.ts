@@ -39,6 +39,9 @@ import { Get5_OnBombEvent } from "../../types/map_flow/Get5_OnBombEvent.js";
 import { Get5_OnRoundStart } from "../../types/map_flow/Get5_OnRoundStart.js";
 import Utils from "../../utility/utils.js";
 import { Get5_OnRoundEnd } from "../../types/map_flow/Get5_OnRoundEnd.js";
+import { Get5_OnPlayerConnect } from "../../types/Get5_OnPlayerConnect.js";
+import { Get5_OnPlayerDisconnect } from "../../types/Get5_OnPlayerDisconnect.js";
+import ConnectedPlayersService from "../../services/connectedplayers.js";
 
 /** Basic Rate limiter.
  * @const
@@ -200,6 +203,18 @@ router.post("/", basicRateLimit, async (req, res) => {
           res
         );
         break;
+      case "player_connect": {
+        const connectEvent = req.body as Get5_OnPlayerConnect;
+        ConnectedPlayersService.onConnect(connectEvent.matchid, connectEvent.player);
+        res.status(200).send({ message: "Success" });
+        break;
+      }
+      case "player_disconnect": {
+        const disconnectEvent = req.body as Get5_OnPlayerDisconnect;
+        ConnectedPlayersService.onDisconnect(disconnectEvent.matchid, disconnectEvent.player.steamid);
+        res.status(200).send({ message: "Success" });
+        break;
+      }
       default:
         res.status(202).send({message: `Event ${eventType.event} is not implemented.`});
         break;
