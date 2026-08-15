@@ -310,13 +310,19 @@ export async function announceNewMatch(matchId: number): Promise<void> {
     );
     return;
   }
-  if (!client?.isReady()) return;
+  if (!client?.isReady()) {
+    console.warn(`Discord announceNewMatch: client not ready, match ${matchId} not announced.`);
+    return;
+  }
   try {
     const sql =
       "SELECT m.team1_string, m.team2_string, gs.ip_string, gs.port " +
       "FROM `match` m LEFT JOIN game_server gs ON m.server_id = gs.id WHERE m.id = ?";
     const rows: RowDataPacket[] = await db.query(sql, [matchId]);
-    if (!rows.length) return;
+    if (!rows.length) {
+      console.warn(`Discord announceNewMatch: match ${matchId} not found in DB, not announced.`);
+      return;
+    }
 
     const match = rows[0];
     const serverIP = match.ip_string ? `${match.ip_string}:${match.port}` : "N/A";
