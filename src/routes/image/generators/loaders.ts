@@ -2,6 +2,7 @@ import { loadImage } from "canvas";
 import type { Image } from "canvas";
 import path from "path";
 import fs from "fs";
+import os from "os";
 
 const MAP_PREFIX_RE = /^(de_|cs_|ar_)/;
 
@@ -62,7 +63,10 @@ export async function tryLoadPlayerImage(steamId: string): Promise<Image | null>
       const p = path.join(dir, steamId + e);
       if (fs.existsSync(p)) { try { return await loadImage(p); } catch { /* skip */ } }
     }
-    console.warn(`[tryLoadPlayerImage] No uploaded photo for steamId=${steamId}, falling back to default.`);
+    console.warn(
+      `[tryLoadPlayerImage] No uploaded photo for steamId=${steamId}, falling back to default. ` +
+      `Checked dir="${dir}" (process.cwd()="${process.cwd()}") on host=${os.hostname()} pid=${process.pid}.`
+    );
   }
   for (const e of exts) {
     const p = path.join(dir, "default" + e);

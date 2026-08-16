@@ -1,4 +1,4 @@
-import { registerFont, loadImage } from "canvas";
+import { registerFont, loadImage, createCanvas } from "canvas";
 import type { CanvasRenderingContext2D, Image as CanvasImage } from "canvas";
 import path from "path";
 import fs from "fs";
@@ -186,8 +186,43 @@ export function tryRegisterFont(fontFile: string, families: string[]): void {
 
 export const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 20 * 1024 * 1024 },
+  limits: { fileSize: 8 * 1024 * 1024 },
 });
+
+/**
+ * Downscales an uploaded image buffer so neither dimension exceeds
+ * maxDimension, preserving aspect ratio — never upscales. Re-encodes as
+ * JPEG when the original filename looks like one (smaller output for
+ * photos/backgrounds), PNG otherwise (keeps transparency for logos).
+ * Returns the original buffer unchanged if it's already within bounds or
+ * fails to decode.
+ */
+export async function resizeImageBuffer(
+  buffer: Buffer,
+  maxDimension: number,
+  originalName = ""
+): Promise<Buffer> {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const img = await loadImage(buffer as any);
+    if (img.width <= maxDimension && img.height <= maxDimension) return buffer;
+
+    const scale = Math.min(maxDimension / img.width, maxDimension / img.height);
+    const w = Math.max(1, Math.round(img.width * scale));
+    const h = Math.max(1, Math.round(img.height * scale));
+
+    const canvas = createCanvas(w, h);
+    const ctx = canvas.getContext("2d");
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ctx.drawImage(img as any, 0, 0, w, h);
+
+    const isJpeg = /\.jpe?g$/i.test(originalName);
+    return isJpeg ? canvas.toBuffer("image/jpeg", { quality: 0.9 }) : canvas.toBuffer("image/png");
+  } catch (err) {
+    console.warn("[resizeImageBuffer] Failed to resize, keeping original:", err);
+    return buffer;
+  }
+}
 
 export function writeFileSafe(filePath: string, buffer: Buffer): void {
   // Normalize to prevent path traversal — ensure the resolved path stays within its parent dir

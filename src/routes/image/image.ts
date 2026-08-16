@@ -10,7 +10,7 @@ import path from "path";
 import fs from "fs";
 
 import { db } from "../../services/db.js";
-import { upload, writeFileSafe } from "./helpers.js";
+import { upload, writeFileSafe, resizeImageBuffer } from "./helpers.js";
 import { loadSettings, saveSettings } from "./settings.js";
 import Utils from "../../utility/utils.js";
 import { generateMatchImage } from "./generators/match.js";
@@ -188,13 +188,14 @@ router.put("/settings", (req: Request, res: Response) => {
 router.post(
   "/settings/background",
   upload.single("background") as any,
-  (req: MReq, res: Response) => {
+  async (req: MReq, res: Response) => {
     if (!req.file) { res.status(400).json({ error: "No file received." }); return; }
     const imgDir = path.join(process.cwd(), "public", "img");
     if (!fs.existsSync(imgDir)) fs.mkdirSync(imgDir, { recursive: true });
     const safeFilename = path.basename(req.file.originalname).replace(/[^a-zA-Z0-9._\-]/g, "_");
     const dest = path.join(imgDir, safeFilename);
-    writeFileSafe(dest, req.file.buffer);
+    const resized = await resizeImageBuffer(req.file.buffer, 1920, safeFilename);
+    writeFileSafe(dest, resized);
     const s = loadSettings();
     s.match.background = safeFilename;
     saveSettings(s);
@@ -206,13 +207,14 @@ router.post(
 router.post(
   "/upload/img",
   upload.single("file") as any,
-  (req: MReq, res: Response) => {
+  async (req: MReq, res: Response) => {
     if (!req.file) { res.status(400).json({ error: "No file received." }); return; }
     const imgDir = path.join(process.cwd(), "public", "img");
     if (!fs.existsSync(imgDir)) fs.mkdirSync(imgDir, { recursive: true });
     const safeFilename = path.basename(req.file.originalname).replace(/[^a-zA-Z0-9._\-]/g, "_");
     const dest = path.join(imgDir, safeFilename);
-    writeFileSafe(dest, req.file.buffer);
+    const resized = await resizeImageBuffer(req.file.buffer, 1920, safeFilename);
+    writeFileSafe(dest, resized);
     res.json({ filename: safeFilename });
   }
 );
@@ -234,13 +236,14 @@ router.get("/maps", (_req: Request, res: Response) => {
 router.post(
   "/upload/map",
   upload.single("file") as any,
-  (req: MReq, res: Response) => {
+  async (req: MReq, res: Response) => {
     if (!req.file) { res.status(400).json({ error: "No file received." }); return; }
     const mapsDir = path.join(process.cwd(), "public", "img", "maps");
     if (!fs.existsSync(mapsDir)) fs.mkdirSync(mapsDir, { recursive: true });
     const safeMapFilename = path.basename(req.file.originalname).replace(/[^a-zA-Z0-9._\-]/g, "_");
     const dest = path.join(mapsDir, safeMapFilename);
-    writeFileSafe(dest, req.file.buffer);
+    const resized = await resizeImageBuffer(req.file.buffer, 1920, safeMapFilename);
+    writeFileSafe(dest, resized);
     res.json({ filename: safeMapFilename });
   }
 );
@@ -262,7 +265,7 @@ router.get("/players", (_req: Request, res: Response) => {
 router.post(
   "/upload/player",
   upload.single("file") as any,
-  (req: MReq, res: Response) => {
+  async (req: MReq, res: Response) => {
     if (!req.file) { res.status(400).json({ error: "No file received." }); return; }
     const steamId = (req as any).body?.steam_id as string | undefined;
     if (!steamId || !/^\d{17}$/.test(steamId)) {
@@ -272,7 +275,8 @@ router.post(
     const playersDir = path.join(process.cwd(), "public", "img", "players");
     if (!fs.existsSync(playersDir)) fs.mkdirSync(playersDir, { recursive: true });
     const dest = path.join(playersDir, `${steamId}.png`);
-    writeFileSafe(dest, req.file.buffer);
+    const resized = await resizeImageBuffer(req.file.buffer, 512);
+    writeFileSafe(dest, resized);
     res.json({ filename: `${steamId}.png` });
   }
 );
