@@ -10,7 +10,7 @@ import path from "path";
 import fs from "fs";
 
 import { db } from "../../services/db.js";
-import { upload, writeFileSafe, resizeImageBuffer } from "./helpers.js";
+import { upload, writeFileSafe, resizeImageBuffer, assertDecodableImage } from "./helpers.js";
 import { loadSettings, saveSettings } from "./settings.js";
 import Utils from "../../utility/utils.js";
 import { generateMatchImage } from "./generators/match.js";
@@ -190,6 +190,12 @@ router.post(
   upload.single("background") as any,
   async (req: MReq, res: Response) => {
     if (!req.file) { res.status(400).json({ error: "No file received." }); return; }
+    try {
+      await assertDecodableImage(req.file.buffer);
+    } catch (err) {
+      res.status(400).json({ error: (err as Error).message });
+      return;
+    }
     const imgDir = path.join(process.cwd(), "public", "img");
     if (!fs.existsSync(imgDir)) fs.mkdirSync(imgDir, { recursive: true });
     const safeFilename = path.basename(req.file.originalname).replace(/[^a-zA-Z0-9._\-]/g, "_");
@@ -209,6 +215,12 @@ router.post(
   upload.single("file") as any,
   async (req: MReq, res: Response) => {
     if (!req.file) { res.status(400).json({ error: "No file received." }); return; }
+    try {
+      await assertDecodableImage(req.file.buffer);
+    } catch (err) {
+      res.status(400).json({ error: (err as Error).message });
+      return;
+    }
     const imgDir = path.join(process.cwd(), "public", "img");
     if (!fs.existsSync(imgDir)) fs.mkdirSync(imgDir, { recursive: true });
     const safeFilename = path.basename(req.file.originalname).replace(/[^a-zA-Z0-9._\-]/g, "_");
@@ -238,6 +250,12 @@ router.post(
   upload.single("file") as any,
   async (req: MReq, res: Response) => {
     if (!req.file) { res.status(400).json({ error: "No file received." }); return; }
+    try {
+      await assertDecodableImage(req.file.buffer);
+    } catch (err) {
+      res.status(400).json({ error: (err as Error).message });
+      return;
+    }
     const mapsDir = path.join(process.cwd(), "public", "img", "maps");
     if (!fs.existsSync(mapsDir)) fs.mkdirSync(mapsDir, { recursive: true });
     const safeMapFilename = path.basename(req.file.originalname).replace(/[^a-zA-Z0-9._\-]/g, "_");
@@ -270,6 +288,12 @@ router.post(
     const steamId = (req as any).body?.steam_id as string | undefined;
     if (!steamId || !/^\d{17}$/.test(steamId)) {
       res.status(400).json({ error: "Invalid or missing steam_id (must be 17 digits)." });
+      return;
+    }
+    try {
+      await assertDecodableImage(req.file.buffer);
+    } catch (err) {
+      res.status(400).json({ error: (err as Error).message });
       return;
     }
     const playersDir = path.join(process.cwd(), "public", "img", "players");

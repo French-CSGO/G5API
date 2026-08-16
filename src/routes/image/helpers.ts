@@ -190,12 +190,31 @@ export const upload = multer({
 });
 
 /**
+ * node-canvas can only decode PNG/JPEG/GIF — never WebP or AVIF, regardless
+ * of system libraries. Browsers happily display those formats directly
+ * (e.g. via the static file route), which makes a bad upload look "fine"
+ * until it's rendered into a generated image and fails there instead.
+ * Throws with a clear message if the buffer isn't decodable, so upload
+ * routes can reject it up front instead of silently persisting it.
+ */
+export async function assertDecodableImage(buffer: Buffer): Promise<void> {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await loadImage(buffer as any);
+  } catch {
+    throw new Error(
+      "Format d'image non supporté (WebP et AVIF ne sont pas décodables par le générateur — utilisez PNG ou JPEG)."
+    );
+  }
+}
+
+/**
  * Downscales an uploaded image buffer so neither dimension exceeds
  * maxDimension, preserving aspect ratio — never upscales. Re-encodes as
  * JPEG when the original filename looks like one (smaller output for
  * photos/backgrounds), PNG otherwise (keeps transparency for logos).
- * Returns the original buffer unchanged if it's already within bounds or
- * fails to decode.
+ * Assumes the buffer is already known-decodable (see assertDecodableImage);
+ * returns the original buffer unchanged if it's already within bounds.
  */
 export async function resizeImageBuffer(
   buffer: Buffer,
