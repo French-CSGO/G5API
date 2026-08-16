@@ -100,9 +100,14 @@ export function drawLogoCentered(
 
 /**
  * Draws an image (e.g. a player photo) scaled up so it fully covers the
- * target box on whichever axis needs more scaling, then center-crops the
- * other axis to fit — never stretches the image out of its aspect ratio.
- * Equivalent to CSS `object-fit: cover`. Draws nothing if img is null.
+ * target box on whichever axis needs more scaling, then crops the other
+ * axis to fit — never stretches the image out of its aspect ratio.
+ * Equivalent to CSS `object-fit: cover`. Horizontal overflow is center-
+ * cropped, but vertical overflow is anchored to the top (like
+ * `object-position: top`) rather than centered, since portrait player
+ * photos usually have the face near the top — centering would cut into
+ * it whenever there's more headroom above than below. Draws nothing if
+ * img is null.
  */
 export function drawImageCover(
   ctx: CanvasRenderingContext2D,
@@ -115,7 +120,7 @@ export function drawImageCover(
   const srcW = width / scale;
   const srcH = height / scale;
   const srcX = (img.width - srcW) / 2;
-  const srcY = (img.height - srcH) / 2;
+  const srcY = 0;
   const dx = x - width / 2;
   const dy = y - height / 2;
   if (circle) {
