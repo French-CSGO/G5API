@@ -62,6 +62,7 @@ export async function tryLoadPlayerImage(steamId: string): Promise<Image | null>
       const p = path.join(dir, steamId + e);
       if (fs.existsSync(p)) { try { return await loadImage(p); } catch { /* skip */ } }
     }
+    console.warn(`[tryLoadPlayerImage] No uploaded photo for steamId=${steamId}, falling back to default.`);
   }
   for (const e of exts) {
     const p = path.join(dir, "default" + e);

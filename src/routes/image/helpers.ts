@@ -99,10 +99,10 @@ export function drawLogoCentered(
 }
 
 /**
- * Draws an image (e.g. a player photo) scaled up/down so it exactly fills the
- * target height (no vertical squish), then center-crops the width to fit —
- * never stretches the image out of its aspect ratio. Equivalent to CSS
- * `object-fit: cover` driven by height. Draws nothing if img is null.
+ * Draws an image (e.g. a player photo) scaled up so it fully covers the
+ * target box on whichever axis needs more scaling, then center-crops the
+ * other axis to fit — never stretches the image out of its aspect ratio.
+ * Equivalent to CSS `object-fit: cover`. Draws nothing if img is null.
  */
 export function drawImageCover(
   ctx: CanvasRenderingContext2D,
@@ -111,11 +111,11 @@ export function drawImageCover(
   circle = false
 ): void {
   if (!img) return;
-  const scale = height / img.height;
-  const srcH = img.height;
-  const srcW = Math.min(width / scale, img.width);
-  const srcX = Math.max(0, (img.width - srcW) / 2);
-  const srcY = 0;
+  const scale = Math.max(width / img.width, height / img.height);
+  const srcW = width / scale;
+  const srcH = height / scale;
+  const srcX = (img.width - srcW) / 2;
+  const srcY = (img.height - srcH) / 2;
   const dx = x - width / 2;
   const dy = y - height / 2;
   if (circle) {
