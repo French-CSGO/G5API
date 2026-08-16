@@ -86,10 +86,29 @@ export async function tryLoadPlayerImage(steamId: string): Promise<Image | null>
     } catch (err) {
       dirListing = `<readdir failed: ${(err as Error).message}>`;
     }
+
+    // Re-attempt the .png candidate with full error + stat detail, purely
+    // for diagnostics — the fast path above already gave up on it.
+    const pngPath = path.join(dir, steamId + ".png");
+    let statInfo = "<no stat>";
+    try {
+      const st = fs.statSync(pngPath);
+      statInfo = `size=${st.size} mtime=${st.mtime.toISOString()} isFile=${st.isFile()}`;
+    } catch (err) {
+      statInfo = `<stat failed: ${(err as Error).message}>`;
+    }
+    let loadErr = "<no error captured>";
+    try {
+      await loadImage(pngPath);
+      loadErr = "<succeeded on retry!?>";
+    } catch (err) {
+      loadErr = (err as Error).message;
+    }
+
     console.warn(
       `[tryLoadPlayerImage] No uploaded photo for steamId="${steamId}" (length=${steamId.length}), falling back to default. ` +
       `Checked dir="${dir}" (process.cwd()="${process.cwd()}") on host=${os.hostname()} pid=${process.pid}. ` +
-      `Actual dir contents: ${dirListing}`
+      `Actual dir contents: ${dirListing}. stat(${pngPath})=${statInfo}. loadImage error=${loadErr}`
     );
   }
   for (const e of exts) {
