@@ -79,16 +79,23 @@ export function fieldFont(f: { bold: boolean; size: number; font: string }): str
   return `${f.bold ? "bold " : ""}${f.size}px ${f.font}`;
 }
 
-/** Draws a logo centered at (cfg.x, cfg.y) with size cfg.size × cfg.size */
+/**
+ * Draws a logo/flag centered at (cfg.x, cfg.y), scaled to fit within a
+ * cfg.size × cfg.size box while preserving its native aspect ratio
+ * (equivalent to CSS `object-fit: contain`) — never stretches non-square
+ * images (e.g. a team flag used as a logo fallback) out of shape.
+ */
 export function drawLogoCentered(
   ctx: CanvasRenderingContext2D,
   img: CanvasImage | null,
   cfg: { x: number; y: number; size: number }
 ): void {
   if (!img) return;
-  const half = cfg.size / 2;
+  const scale = Math.min(cfg.size / img.width, cfg.size / img.height);
+  const w = img.width * scale;
+  const h = img.height * scale;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  ctx.drawImage(img as any, cfg.x - half, cfg.y - half, cfg.size, cfg.size);
+  ctx.drawImage(img as any, cfg.x - w / 2, cfg.y - h / 2, w, h);
 }
 
 /**
