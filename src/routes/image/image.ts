@@ -279,6 +279,30 @@ router.get("/players", (_req: Request, res: Response) => {
   }
 });
 
+/** DELETE /image/player/:steamid — supprime l'image d'un joueur dans public/img/players/ */
+router.delete("/player/:steamid", (req: Request, res: Response) => {
+  const steamId = req.params.steamid;
+  if (!steamId || !/^\d{17}$/.test(steamId)) {
+    res.status(400).json({ error: "Invalid steam_id (must be 17 digits)." });
+    return;
+  }
+  const playersDir = path.join(process.cwd(), "public", "img", "players");
+  const exts = [".png", ".jpg", ".jpeg", ".webp"];
+  let deleted = false;
+  for (const e of exts) {
+    const p = path.join(playersDir, steamId + e);
+    try {
+      fs.unlinkSync(p);
+      deleted = true;
+    } catch { /* didn't exist under this extension */ }
+  }
+  if (!deleted) {
+    res.status(404).json({ error: "No image found for this steam_id." });
+    return;
+  }
+  res.json({ message: "Image deleted.", steamId });
+});
+
 /** POST /image/upload/player — upload d'une image joueur dans public/img/players/{steamid}.png */
 router.post(
   "/upload/player",
