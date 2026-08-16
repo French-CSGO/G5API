@@ -63,9 +63,16 @@ export async function tryLoadPlayerImage(steamId: string): Promise<Image | null>
       const p = path.join(dir, steamId + e);
       if (fs.existsSync(p)) { try { return await loadImage(p); } catch { /* skip */ } }
     }
+    let dirListing: string;
+    try {
+      dirListing = JSON.stringify(fs.readdirSync(dir));
+    } catch (err) {
+      dirListing = `<readdir failed: ${(err as Error).message}>`;
+    }
     console.warn(
-      `[tryLoadPlayerImage] No uploaded photo for steamId=${steamId}, falling back to default. ` +
-      `Checked dir="${dir}" (process.cwd()="${process.cwd()}") on host=${os.hostname()} pid=${process.pid}.`
+      `[tryLoadPlayerImage] No uploaded photo for steamId="${steamId}" (length=${steamId.length}), falling back to default. ` +
+      `Checked dir="${dir}" (process.cwd()="${process.cwd()}") on host=${os.hostname()} pid=${process.pid}. ` +
+      `Actual dir contents: ${dirListing}`
     );
   }
   for (const e of exts) {
