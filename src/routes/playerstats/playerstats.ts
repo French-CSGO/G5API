@@ -240,7 +240,7 @@ router.get("/unique", async (req, res, next) => {
  *
  * /playerstats/search:
  *   get:
- *     description: Search all distinct players who have appeared in matches, by name or Steam ID. Reserved to cast/admin users.
+ *     description: Search distinct players by name or Steam ID (or list all when search is omitted). Reserved to cast/admin users.
  *     produces:
  *       - application/json
  *     parameters:
@@ -279,12 +279,12 @@ router.get("/search", Utils.ensureAuthenticated, async (req, res) => {
       res.status(403).json({ message: "Accès réservé aux utilisateurs avec le rôle cast." });
       return;
     }
-    const search = req.query.search as string | undefined;
-    let sql: string = "SELECT steam_id, MAX(name) as name FROM player_stats";
-    let params: any[] = [];
+    const search = typeof req.query.search === "string" ? req.query.search.trim() : "";
+    let sql = "SELECT steam_id, MAX(name) AS name FROM player_stats";
+    const params: string[] = [];
     if (search) {
-      sql += " WHERE name LIKE ? OR steam_id LIKE ?";
-      params = [`%${search}%`, `%${search}%`];
+      sql += " WHERE steam_id LIKE ? OR name LIKE ?";
+      params.push(`%${search}%`, `%${search}%`);
     }
     sql += " GROUP BY steam_id ORDER BY name ASC";
     const players: RowDataPacket[] = await db.query(sql, params);

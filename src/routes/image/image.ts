@@ -10,7 +10,13 @@ import path from "path";
 import fs from "fs";
 
 import { db } from "../../services/db.js";
-import { upload, writeFileSafe, compressImageKeepingAlpha } from "./helpers.js";
+import {
+  upload,
+  writeFileSafe,
+  compressImageKeepingAlpha,
+  resizeImageBuffer,
+  assertDecodableImage
+} from "./helpers.js";
 import { loadSettings, saveSettings } from "./settings.js";
 import Utils from "../../utility/utils.js";
 import { generateMatchImage } from "./generators/match.js";
@@ -188,13 +194,20 @@ router.put("/settings", (req: Request, res: Response) => {
 router.post(
   "/settings/background",
   upload.single("background") as any,
-  (req: MReq, res: Response) => {
+  async (req: MReq, res: Response) => {
     if (!req.file) { res.status(400).json({ error: "No file received." }); return; }
+    try {
+      await assertDecodableImage(req.file.buffer);
+    } catch (err) {
+      res.status(400).json({ error: (err as Error).message });
+      return;
+    }
     const imgDir = path.join(process.cwd(), "public", "img");
     if (!fs.existsSync(imgDir)) fs.mkdirSync(imgDir, { recursive: true });
     const safeFilename = path.basename(req.file.originalname).replace(/[^a-zA-Z0-9._\-]/g, "_");
     const dest = path.join(imgDir, safeFilename);
-    writeFileSafe(dest, req.file.buffer);
+    const resized = await resizeImageBuffer(req.file.buffer, 1920, safeFilename);
+    writeFileSafe(dest, resized);
     const s = loadSettings();
     s.match.background = safeFilename;
     saveSettings(s);
@@ -206,13 +219,20 @@ router.post(
 router.post(
   "/upload/img",
   upload.single("file") as any,
-  (req: MReq, res: Response) => {
+  async (req: MReq, res: Response) => {
     if (!req.file) { res.status(400).json({ error: "No file received." }); return; }
+    try {
+      await assertDecodableImage(req.file.buffer);
+    } catch (err) {
+      res.status(400).json({ error: (err as Error).message });
+      return;
+    }
     const imgDir = path.join(process.cwd(), "public", "img");
     if (!fs.existsSync(imgDir)) fs.mkdirSync(imgDir, { recursive: true });
     const safeFilename = path.basename(req.file.originalname).replace(/[^a-zA-Z0-9._\-]/g, "_");
     const dest = path.join(imgDir, safeFilename);
-    writeFileSafe(dest, req.file.buffer);
+    const resized = await resizeImageBuffer(req.file.buffer, 1920, safeFilename);
+    writeFileSafe(dest, resized);
     res.json({ filename: safeFilename });
   }
 );
@@ -234,13 +254,20 @@ router.get("/maps", (_req: Request, res: Response) => {
 router.post(
   "/upload/map",
   upload.single("file") as any,
-  (req: MReq, res: Response) => {
+  async (req: MReq, res: Response) => {
     if (!req.file) { res.status(400).json({ error: "No file received." }); return; }
+    try {
+      await assertDecodableImage(req.file.buffer);
+    } catch (err) {
+      res.status(400).json({ error: (err as Error).message });
+      return;
+    }
     const mapsDir = path.join(process.cwd(), "public", "img", "maps");
     if (!fs.existsSync(mapsDir)) fs.mkdirSync(mapsDir, { recursive: true });
     const safeMapFilename = path.basename(req.file.originalname).replace(/[^a-zA-Z0-9._\-]/g, "_");
     const dest = path.join(mapsDir, safeMapFilename);
-    writeFileSafe(dest, req.file.buffer);
+    const resized = await resizeImageBuffer(req.file.buffer, 1920, safeMapFilename);
+    writeFileSafe(dest, resized);
     res.json({ filename: safeMapFilename });
   }
 );
@@ -267,6 +294,30 @@ router.get("/players", Utils.ensureAuthenticated, requireCastOrAdmin, (_req: Req
   }
 });
 
+/** DELETE /image/player/:steamid — supprime l'image d'un joueur dans public/img/players/ */
+router.delete("/player/:steamid", Utils.ensureAuthenticated, requireCastOrAdmin, (req: Request, res: Response) => {
+  const steamId = req.params.steamid;
+  if (!steamId || !/^\d{17}$/.test(steamId)) {
+    res.status(400).json({ error: "Invalid steam_id (must be 17 digits)." });
+    return;
+  }
+  const playersDir = path.join(process.cwd(), "public", "img", "players");
+  const exts = [".png", ".jpg", ".jpeg", ".webp"];
+  let deleted = false;
+  for (const e of exts) {
+    const p = path.join(playersDir, steamId + e);
+    try {
+      fs.unlinkSync(p);
+      deleted = true;
+    } catch { /* didn't exist under this extension */ }
+  }
+  if (!deleted) {
+    res.status(404).json({ error: "No image found for this steam_id." });
+    return;
+  }
+  res.json({ message: "Image deleted.", steamId });
+});
+
 /** POST /image/upload/player — upload d'une image joueur dans public/img/players/{steamid}.png */
 router.post(
   "/upload/player",
@@ -280,9 +331,14 @@ router.post(
       res.status(400).json({ error: "Invalid or missing steam_id (must be 17 digits)." });
       return;
     }
+    try {
+      await assertDecodableImage(req.file.buffer);
+    } catch (err) {
+      res.status(400).json({ error: (err as Error).message });
+      return;
+    }
     let compressed: Buffer;
     try {
-      // Redimensionne et recompresse en PNG en conservant la transparence.
       compressed = await compressImageKeepingAlpha(req.file.buffer);
     } catch (err) {
       console.error("[image/upload/player] Error:", err);
@@ -294,32 +350,6 @@ router.post(
     const dest = path.join(playersDir, `${steamId}.png`);
     writeFileSafe(dest, compressed);
     res.json({ filename: `${steamId}.png` });
-  }
-);
-
-/** DELETE /image/player/:steam_id — supprime l'image d'un joueur dans public/img/players/ */
-router.delete(
-  "/player/:steam_id",
-  Utils.ensureAuthenticated,
-  requireCastOrAdmin,
-  (req: Request, res: Response) => {
-    const steamId = req.params.steam_id;
-    if (!/^\d{17}$/.test(steamId)) {
-      res.status(400).json({ error: "Invalid steam_id (must be 17 digits)." });
-      return;
-    }
-    const playersDir = path.join(process.cwd(), "public", "img", "players");
-    const extensions = ["png", "jpg", "jpeg", "webp"];
-    let deleted = false;
-    for (const ext of extensions) {
-      const filePath = path.join(playersDir, `${steamId}.${ext}`);
-      try {
-        fs.unlinkSync(filePath);
-        deleted = true;
-      } catch { /* file didn't exist for this extension */ }
-    }
-    if (!deleted) { res.status(404).json({ error: "Image not found." }); return; }
-    res.json({ message: "Image deleted." });
   }
 );
 
@@ -900,63 +930,51 @@ async function renderSeasonVersusImage(req: Request, res: Response) {
   }
 }
 
-// ─── OBS Slot routes ───────────────────────────────────────────────────────────
-// Un "slot" (voir /obs-slots) est un lien fixe (identifié par un slug opaque)
-// que le panel peut réassigner à un match différent sans jamais changer l'URL
-// configurée côté OBS Studio. Plusieurs slots indépendants peuvent chacun
-// pointer vers un match différent, pour supporter plusieurs streams en
-// parallèle. Ces routes délèguent aux mêmes fonctions que /match/:match_id/**
-// une fois le slug résolu en match_id.
+// ─── OBS slot image routes ─────────────────────────────────────────────────────
+// Stable /image/slot/:slug/... links that render whichever match is currently
+// assigned to that OBS slot, so browser sources never need updating. This renders
+// the image in-process (rather than 302-redirecting to /image/match/:id/...) so
+// OBS/browsers can never cache a stale redirect target after the slot is reassigned.
 
-async function resolveSlotMatchId(req: Request, res: Response, next: NextFunction) {
-  try {
-    const slug = req.params.slot_id;
-    const rows = await db.query(
-      "SELECT match_id FROM obs_slot WHERE slug = ?",
-      [slug]
-    ) as Array<{ match_id: number | null }>;
-    if (!rows.length) { res.status(404).json({ error: "Slot not found." }); return; }
-    if (rows[0].match_id == null) { res.status(404).json({ error: "No match assigned to this slot." }); return; }
-    req.params.match_id = String(rows[0].match_id);
-    next();
-  } catch (err) {
-    console.error("[image/slot] Error:", err);
-    res.status(500).json({ error: "Failed to resolve slot." });
-  }
+async function resolveSlotMatchId(slug: string): Promise<number | null> {
+  const rows = await db.query(
+    "SELECT match_id FROM obs_slot WHERE slug = ?",
+    [slug]
+  ) as { match_id: number | null }[];
+  return rows?.[0]?.match_id ?? null;
 }
 
-router.get("/slot/:slot_id/match", resolveSlotMatchId, async (req: Request, res: Response) => {
-  await renderMatchImage(req, res, null, "full");
-});
-router.get("/slot/:slot_id/match/map", resolveSlotMatchId, async (req: Request, res: Response) => {
-  await renderMatchImage(req, res, null, "latest");
-});
-router.get("/slot/:slot_id/match/map/:map_number", resolveSlotMatchId, async (req: Request, res: Response) => {
+function mountSlotRoute(subPath: string, handler: (req: Request, res: Response) => Promise<void>) {
+  router.get(`/slot/:slug${subPath}`, async (req: Request, res: Response) => {
+    try {
+      const matchId = await resolveSlotMatchId(req.params.slug);
+      if (matchId === null) { res.status(404).json({ error: "Slot not found or no match assigned" }); return; }
+      req.params.match_id = String(matchId);
+      await handler(req, res);
+    } catch (err) {
+      console.error("[image/slot] Error:", err);
+      res.status(500).json({ error: "Failed to resolve OBS slot" });
+    }
+  });
+}
+
+mountSlotRoute("/match", (req, res) => renderMatchImage(req, res, null, "full"));
+mountSlotRoute("/match/map", (req, res) => renderMatchImage(req, res, null, "latest"));
+mountSlotRoute("/match/map/:map_number", async (req, res) => {
   const mapNumber = parseInt(req.params.map_number);
   if (isNaN(mapNumber) || mapNumber < 1) { res.status(400).json({ error: "Invalid map number" }); return; }
   await renderMatchImage(req, res, mapNumber, "byNumber");
 });
-
-router.get("/slot/:slot_id/mvp", resolveSlotMatchId, async (req: Request, res: Response) => {
-  await renderFullMatchMvpImage(req, res);
-});
-router.get("/slot/:slot_id/map/:map_number/mvp", resolveSlotMatchId, async (req: Request, res: Response) => {
-  await renderMvpImage(req, res);
-});
-
-router.get("/slot/:slot_id/player/:steam_id", resolveSlotMatchId, async (req: Request, res: Response) => {
-  await renderPlayerImage(req, res, null);
-});
-router.get("/slot/:slot_id/map/:map_number/player/:steam_id", resolveSlotMatchId, async (req: Request, res: Response) => {
+mountSlotRoute("/mvp", renderFullMatchMvpImage);
+mountSlotRoute("/map/:map_number/mvp", renderMvpImage);
+mountSlotRoute("/player/:steam_id", (req, res) => renderPlayerImage(req, res, null));
+mountSlotRoute("/map/:map_number/player/:steam_id", async (req, res) => {
   const mapNumber = parseInt(req.params.map_number);
   if (isNaN(mapNumber) || mapNumber < 1) { res.status(400).json({ error: "Invalid map number" }); return; }
   await renderPlayerImage(req, res, mapNumber);
 });
-
-router.get("/slot/:slot_id/team/:team_number", resolveSlotMatchId, async (req: Request, res: Response) => {
-  await renderTeamMatchImage(req, res, null);
-});
-router.get("/slot/:slot_id/map/:map_number/team/:team_number", resolveSlotMatchId, async (req: Request, res: Response) => {
+mountSlotRoute("/team/:team_number", (req, res) => renderTeamMatchImage(req, res, null));
+mountSlotRoute("/map/:map_number/team/:team_number", async (req, res) => {
   const mapNumber = parseInt(req.params.map_number);
   if (isNaN(mapNumber) || mapNumber < 1) { res.status(400).json({ error: "Invalid map number" }); return; }
   await renderTeamMatchImage(req, res, mapNumber);

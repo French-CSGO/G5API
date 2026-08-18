@@ -34,6 +34,9 @@ export interface NormalisedMatch {
   /** ID du groupe round-robin (Group Stage) auquel appartient ce match, sinon null.
    *  Deux matchs de groupes différents peuvent partager le même numéro de round. */
   group_id: string | null;
+  /** Court identifiant alphabétique du match dans le tournoi (A, B, C... AA, AB...),
+   *  attribué par Challonge dans l'ordre de création/affichage des matchs. */
+  identifier: string | null;
   suggested_play_order: number | null;
   scheduled_time: string | null;
   scores_csv: string | null;
@@ -77,6 +80,7 @@ export function parseV2Match(item: any): NormalisedMatch {
     state: attr.state ?? "pending",
     round: attr.round ?? 0,
     group_id: groupId,
+    identifier: attr.identifier ?? null,
     suggested_play_order: attr.suggested_play_order ?? null,
     // scheduled_time may live under timestamps.scheduled_at in some versions
     scheduled_time: attr.scheduled_time ?? attr.timestamps?.scheduled_at ?? null,
@@ -90,13 +94,21 @@ export function parseV2Match(item: any): NormalisedMatch {
   };
 }
 
-/** Parse a single v2.1 participant item. */
-export function parseV2Participant(item: any): { id: number; display_name: string; name: string } {
+/** Parse a single v2.1 participant item.
+ *  group_player_ids: alternate IDs Challonge uses to reference this same
+ *  participant inside group-stage/swiss matches — distinct from the
+ *  participant's own id, which is what's normally stored as
+ *  team.challonge_team_id on the G5 side. */
+export function parseV2Participant(item: any): { id: number; display_name: string; name: string; group_player_ids: number[] } {
   const attr = item.attributes ?? {};
+  const rawGroupIds = Array.isArray(attr.group_player_ids) ? attr.group_player_ids : [];
   return {
     id: parseInt(item.id, 10),
     display_name: attr.name ?? "",
-    name: attr.name ?? ""
+    name: attr.name ?? "",
+    group_player_ids: rawGroupIds
+      .map((gid: any) => parseInt(String(gid), 10))
+      .filter((gid: number) => !isNaN(gid))
   };
 }
 

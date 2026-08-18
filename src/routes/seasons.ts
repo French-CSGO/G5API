@@ -1392,7 +1392,7 @@ router.get("/:season_id/teams", Utils.ensureAuthenticated, async (req, res, next
   try {
     const seasonId = parseInt(req.params.season_id);
     const sql =
-      "SELECT t.id, t.name, t.tag, t.logo, t.public_team FROM team t " +
+      "SELECT t.id, t.name, t.tag, t.logo, t.public_team, t.challonge_team_id FROM team t " +
       "INNER JOIN teams_seasons ts ON ts.teams_id = t.id WHERE ts.season_id = ?";
     const teams: RowDataPacket[] = await db.query(sql, [seasonId]);
     res.json({ teams });
@@ -1425,6 +1425,115 @@ router.delete("/:season_id/teams/:team_id", Utils.ensureAuthenticated, async (re
     const teamId = parseInt(req.params.team_id);
     await db.query("DELETE FROM teams_seasons WHERE season_id = ? AND teams_id = ?", [seasonId, teamId]);
     res.json({ message: "Team removed from season successfully!" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: (err as Error).toString() });
+  }
+});
+
+// ─── Swiss board persistence ───────────────────────────────────────────────────
+// Server-side save for the Swiss stage generator (SwissGenerator.vue in G5V):
+// one JSON blob per season holding the whole board (teams, placements,
+// results, style), so it survives across sessions/machines instead of only
+// living in a downloaded project file.
+
+/** GET /:season_id/swiss-board — état sauvegardé du générateur Swiss (ou null).
+ *  Public (pas de ensureAuthenticated) : consommé par l'overlay OBS en lecture
+ *  seule, qui tourne dans le navigateur embarqué d'OBS sans session connectée.
+ *  Le payload ne contient que des données déjà publiques (noms/logos d'équipes,
+ *  placements) ; l'écriture (PUT ci-dessous) reste protégée. */
+router.get("/:season_id/swiss-board", async (req, res) => {
+  try {
+    const seasonId = parseInt(req.params.season_id);
+    if (isNaN(seasonId)) { res.status(400).json({ message: "ID invalide." }); return; }
+    const rows: RowDataPacket[] = await db.query(
+      "SELECT data, updated_at FROM swiss_board WHERE season_id = ?",
+      [seasonId]
+    );
+    if (!rows.length) { res.json({ board: null }); return; }
+    let data: unknown;
+    try { data = JSON.parse(rows[0].data as string); } catch { data = null; }
+    res.json({ board: data, updated_at: rows[0].updated_at });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: (err as Error).toString() });
+  }
+});
+
+/** PUT /:season_id/swiss-board — enregistre l'état complet du générateur Swiss */
+router.put("/:season_id/swiss-board", Utils.ensureAuthenticated, async (req, res) => {
+  try {
+    const seasonId = parseInt(req.params.season_id);
+    if (isNaN(seasonId)) { res.status(400).json({ message: "ID invalide." }); return; }
+
+    const seasonRows: RowDataPacket[] = await db.query("SELECT user_id FROM season WHERE id = ?", [seasonId]);
+    if (!seasonRows.length) { res.status(404).json({ message: "Saison introuvable." }); return; }
+    if (seasonRows[0].user_id !== req.user!.id && !Utils.superAdminCheck(req.user!)) {
+      res.status(403).json({ message: "Non autorisé." }); return;
+    }
+
+    const board = req.body?.board;
+    if (!board || typeof board !== "object") { res.status(400).json({ message: "Données invalides." }); return; }
+    const data = JSON.stringify(board);
+
+    await db.query(
+      "INSERT INTO swiss_board (season_id, data) VALUES (?, ?) ON DUPLICATE KEY UPDATE data = VALUES(data)",
+      [seasonId, data]
+    );
+    res.json({ message: "Générateur Swiss enregistré." });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: (err as Error).toString() });
+  }
+});
+
+// ─── Round robin board persistence ─────────────────────────────────────────────
+// Même principe que le générateur Swiss ci-dessus, mais pour le générateur de
+// poules round robin (RoundRobinGenerator.vue dans G5V) : un JSON par saison
+// contenant les poules, les affectations d'équipes et les résultats.
+
+/** GET /:season_id/round-robin-board — état sauvegardé du générateur Round Robin
+ *  (ou null). Public (pas de ensureAuthenticated), même raison que swiss-board. */
+router.get("/:season_id/round-robin-board", async (req, res) => {
+  try {
+    const seasonId = parseInt(req.params.season_id);
+    if (isNaN(seasonId)) { res.status(400).json({ message: "ID invalide." }); return; }
+    const rows: RowDataPacket[] = await db.query(
+      "SELECT data, updated_at FROM round_robin_board WHERE season_id = ?",
+      [seasonId]
+    );
+    if (!rows.length) { res.json({ board: null }); return; }
+    let data: unknown;
+    try { data = JSON.parse(rows[0].data as string); } catch { data = null; }
+    res.json({ board: data, updated_at: rows[0].updated_at });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: (err as Error).toString() });
+  }
+});
+
+/** PUT /:season_id/round-robin-board — enregistre l'état complet du générateur
+ *  Round Robin. */
+router.put("/:season_id/round-robin-board", Utils.ensureAuthenticated, async (req, res) => {
+  try {
+    const seasonId = parseInt(req.params.season_id);
+    if (isNaN(seasonId)) { res.status(400).json({ message: "ID invalide." }); return; }
+
+    const seasonRows: RowDataPacket[] = await db.query("SELECT user_id FROM season WHERE id = ?", [seasonId]);
+    if (!seasonRows.length) { res.status(404).json({ message: "Saison introuvable." }); return; }
+    if (seasonRows[0].user_id !== req.user!.id && !Utils.superAdminCheck(req.user!)) {
+      res.status(403).json({ message: "Non autorisé." }); return;
+    }
+
+    const board = req.body?.board;
+    if (!board || typeof board !== "object") { res.status(400).json({ message: "Données invalides." }); return; }
+    const data = JSON.stringify(board);
+
+    await db.query(
+      "INSERT INTO round_robin_board (season_id, data) VALUES (?, ?) ON DUPLICATE KEY UPDATE data = VALUES(data)",
+      [seasonId, data]
+    );
+    res.json({ message: "Générateur Round Robin enregistré." });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: (err as Error).toString() });
@@ -1473,6 +1582,34 @@ async function getSlugForMatch(seasonId: number, challongeMatchId: number, apiKe
 }
 
 /** Helper partagé : enrichit les matchs d'un slug avec local_team + g5_match_id (v2.1) */
+/** Le endpoint v2.1 /matches.json n'expose pas group_id sur l'attribut du
+ *  match pour les tournois "group stage" (constaté empiriquement — aucun
+ *  champ ni relation ne le porte dans attributes/relationships, alors que
+ *  l'ancienne API v1 l'expose bien en clair). Les IDs de match sont
+ *  identiques entre v1 et v2.1 pour un même tournoi (contrairement aux IDs
+ *  de participants, qui diffèrent), donc on interroge v1 en complément et on
+ *  fusionne group_id par match id. */
+async function fetchV1GroupIds(slug: string, apiKey: string): Promise<Map<number, string>> {
+  const groupIds = new Map<number, string>();
+  try {
+    const resp = await challongeFetch(
+      `https://api.challonge.com/v1/tournaments/${slug}/matches.json?api_key=${encodeURIComponent(apiKey)}`
+    );
+    if (!resp.ok) return groupIds;
+    const body: any = await resp.json();
+    const items: any[] = Array.isArray(body) ? body : [];
+    for (const item of items) {
+      const m = item?.match;
+      if (m?.id != null && m?.group_id != null) {
+        groupIds.set(Number(m.id), String(m.group_id));
+      }
+    }
+  } catch {
+    // Best-effort : si l'API v1 échoue, group_id reste absent pour ce bracket.
+  }
+  return groupIds;
+}
+
 async function enrichChallongeMatches(
   slug: string,
   label: string,
@@ -1486,9 +1623,10 @@ async function enrichChallongeMatches(
   // v2.1 — matches + participants en parallèle (économise 1 RTT par bracket)
   let matchUrl = `${CHALLONGE_V2_BASE}/tournaments/${slug}/matches.json?per_page=500`;
   if (state) matchUrl += `&state=${state}`;
-  const [resp, partResp] = await Promise.all([
+  const [resp, partResp, v1GroupIds] = await Promise.all([
     challongeFetch(matchUrl, { headers: cHeaders }),
-    challongeFetch(`${CHALLONGE_V2_BASE}/tournaments/${slug}/participants.json?per_page=500`, { headers: cHeaders })
+    challongeFetch(`${CHALLONGE_V2_BASE}/tournaments/${slug}/participants.json?per_page=500`, { headers: cHeaders }),
+    fetchV1GroupIds(slug, apiKey)
   ]);
   if (!resp.ok) return [];
   const rawBody: any = await resp.json();
@@ -1498,27 +1636,41 @@ async function enrichChallongeMatches(
   const partBody: any = partResp.ok ? await partResp.json() : {};
   const rawParts: any[] = Array.isArray(partBody?.data) ? partBody.data : [];
   // Map: challongeId (number) → participant { id, display_name, name }
-  const partMap = new Map<number, any>(
-    rawParts.map((item: any) => {
-      const p = parseV2Participant(item);
-      return [p.id, p];
-    })
-  );
+  const partMap = new Map<number, any>();
+  // Map: group-stage/swiss-scoped id → the participant's own (normal) id.
+  // Challonge references players in group/swiss matches by these alternate
+  // ids, not by the participant id that's stored as team.challonge_team_id.
+  const groupIdToParticipantId = new Map<number, number>();
+  rawParts.forEach((item: any) => {
+    const p = parseV2Participant(item);
+    partMap.set(p.id, p);
+    p.group_player_ids.forEach((gid: number) => groupIdToParticipantId.set(gid, p.id));
+  });
+
+  // Resolves any id a match might reference (normal participant id, or a
+  // group/swiss-scoped id) back to the participant's own normal id.
+  const normalizeParticipantId = (pid: number | null): number | null => {
+    if (pid === null) return null;
+    if (partMap.has(pid)) return pid;
+    return groupIdToParticipantId.get(pid) ?? pid;
+  };
 
   const challongeIds = rawParts.map((item: any) => parseInt(item.id, 10));
 
   // Inclure aussi les IDs de participants qui apparaissent directement dans les matchs
-  // (les endpoints participants et matches peuvent retourner des ensembles d'IDs différents)
+  // (les endpoints participants et matches peuvent retourner des ensembles d'IDs différents),
+  // normalisés vers l'id participant normal pour matcher team.challonge_team_id.
   const matchPlayerIds = rawMatches.flatMap((item: any) => {
     const m = parseV2Match(item);
-    return [m.player1_id, m.player2_id].filter((id): id is number => id !== null);
+    return [normalizeParticipantId(m.player1_id), normalizeParticipantId(m.player2_id)]
+      .filter((id): id is number => id !== null);
   });
   const allLookupIds = [...new Set([...challongeIds, ...matchPlayerIds])];
 
   let localTeams: RowDataPacket[] = [];
   if (allLookupIds.length > 0) {
     localTeams = await db.query(
-      `SELECT id, name, challonge_team_id FROM team WHERE challonge_team_id IN (${allLookupIds.map(() => "?").join(",")})`,
+      `SELECT id, name, tag, logo, challonge_team_id FROM team WHERE challonge_team_id IN (${allLookupIds.map(() => "?").join(",")})`,
       allLookupIds.map(String)
     );
   }
@@ -1527,14 +1679,15 @@ async function enrichChallongeMatches(
   return rawMatches.map((item: any) => {
     const m = parseV2Match(item);
 
-    // Résolution participant : cherche d'abord dans la map principale.
-    // Pour les matchs de phase de groupes, l'ID Challonge peut être différent de
-    // l'ID participant principal → fallback avec un objet minimal pour que le match reste visible.
+    // Résolution participant : normalise d'abord l'id (les matchs de phase
+    // de groupe/swiss référencent un id alternatif, voir group_player_ids
+    // ci-dessus), puis cherche dans la map principale — fallback avec un
+    // objet minimal si le participant reste introuvable (ex: "Bye").
     const resolveParticipant = (pid: number | null) => {
       if (pid === null) return null;
-      const found = partMap.get(pid);
+      const normalized = normalizeParticipantId(pid);
+      const found = normalized !== null ? partMap.get(normalized) : undefined;
       if (found) return found;
-      // Participant non trouvé (phase de groupes avec IDs internes) : retourne un placeholder
       return { id: pid, display_name: `#${pid}`, name: `#${pid}` };
     };
 
@@ -1552,8 +1705,10 @@ async function enrichChallongeMatches(
       slug,
       tournament_label: label,
       state: m.state,
+      winner_id: normalizeParticipantId(m.winner_id),
       round: m.round,
-      group_id: m.group_id,
+      group_id: m.group_id ?? v1GroupIds.get(m.id) ?? null,
+      identifier: m.identifier,
       suggested_play_order: m.suggested_play_order,
       scheduled_time: m.scheduled_time,
       scores_csv: m.scores_csv,
@@ -1571,6 +1726,79 @@ router.get("/:season_id/challonge/tournaments", Utils.ensureAuthenticated, async
     const seasonId = parseInt(req.params.season_id);
     const tournaments = await getSeasonChallongeTournaments(seasonId);
     res.json({ tournaments });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: (err as Error).toString() });
+  }
+});
+
+/** GET /:season_id/challonge/tournaments/:tournament_id/participants —
+ *  liste brute des participants Challonge d'un bracket (id, name), pour le
+ *  synchroniseur d'ID d'équipe côté G5V (SwissTeamSync.vue). */
+router.get("/:season_id/challonge/tournaments/:tournament_id/participants", Utils.ensureAuthenticated, async (req, res) => {
+  try {
+    const seasonId = parseInt(req.params.season_id);
+    const tournamentId = parseInt(req.params.tournament_id);
+    const apiKey = getChallongeAPIKey();
+    const tournaments = await getSeasonChallongeTournaments(seasonId);
+    const tournament = tournaments.find(t => t.id === tournamentId);
+    if (!tournament) { res.status(404).json({ message: "Bracket Challonge introuvable pour cette saison." }); return; }
+
+    const cHeaders = challongeHeaders(apiKey);
+    const partResp = await challongeFetch(
+      `${CHALLONGE_V2_BASE}/tournaments/${tournament.challonge_slug}/participants.json?per_page=500`,
+      { headers: cHeaders }
+    );
+    if (!partResp.ok) { res.status(502).json({ message: "Impossible de récupérer les participants Challonge." }); return; }
+    const partBody: any = await partResp.json();
+    const rawParts: any[] = Array.isArray(partBody?.data) ? partBody.data : [];
+    const participants = rawParts
+      .map((item: any) => parseV2Participant(item))
+      .map((p) => ({ id: p.id, name: p.name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    res.json({ participants });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: (err as Error).toString() });
+  }
+});
+
+/** PUT /:season_id/challonge/team-sync — enregistre en masse l'association
+ *  team.challonge_team_id pour des équipes de la saison. Chaque entrée est
+ *  vérifiée comme appartenant bien à la saison (teams_seasons) avant écriture. */
+router.put("/:season_id/challonge/team-sync", Utils.ensureAuthenticated, async (req, res) => {
+  try {
+    const seasonId = parseInt(req.params.season_id);
+    if (isNaN(seasonId)) { res.status(400).json({ message: "ID invalide." }); return; }
+
+    const seasonRows: RowDataPacket[] = await db.query("SELECT user_id FROM season WHERE id = ?", [seasonId]);
+    if (!seasonRows.length) { res.status(404).json({ message: "Saison introuvable." }); return; }
+    if (seasonRows[0].user_id !== req.user!.id && !Utils.superAdminCheck(req.user!)) {
+      res.status(403).json({ message: "Non autorisé." }); return;
+    }
+
+    const associations: { team_id: number; challonge_team_id: string | null }[] = req.body?.associations;
+    if (!Array.isArray(associations) || !associations.length) {
+      res.status(400).json({ message: "Aucune association fournie." }); return;
+    }
+
+    const seasonTeamRows: RowDataPacket[] = await db.query(
+      "SELECT teams_id FROM teams_seasons WHERE season_id = ?",
+      [seasonId]
+    );
+    const seasonTeamIds = new Set(seasonTeamRows.map(r => r.teams_id));
+
+    let updated = 0;
+    for (const assoc of associations) {
+      const teamId = parseInt(String(assoc.team_id), 10);
+      if (isNaN(teamId) || !seasonTeamIds.has(teamId)) continue;
+      await db.query(
+        "UPDATE team SET challonge_team_id = ? WHERE id = ?",
+        [assoc.challonge_team_id || null, teamId]
+      );
+      updated++;
+    }
+    res.json({ message: `${updated} équipe(s) synchronisée(s).`, updated });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: (err as Error).toString() });
