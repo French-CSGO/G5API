@@ -238,6 +238,59 @@ router.get("/unique", async (req, res, next) => {
 /**
  * @swagger
  *
+ * /playerstats/search:
+ *   get:
+ *     description: Search distinct players by name or Steam ID (or list all when search is omitted). Used by the player avatar upload page.
+ *     produces:
+ *       - application/json
+ *     parameters:
+ *       - name: search
+ *         required: false
+ *         schema:
+ *            type: string
+ *     tags:
+ *       - playerstats
+ *     responses:
+ *       200:
+ *         description: Matching players.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 players:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       steam_id:
+ *                         type: string
+ *                       name:
+ *                         type: string
+ *       500:
+ *         $ref: '#/components/responses/Error'
+ */
+router.get("/search", async (req, res, next) => {
+  try {
+    const search = typeof req.query.search === "string" ? req.query.search.trim() : "";
+    let sql = "SELECT DISTINCT steam_id, name FROM player_stats";
+    const params: string[] = [];
+    if (search) {
+      sql += " WHERE steam_id LIKE ? OR name LIKE ?";
+      params.push(`%${search}%`, `%${search}%`);
+    }
+    sql += " ORDER BY name ASC";
+    const players: RowDataPacket[] = await db.query(sql, params);
+    res.json({ players });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: (err as Error).toString() });
+  }
+});
+
+/**
+ * @swagger
+ *
  * /playerstats/:steam_id:
  *   get:
  *     description: Player stats from a given Steam ID.

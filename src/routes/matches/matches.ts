@@ -28,6 +28,7 @@ import { RowDataPacket } from "mysql2";
 import { AccessMessage } from "../../types/mapstats/AccessMessage.js";
 import { startAndWait, isEnabled as pterodactylEnabled } from "../../services/pterodactyl.js";
 import { createVetoSession } from "../../services/prevetoservice.js";
+import ConnectedPlayersService from "../../services/connectedplayers.js";
 
 
 /**
@@ -1003,6 +1004,43 @@ router.get("/:match_id/server-events/stream", async (req, res) => {
  *       500:
  *         $ref: '#/components/responses/Error'
  */
+/**
+ * @swagger
+ *
+ * /matches/:match_id/connected-players:
+ *   get:
+ *     description: Returns the list of players currently connected to the match's game server, as reported by MatchZy. Admin only.
+ *     produces:
+ *       - application/json
+ *     parameters:
+ *       - name: match_id
+ *         required: true
+ *         schema:
+ *          type: integer
+ *     tags:
+ *       - matches
+ *     responses:
+ *       200:
+ *         description: Connected players.
+ *       403:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       401:
+ *         $ref: '#/components/responses/Error'
+ */
+router.get("/:match_id/connected-players", Utils.ensureAuthenticated, async (req, res, next) => {
+  try {
+    if (!Utils.adminCheck(req.user!)) {
+      res.status(403).json({ message: "User is not authorized to perform action." });
+      return;
+    }
+    const connectedPlayers = ConnectedPlayersService.getConnected(req.params.match_id);
+    res.json({ connectedPlayers });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: (err as Error).toString() });
+  }
+});
+
 router.get("/:match_id/paused", async (req, res, next) => {
   try {
     let sql: string =

@@ -2,6 +2,7 @@ import { loadImage } from "canvas";
 import type { Image } from "canvas";
 import path from "path";
 import fs from "fs";
+import os from "os";
 
 const MAP_PREFIX_RE = /^(de_|cs_|ar_)/;
 
@@ -10,13 +11,30 @@ export function stripMapPrefix(name: string): string {
   return name.replace(MAP_PREFIX_RE, "").toUpperCase();
 }
 
+/**
+ * Attempts to load an image directly (open+read) rather than pre-checking
+ * with fs.existsSync first. On some Docker bind-mount setups, stat()-based
+ * checks (existsSync) can return a stale ENOENT for a file that readdir()
+ * already sees and that open()/read() can access fine — so a separate
+ * existence check can produce false negatives. Trying the actual read and
+ * catching failure sidesteps that class of bug entirely.
+ */
+async function tryLoadImageAt(p: string): Promise<Image | null> {
+  try {
+    return await loadImage(p);
+  } catch {
+    return null;
+  }
+}
+
 export async function tryLoadLogo(logoName: string | null | undefined): Promise<Image | null> {
   if (!logoName) return null;
   const dir = path.join(process.cwd(), "public", "img", "logos");
   const exts = [".png", ".svg", ".jpg", ".jpeg", ".webp"];
   const candidates = [...exts.map(e => path.join(dir, logoName + e)), path.join(dir, logoName)];
   for (const p of candidates) {
-    if (fs.existsSync(p)) { try { return await loadImage(p); } catch { /* skip */ } }
+    const img = await tryLoadImageAt(p);
+    if (img) return img;
   }
   return null;
 }
@@ -26,8 +44,8 @@ export async function tryLoadFlag(flag: string | null | undefined): Promise<Imag
   const code = flag.toLowerCase();
   const dir = path.join(process.cwd(), "public", "img", "flags");
   for (const ext of [".png", ".svg", ".jpg"]) {
-    const p = path.join(dir, code + ext);
-    if (fs.existsSync(p)) { try { return await loadImage(p); } catch { /* skip */ } }
+    const img = await tryLoadImageAt(path.join(dir, code + ext));
+    if (img) return img;
   }
   try { return await loadImage(`https://flagcdn.com/w160/${code}.png`); } catch { /* skip */ }
   return null;
@@ -47,8 +65,8 @@ export async function tryLoadMapImage(mapName: string): Promise<Image | null> {
   const names = [mapName, mapName.replace(MAP_PREFIX_RE, "")];
   for (const n of names) {
     for (const e of exts) {
-      const p = path.join(dir, n + e);
-      if (fs.existsSync(p)) { try { return await loadImage(p); } catch { /* skip */ } }
+      const img = await tryLoadImageAt(path.join(dir, n + e));
+      if (img) return img;
     }
   }
   return null;
@@ -59,13 +77,43 @@ export async function tryLoadPlayerImage(steamId: string): Promise<Image | null>
   const exts = [".png", ".jpg", ".jpeg", ".webp"];
   if (steamId) {
     for (const e of exts) {
-      const p = path.join(dir, steamId + e);
-      if (fs.existsSync(p)) { try { return await loadImage(p); } catch { /* skip */ } }
+      const img = await tryLoadImageAt(path.join(dir, steamId + e));
+      if (img) return img;
     }
+    let dirListing: string;
+    try {
+      dirListing = JSON.stringify(fs.readdirSync(dir));
+    } catch (err) {
+      dirListing = `<readdir failed: ${(err as Error).message}>`;
+    }
+
+    // Re-attempt the .png candidate with full error + stat detail, purely
+    // for diagnostics — the fast path above already gave up on it.
+    const pngPath = path.join(dir, steamId + ".png");
+    let statInfo = "<no stat>";
+    try {
+      const st = fs.statSync(pngPath);
+      statInfo = `size=${st.size} mtime=${st.mtime.toISOString()} isFile=${st.isFile()}`;
+    } catch (err) {
+      statInfo = `<stat failed: ${(err as Error).message}>`;
+    }
+    let loadErr = "<no error captured>";
+    try {
+      await loadImage(pngPath);
+      loadErr = "<succeeded on retry!?>";
+    } catch (err) {
+      loadErr = (err as Error).message;
+    }
+
+    console.warn(
+      `[tryLoadPlayerImage] No uploaded photo for steamId="${steamId}" (length=${steamId.length}), falling back to default. ` +
+      `Checked dir="${dir}" (process.cwd()="${process.cwd()}") on host=${os.hostname()} pid=${process.pid}. ` +
+      `Actual dir contents: ${dirListing}. stat(${pngPath})=${statInfo}. loadImage error=${loadErr}`
+    );
   }
   for (const e of exts) {
-    const p = path.join(dir, "default" + e);
-    if (fs.existsSync(p)) { try { return await loadImage(p); } catch { /* skip */ } }
+    const img = await tryLoadImageAt(path.join(dir, "default" + e));
+    if (img) return img;
   }
   return null;
 }

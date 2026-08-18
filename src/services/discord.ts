@@ -77,19 +77,22 @@ function normalizeRoleName(s: string): string {
 }
 
 // Supporte channel ID (bot) et webhook URL — pour les types one-shot
-async function sendEmbedToTargets(targets: string[], embed: EmbedBuilder): Promise<void> {
+// `content` est envoyé en dehors de l'embed : Discord ne notifie les mentions
+// (<@id>, <@&roleId>) que si elles sont dans le texte du message, jamais
+// depuis un champ d'embed.
+async function sendEmbedToTargets(targets: string[], embed: EmbedBuilder, content?: string): Promise<void> {
   for (const target of targets) {
     try {
       if (target.startsWith("https://discord.com/api/webhooks/")) {
         await fetch(target, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ embeds: [embed.toJSON()] }),
+          body: JSON.stringify({ content, embeds: [embed.toJSON()] }),
         });
       } else {
         if (!client?.isReady()) continue;
         const ch = await client.channels.fetch(target) as TextChannel;
-        await ch.send({ embeds: [embed] });
+        await ch.send({ content, embeds: [embed] });
       }
     } catch (err) {
       console.error(`Discord sendEmbedToTargets [${target.slice(0, 60)}]:`, (err as Error).message);
@@ -153,6 +156,17 @@ export async function initDiscord(): Promise<void> {
         new SlashCommandBuilder()
           .setName("purge")
           .setDescription("Supprime tous les messages du channel actuel")
+          .toJSON(),
+        new SlashCommandBuilder()
+          .setName("test-pings")
+          .setDescription("Envoie un message taguant toutes les équipes d'une saison pour vérifier les pings")
+          .addStringOption(option =>
+            option
+              .setName("saison")
+              .setDescription("Saison à tester")
+              .setRequired(true)
+              .setAutocomplete(true)
+          )
           .toJSON()
       ];
       const rest = new REST().setToken(token);
@@ -167,14 +181,87 @@ export async function initDiscord(): Promise<void> {
       updateScoreboard();
       updateSchedule();
       setInterval(updateSchedule, 60 * 1000);
+      checkStalledMatches();
+      setInterval(checkStalledMatches, 60 * 1000);
     });
 
     client.on("interactionCreate", async (interaction) => {
+      if (interaction.isAutocomplete()) {
+        if (interaction.commandName === "test-pings") {
+          const focused = interaction.options.getFocused();
+          const seasons: RowDataPacket[] = await db.query(
+            "SELECT id, name FROM season WHERE name LIKE ? ORDER BY id DESC LIMIT 25",
+            [`%${focused}%`]
+          );
+          await interaction.respond(
+            seasons.map(s => ({ name: s.name as string, value: String(s.id) }))
+          );
+        }
+        return;
+      }
       if (!interaction.isChatInputCommand()) return;
       if (interaction.commandName === "refresh-schedule") {
         await interaction.deferReply({ ephemeral: true });
         await updateSchedule();
         await interaction.editReply("✅ Schedule rafraîchi.");
+      }
+      if (interaction.commandName === "test-pings") {
+        await interaction.deferReply({ ephemeral: true });
+        try {
+          const seasonId = parseInt(interaction.options.getString("saison", true), 10);
+          const seasonRows: RowDataPacket[] = await db.query(
+            "SELECT id, name FROM season WHERE id = ?",
+            [seasonId]
+          );
+          if (!seasonRows.length) {
+            await interaction.editReply("❌ Saison introuvable.");
+            return;
+          }
+
+          const teamRows: RowDataPacket[] = await db.query(
+            "SELECT t.id, t.name FROM team t " +
+            "INNER JOIN teams_seasons ts ON ts.teams_id = t.id WHERE ts.season_id = ? ORDER BY t.name ASC",
+            [seasonId]
+          );
+          if (!teamRows.length) {
+            await interaction.editReply(`❌ Aucune équipe associée à la saison **${seasonRows[0].name}**.`);
+            return;
+          }
+
+          const channelIds = getChannels("discord.channels.default");
+          if (!channelIds.length) {
+            await interaction.editReply("❌ Aucun salon configuré (discord.channels.default).");
+            return;
+          }
+
+          let sentTo = 0;
+          for (const channelId of channelIds) {
+            try {
+              const channel = await client!.channels.fetch(channelId) as TextChannel;
+              const guild = channel.guild;
+              const mentions = teamRows.map(t => {
+                const norm = normalizeRoleName(t.name);
+                const role = guild.roles.cache.find(r => normalizeRoleName(r.name) === norm);
+                return role ? `<@&${role.id}>` : `**${t.name}**`;
+              });
+              await channel.send(
+                `🔔 **Test de ping — Saison ${seasonRows[0].name}**\n${mentions.join(" ")}`
+              );
+              sentTo++;
+            } catch (err) {
+              console.error(`Discord test-pings [${channelId}]:`, (err as Error).message);
+            }
+          }
+
+          await interaction.editReply(
+            sentTo
+              ? `✅ Message envoyé dans ${sentTo} salon(s) pour ${teamRows.length} équipe(s) de la saison **${seasonRows[0].name}**.`
+              : "❌ Échec de l'envoi dans tous les salons configurés."
+          );
+        } catch (err) {
+          console.error("Discord test-pings error:", (err as Error).message);
+          await interaction.editReply("❌ Erreur lors de l'envoi du test de ping.");
+        }
       }
       if (interaction.commandName === "purge") {
         await interaction.deferReply({ ephemeral: true });
@@ -217,13 +304,25 @@ export async function initDiscord(): Promise<void> {
 export async function announceNewMatch(matchId: number): Promise<void> {
   if (!isDiscordEnabled()) return;
   const channelIds = getChannelsOrDefault("discord.channels.announce");
-  if (!client?.isReady() || !channelIds.length) return;
+  if (!channelIds.length) {
+    console.warn(
+      `Discord announceNewMatch: no channel configured (discord.channels.announce / discord.channels.default), match ${matchId} not announced.`
+    );
+    return;
+  }
+  if (!client?.isReady()) {
+    console.warn(`Discord announceNewMatch: client not ready, match ${matchId} not announced.`);
+    return;
+  }
   try {
     const sql =
       "SELECT m.team1_string, m.team2_string, gs.ip_string, gs.port " +
       "FROM `match` m LEFT JOIN game_server gs ON m.server_id = gs.id WHERE m.id = ?";
     const rows: RowDataPacket[] = await db.query(sql, [matchId]);
-    if (!rows.length) return;
+    if (!rows.length) {
+      console.warn(`Discord announceNewMatch: match ${matchId} not found in DB, not announced.`);
+      return;
+    }
 
     const match = rows[0];
     const serverIP = match.ip_string ? `${match.ip_string}:${match.port}` : "N/A";
@@ -768,5 +867,105 @@ export async function sendGotvMatchEmbed(data: {
     await sendEmbedToTargets(channelIds, embed);
   } catch (err) {
     console.error("Discord sendGotvMatchEmbed error:", (err as Error).message);
+  }
+}
+
+// ─── Stalled Match Reminders ────────────────────────────────────────────────
+// Pings admins in discord.channels.default when a match looks stuck. Both
+// "not started" rules key off the same signal — no map_stats row for the
+// match yet — since pending_veto only reflects the opt-in pre-match/lobby
+// veto flow (veto_before_match=true at creation) and stays 0 for the
+// standard in-game veto used by most matches:
+//  - no map started 5 minutes after match creation → force veto
+//  - still no map started 10 minutes after creation → force start
+//  - in a BO3, the next map not started 10 minutes after the previous one
+//    ended → force start
+// Each occurrence is tracked via the settings key/value store so it only
+// fires once (mirrors discord.msgid.* persistence used for scoreboard/schedule).
+
+const STALLED_MATCH_ADMIN_IDS = ["286256551994458113", "1171449591833579557"];
+
+function buildMatchUrl(matchId: number): string {
+  const hostname: string = config.get("server.hostname");
+  return `${hostname.replace(/\/$/, "")}/match/${matchId}`;
+}
+
+function alreadyNotified(key: string): boolean {
+  return getSetting(key) === "1";
+}
+
+async function notifyStalledMatch(matchId: number, title: string, description: string): Promise<void> {
+  const channelIds = getChannels("discord.channels.default");
+  if (!channelIds.length) return;
+  const matchUrl = buildMatchUrl(matchId);
+  const content = STALLED_MATCH_ADMIN_IDS.map((id) => `<@${id}>`).join(" ");
+  const embed = new EmbedBuilder()
+    .setColor(0xe74c3c)
+    .setTitle(title)
+    .setURL(matchUrl)
+    .setDescription(description)
+    .addFields({ name: "Match", value: `[#${matchId}](${matchUrl})`, inline: true })
+    .setTimestamp();
+  await sendEmbedToTargets(channelIds, embed, content);
+}
+
+async function checkStalledMatches(): Promise<void> {
+  if (!isDiscordEnabled() || !client?.isReady()) return;
+  try {
+    const pendingVetoMatches: RowDataPacket[] = await db.query(
+      "SELECT m.id FROM `match` m WHERE m.cancelled = 0 AND m.forfeit = 0 AND m.end_time IS NULL " +
+        "AND m.start_time IS NOT NULL AND m.start_time <= NOW() - INTERVAL 5 MINUTE " +
+        "AND NOT EXISTS (SELECT 1 FROM map_stats ms WHERE ms.match_id = m.id)",
+      []
+    );
+    for (const m of pendingVetoMatches) {
+      const key = `discord.notified.forceveto.${m.id}`;
+      if (alreadyNotified(key)) continue;
+      await notifyStalledMatch(
+        m.id,
+        "⏳ Véto non démarré",
+        "Le véto n'a pas démarré 5 minutes après la création du match — pensez à **forcer le véto**."
+      );
+      await setSetting(key, "1");
+    }
+
+    const notStartedMatches: RowDataPacket[] = await db.query(
+      "SELECT m.id FROM `match` m WHERE m.cancelled = 0 AND m.forfeit = 0 AND m.end_time IS NULL " +
+        "AND m.start_time IS NOT NULL AND m.start_time <= NOW() - INTERVAL 10 MINUTE " +
+        "AND NOT EXISTS (SELECT 1 FROM map_stats ms WHERE ms.match_id = m.id)",
+      []
+    );
+    for (const m of notStartedMatches) {
+      const key = `discord.notified.forcestart.${m.id}`;
+      if (alreadyNotified(key)) continue;
+      await notifyStalledMatch(
+        m.id,
+        "⏳ Match non démarré",
+        "Le match n'a pas démarré 10 minutes après sa création — pensez à **forcer le lancement**."
+      );
+      await setSetting(key, "1");
+    }
+
+    const staleBo3Maps: RowDataPacket[] = await db.query(
+      "SELECT ms.id AS map_stats_id, ms.match_id FROM map_stats ms " +
+        "INNER JOIN (SELECT match_id, MAX(id) AS max_id FROM map_stats GROUP BY match_id) latest " +
+        "  ON latest.match_id = ms.match_id AND latest.max_id = ms.id " +
+        "INNER JOIN `match` m ON m.id = ms.match_id " +
+        "WHERE m.max_maps = 3 AND m.cancelled = 0 AND m.forfeit = 0 AND m.end_time IS NULL " +
+        "AND ms.end_time IS NOT NULL AND ms.end_time <= NOW() - INTERVAL 10 MINUTE",
+      []
+    );
+    for (const row of staleBo3Maps) {
+      const key = `discord.notified.forcestart.map.${row.map_stats_id}`;
+      if (alreadyNotified(key)) continue;
+      await notifyStalledMatch(
+        row.match_id,
+        "⏳ Map suivante non démarrée",
+        "La map suivante n'a pas démarré 10 minutes après la fin de la précédente — pensez à **forcer le lancement**."
+      );
+      await setSetting(key, "1");
+    }
+  } catch (err) {
+    console.error("Discord checkStalledMatches error:", (err as Error).message);
   }
 }

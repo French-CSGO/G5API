@@ -1,4 +1,4 @@
-import { registerFont, loadImage } from "canvas";
+import { registerFont, loadImage, createCanvas } from "canvas";
 import type { CanvasRenderingContext2D, Image as CanvasImage } from "canvas";
 import path from "path";
 import fs from "fs";
@@ -79,23 +79,35 @@ export function fieldFont(f: { bold: boolean; size: number; font: string }): str
   return `${f.bold ? "bold " : ""}${f.size}px ${f.font}`;
 }
 
-/** Draws a logo centered at (cfg.x, cfg.y) with size cfg.size × cfg.size */
+/**
+ * Draws a logo/flag centered at (cfg.x, cfg.y), scaled to fit within a
+ * cfg.size × cfg.size box while preserving its native aspect ratio
+ * (equivalent to CSS `object-fit: contain`) — never stretches non-square
+ * images (e.g. a team flag used as a logo fallback) out of shape.
+ */
 export function drawLogoCentered(
   ctx: CanvasRenderingContext2D,
   img: CanvasImage | null,
   cfg: { x: number; y: number; size: number }
 ): void {
   if (!img) return;
-  const half = cfg.size / 2;
+  const scale = Math.min(cfg.size / img.width, cfg.size / img.height);
+  const w = img.width * scale;
+  const h = img.height * scale;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  ctx.drawImage(img as any, cfg.x - half, cfg.y - half, cfg.size, cfg.size);
+  ctx.drawImage(img as any, cfg.x - w / 2, cfg.y - h / 2, w, h);
 }
 
 /**
- * Draws an image (e.g. a player photo) scaled up/down so it exactly fills the
- * target height (no vertical squish), then center-crops the width to fit —
- * never stretches the image out of its aspect ratio. Equivalent to CSS
- * `object-fit: cover` driven by height. Draws nothing if img is null.
+ * Draws an image (e.g. a player photo) scaled up so it fully covers the
+ * target box on whichever axis needs more scaling, then crops the other
+ * axis to fit — never stretches the image out of its aspect ratio.
+ * Equivalent to CSS `object-fit: cover`. Horizontal overflow is center-
+ * cropped, but vertical overflow is anchored to the top (like
+ * `object-position: top`) rather than centered, since portrait player
+ * photos usually have the face near the top — centering would cut into
+ * it whenever there's more headroom above than below. Draws nothing if
+ * img is null.
  */
 export function drawImageCover(
   ctx: CanvasRenderingContext2D,
@@ -104,10 +116,10 @@ export function drawImageCover(
   circle = false
 ): void {
   if (!img) return;
-  const scale = height / img.height;
-  const srcH = img.height;
-  const srcW = Math.min(width / scale, img.width);
-  const srcX = Math.max(0, (img.width - srcW) / 2);
+  const scale = Math.max(width / img.width, height / img.height);
+  const srcW = width / scale;
+  const srcH = height / scale;
+  const srcX = (img.width - srcW) / 2;
   const srcY = 0;
   const dx = x - width / 2;
   const dy = y - height / 2;
@@ -179,8 +191,62 @@ export function tryRegisterFont(fontFile: string, families: string[]): void {
 
 export const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 20 * 1024 * 1024 },
+  limits: { fileSize: 8 * 1024 * 1024 },
 });
+
+/**
+ * node-canvas can only decode PNG/JPEG/GIF — never WebP or AVIF, regardless
+ * of system libraries. Browsers happily display those formats directly
+ * (e.g. via the static file route), which makes a bad upload look "fine"
+ * until it's rendered into a generated image and fails there instead.
+ * Throws with a clear message if the buffer isn't decodable, so upload
+ * routes can reject it up front instead of silently persisting it.
+ */
+export async function assertDecodableImage(buffer: Buffer): Promise<void> {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await loadImage(buffer as any);
+  } catch {
+    throw new Error(
+      "Format d'image non supporté (WebP et AVIF ne sont pas décodables par le générateur — utilisez PNG ou JPEG)."
+    );
+  }
+}
+
+/**
+ * Downscales an uploaded image buffer so neither dimension exceeds
+ * maxDimension, preserving aspect ratio — never upscales. Re-encodes as
+ * JPEG when the original filename looks like one (smaller output for
+ * photos/backgrounds), PNG otherwise (keeps transparency for logos).
+ * Assumes the buffer is already known-decodable (see assertDecodableImage);
+ * returns the original buffer unchanged if it's already within bounds.
+ */
+export async function resizeImageBuffer(
+  buffer: Buffer,
+  maxDimension: number,
+  originalName = ""
+): Promise<Buffer> {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const img = await loadImage(buffer as any);
+    if (img.width <= maxDimension && img.height <= maxDimension) return buffer;
+
+    const scale = Math.min(maxDimension / img.width, maxDimension / img.height);
+    const w = Math.max(1, Math.round(img.width * scale));
+    const h = Math.max(1, Math.round(img.height * scale));
+
+    const canvas = createCanvas(w, h);
+    const ctx = canvas.getContext("2d");
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ctx.drawImage(img as any, 0, 0, w, h);
+
+    const isJpeg = /\.jpe?g$/i.test(originalName);
+    return isJpeg ? canvas.toBuffer("image/jpeg", { quality: 0.9 }) : canvas.toBuffer("image/png");
+  } catch (err) {
+    console.warn("[resizeImageBuffer] Failed to resize, keeping original:", err);
+    return buffer;
+  }
+}
 
 export function writeFileSafe(filePath: string, buffer: Buffer): void {
   // Normalize to prevent path traversal — ensure the resolved path stays within its parent dir
