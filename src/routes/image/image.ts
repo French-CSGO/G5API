@@ -24,6 +24,7 @@ import { generatePlayerImage } from "./generators/player.js";
 import { generateTeamSeasonImage } from "./generators/teamSeason.js";
 import { generateMapMvpImage } from "./generators/mvp.js";
 import { generateTeamMatchImage } from "./generators/teamMatch.js";
+import { renderMatchHtml, buildMatchViewData } from "./generators/matchHtml.js";
 import type { ImageSettings } from "./types.js";
 import type {
   MatchRow, MapStatRow, PlayerStatRow,
@@ -417,92 +418,208 @@ router.post("/match/:match_id/map/:map_number/preview", async (req: Request, res
   await renderMatchImage(req, res, mapNumber, "byNumber");
 });
 
+// ─── Match HTML/CSS view routes (pilot) ────────────────────────────────────
+// Live HTML/CSS pages meant to be loaded directly as an OBS Browser Source,
+// replacing the rasterized-PNG workflow for this one visual. Each `/view`
+// page polls its matching `/data` JSON endpoint on an interval to stay live
+// without a full page reload. Settings always come from the saved
+// image-settings.json (no unsaved-preview variant, unlike the PNG routes —
+// see settingsFromRequest()'s doc comment for why that matters here).
+
+/** GET /image/match/:match_id/view — full match stats, as a live HTML page */
+router.get("/match/:match_id/view", async (req: Request, res: Response) => {
+  await renderMatchImageHtml(req, res, null, "full");
+});
+/** GET /image/match/:match_id/data — JSON polled by the page above */
+router.get("/match/:match_id/data", async (req: Request, res: Response) => {
+  await renderMatchImageData(req, res, null, "full");
+});
+
+/** GET /image/match/:match_id/map/view — current (latest) map stats */
+router.get("/match/:match_id/map/view", async (req: Request, res: Response) => {
+  await renderMatchImageHtml(req, res, null, "latest");
+});
+router.get("/match/:match_id/map/data", async (req: Request, res: Response) => {
+  await renderMatchImageData(req, res, null, "latest");
+});
+
+/** GET /image/match/:match_id/map/:map_number/view — stats by map number (1, 2, 3...) */
+router.get("/match/:match_id/map/:map_number/view", async (req: Request, res: Response) => {
+  const mapNumber = parseInt(req.params.map_number);
+  if (isNaN(mapNumber) || mapNumber < 1) { res.status(400).json({ error: "Invalid map number" }); return; }
+  await renderMatchImageHtml(req, res, mapNumber, "byNumber");
+});
+router.get("/match/:match_id/map/:map_number/data", async (req: Request, res: Response) => {
+  const mapNumber = parseInt(req.params.map_number);
+  if (isNaN(mapNumber) || mapNumber < 1) { res.status(400).json({ error: "Invalid map number" }); return; }
+  await renderMatchImageData(req, res, mapNumber, "byNumber");
+});
+
+interface MatchImageData {
+  match: MatchRow;
+  mapRow: MapStatRow | null;
+  allMaps: MapStatRow[];
+  players: PlayerStatRow[];
+  mapSlots: MapStatRow[];
+  plannedMaps: string[];
+  currentSlotIndex: number;
+}
+
+/** Shared data-fetch for the match "stats" visual — used by the PNG (canvas), HTML/CSS, and JSON polling routes alike. */
+async function fetchMatchImageData(
+  matchId: number, mapParam: number | null, mode: "full" | "latest" | "byNumber"
+): Promise<MatchImageData | { error: string; status: number }> {
+  const match = await fetchMatchRow(matchId);
+  if (!match) return { error: "Match not found", status: 404 };
+
+  let mapRow: MapStatRow | null = null;
+  let mapStatsId: number | null = null;
+
+  if (mode === "byNumber" && mapParam !== null) {
+    // map_number is 0-indexed in DB, user passes 1-indexed
+    const rows = await db.query(
+      `SELECT id, map_name, team1_score, team2_score FROM map_stats WHERE match_id = ? AND map_number = ? LIMIT 1`,
+      [matchId, mapParam - 1]
+    ) as MapStatRow[];
+    if (!rows?.length) return { error: `Map ${mapParam} not found for this match`, status: 404 };
+    mapRow = rows[0];
+    mapStatsId = mapRow.id;
+  } else if (mode === "latest") {
+    const rows = await db.query(
+      `SELECT id, map_name, team1_score, team2_score FROM map_stats WHERE match_id = ? ORDER BY id DESC LIMIT 1`,
+      [matchId]
+    ) as MapStatRow[];
+    mapRow = rows?.[0] ?? null;
+    mapStatsId = mapRow?.id ?? null;
+  } else {
+    // "full" mode — get latest map for display but aggregate all player stats
+    const rows = await db.query(
+      `SELECT id, map_name, team1_score, team2_score FROM map_stats WHERE match_id = ? ORDER BY id DESC LIMIT 1`,
+      [matchId]
+    ) as MapStatRow[];
+    mapRow = rows?.[0] ?? null;
+  }
+
+  // For "full" mode, fetch all maps for the series score display
+  const allMaps: MapStatRow[] = mode === "full"
+    ? await db.query(
+        `SELECT id, map_name, team1_score, team2_score FROM map_stats WHERE match_id = ? ORDER BY map_number ASC`,
+        [matchId]
+      ) as MapStatRow[]
+    : []; // per-map mode: map name only, no scores
+
+  // Map slots (map1/map2/map3) — full series order, with planned (unplayed) maps from veto
+  const [mapSlots, plannedMaps] = await Promise.all([
+    fetchAllMaps(matchId),
+    fetchVetoPicks(matchId),
+  ]);
+
+  let currentSlotIndex = -1;
+  if (mode === "byNumber" && mapParam !== null) {
+    currentSlotIndex = mapParam - 1;
+  } else if (mode === "latest" && mapRow) {
+    currentSlotIndex = mapSlots.findIndex(r => r.id === mapRow!.id);
+  }
+  const totalMaps = plannedMaps.length || mapSlots.length;
+  if (totalMaps === 1 && currentSlotIndex >= 0) currentSlotIndex = 1;
+
+  // For "latest" and "byNumber", filter player stats to that specific map
+  // For "full", aggregate across all maps
+  const filterByMap = mode !== "full" && mapStatsId !== null;
+  const playerFilter = filterByMap ? "AND map_id = ?" : "";
+  const playerArgs   = filterByMap ? [matchId, mapStatsId] : [matchId];
+  const players = await db.query(
+    `SELECT steam_id, name, team_id,
+       SUM(kills) AS kills, SUM(deaths) AS deaths, SUM(assists) AS assists,
+       SUM(roundsplayed) AS roundsplayed,
+       SUM(k1) AS k1, SUM(k2) AS k2, SUM(k3) AS k3, SUM(k4) AS k4, SUM(k5) AS k5
+     FROM player_stats
+     WHERE match_id = ? ${playerFilter}
+     GROUP BY steam_id, team_id
+     ORDER BY team_id, kills DESC`,
+    playerArgs
+  ) as PlayerStatRow[];
+
+  return { match, mapRow, allMaps, players, mapSlots, plannedMaps, currentSlotIndex };
+}
+
 async function renderMatchImage(req: Request, res: Response, mapParam: number | null, mode: "full" | "latest" | "byNumber") {
   try {
     const matchId = parseInt(req.params.match_id);
     if (isNaN(matchId)) { res.status(400).json({ error: "Invalid match ID" }); return; }
 
-    const match = await fetchMatchRow(matchId);
-    if (!match) { res.status(404).json({ error: "Match not found" }); return; }
+    const data = await fetchMatchImageData(matchId, mapParam, mode);
+    if ("error" in data) { res.status(data.status).json({ error: data.error }); return; }
 
-    let mapRow: MapStatRow | null = null;
-    let mapStatsId: number | null = null;
-
-    if (mode === "byNumber" && mapParam !== null) {
-      // map_number is 0-indexed in DB, user passes 1-indexed
-      const rows = await db.query(
-        `SELECT id, map_name, team1_score, team2_score FROM map_stats WHERE match_id = ? AND map_number = ? LIMIT 1`,
-        [matchId, mapParam - 1]
-      ) as MapStatRow[];
-      if (!rows?.length) { res.status(404).json({ error: `Map ${mapParam} not found for this match` }); return; }
-      mapRow = rows[0];
-      mapStatsId = mapRow.id;
-    } else if (mode === "latest") {
-      const rows = await db.query(
-        `SELECT id, map_name, team1_score, team2_score FROM map_stats WHERE match_id = ? ORDER BY id DESC LIMIT 1`,
-        [matchId]
-      ) as MapStatRow[];
-      mapRow = rows?.[0] ?? null;
-      mapStatsId = mapRow?.id ?? null;
-    } else {
-      // "full" mode — get latest map for display but aggregate all player stats
-      const rows = await db.query(
-        `SELECT id, map_name, team1_score, team2_score FROM map_stats WHERE match_id = ? ORDER BY id DESC LIMIT 1`,
-        [matchId]
-      ) as MapStatRow[];
-      mapRow = rows?.[0] ?? null;
-    }
-
-    // For "full" mode, fetch all maps for the series score display
-    let allMaps: MapStatRow[] = [];
-    if (mode === "full") {
-      allMaps = await db.query(
-        `SELECT id, map_name, team1_score, team2_score FROM map_stats WHERE match_id = ? ORDER BY map_number ASC`,
-        [matchId]
-      ) as MapStatRow[];
-    } else {
-      allMaps = []; // per-map mode: map name only, no scores
-    }
-
-    // Map slots (map1/map2/map3) — full series order, with planned (unplayed) maps from veto
-    const [mapSlots, plannedMaps] = await Promise.all([
-      fetchAllMaps(matchId),
-      fetchVetoPicks(matchId),
-    ]);
-
-    let currentSlotIndex = -1;
-    if (mode === "byNumber" && mapParam !== null) {
-      currentSlotIndex = mapParam - 1;
-    } else if (mode === "latest" && mapRow) {
-      currentSlotIndex = mapSlots.findIndex(r => r.id === mapRow!.id);
-    }
-    const totalMaps = plannedMaps.length || mapSlots.length;
-    if (totalMaps === 1 && currentSlotIndex >= 0) currentSlotIndex = 1;
-
-    // For "latest" and "byNumber", filter player stats to that specific map
-    // For "full", aggregate across all maps
-    const filterByMap = mode !== "full" && mapStatsId !== null;
-    const playerFilter = filterByMap ? "AND map_id = ?" : "";
-    const playerArgs   = filterByMap ? [matchId, mapStatsId] : [matchId];
-    const players = await db.query(
-      `SELECT steam_id, name, team_id,
-         SUM(kills) AS kills, SUM(deaths) AS deaths, SUM(assists) AS assists,
-         SUM(roundsplayed) AS roundsplayed,
-         SUM(k1) AS k1, SUM(k2) AS k2, SUM(k3) AS k3, SUM(k4) AS k4, SUM(k5) AS k5
-       FROM player_stats
-       WHERE match_id = ? ${playerFilter}
-       GROUP BY steam_id, team_id
-       ORDER BY team_id, kills DESC`,
-      playerArgs
-    ) as PlayerStatRow[];
-
-    const png = await generateMatchImage(match, mapRow, allMaps, players, settingsFromRequest(req), mapSlots, plannedMaps, currentSlotIndex);
+    const png = await generateMatchImage(
+      data.match, data.mapRow, data.allMaps, data.players,
+      settingsFromRequest(req), data.mapSlots, data.plannedMaps, data.currentSlotIndex
+    );
     res.setHeader("Content-Type", "image/png");
     res.setHeader("Cache-Control", "no-cache, no-store");
     res.send(png);
   } catch (err) {
     console.error("[image] Error:", err);
     res.status(500).json({ error: "Failed to generate image" });
+  }
+}
+
+/**
+ * HTML/CSS counterpart of renderMatchImage — same data, rendered as a live
+ * standalone page instead of a rasterized PNG, meant to be loaded directly as
+ * an OBS Browser Source. The page polls the matching `/data` JSON endpoint
+ * (same URL with the final `/view` segment swapped for `/data`) every few
+ * seconds and patches its own DOM in place, so a Browser Source can stay
+ * open across the whole match without ever needing a manual refresh.
+ *
+ * The data URL is passed as a *relative* reference ("data", no leading
+ * slash) rather than one built from req.baseUrl/req.path — the page is
+ * fetched by the browser through whatever reverse proxy sits in front of
+ * G5API (e.g. G5V's dev/prod proxy strips a leading /api that G5API itself
+ * never sees), so any prefix computed server-side would go stale as soon as
+ * the browser tries to resolve it. A same-directory relative path lets the
+ * browser resolve it against the URL it actually used to load the page.
+ */
+async function renderMatchImageHtml(req: Request, res: Response, mapParam: number | null, mode: "full" | "latest" | "byNumber") {
+  try {
+    const matchId = parseInt(req.params.match_id);
+    if (isNaN(matchId)) { res.status(400).json({ error: "Invalid match ID" }); return; }
+
+    const data = await fetchMatchImageData(matchId, mapParam, mode);
+    if ("error" in data) { res.status(data.status).json({ error: data.error }); return; }
+
+    const html = renderMatchHtml(
+      { match: data.match, mapRow: data.mapRow, allMaps: data.allMaps, players: data.players,
+        mapSlots: data.mapSlots, plannedMapNames: data.plannedMaps, currentSlotIndex: data.currentSlotIndex },
+      loadSettings(),
+      "data"
+    );
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.setHeader("Cache-Control", "no-cache, no-store");
+    res.send(html);
+  } catch (err) {
+    console.error("[image] Error (html):", err);
+    res.status(500).json({ error: "Failed to render match page" });
+  }
+}
+
+/** JSON data polled by renderMatchImageHtml's page-side script — same shape the page renders from initially. */
+async function renderMatchImageData(req: Request, res: Response, mapParam: number | null, mode: "full" | "latest" | "byNumber") {
+  try {
+    const matchId = parseInt(req.params.match_id);
+    if (isNaN(matchId)) { res.status(400).json({ error: "Invalid match ID" }); return; }
+
+    const data = await fetchMatchImageData(matchId, mapParam, mode);
+    if ("error" in data) { res.status(data.status).json({ error: data.error }); return; }
+
+    res.setHeader("Cache-Control", "no-cache, no-store");
+    res.json(buildMatchViewData({
+      match: data.match, mapRow: data.mapRow, allMaps: data.allMaps, players: data.players,
+      mapSlots: data.mapSlots, plannedMapNames: data.plannedMaps, currentSlotIndex: data.currentSlotIndex,
+    }));
+  } catch (err) {
+    console.error("[image] Error (data):", err);
+    res.status(500).json({ error: "Failed to fetch match data" });
   }
 }
 
@@ -964,6 +1081,20 @@ mountSlotRoute("/match/map/:map_number", async (req, res) => {
   const mapNumber = parseInt(req.params.map_number);
   if (isNaN(mapNumber) || mapNumber < 1) { res.status(400).json({ error: "Invalid map number" }); return; }
   await renderMatchImage(req, res, mapNumber, "byNumber");
+});
+mountSlotRoute("/match/view", (req, res) => renderMatchImageHtml(req, res, null, "full"));
+mountSlotRoute("/match/data", (req, res) => renderMatchImageData(req, res, null, "full"));
+mountSlotRoute("/match/map/view", (req, res) => renderMatchImageHtml(req, res, null, "latest"));
+mountSlotRoute("/match/map/data", (req, res) => renderMatchImageData(req, res, null, "latest"));
+mountSlotRoute("/match/map/:map_number/view", async (req, res) => {
+  const mapNumber = parseInt(req.params.map_number);
+  if (isNaN(mapNumber) || mapNumber < 1) { res.status(400).json({ error: "Invalid map number" }); return; }
+  await renderMatchImageHtml(req, res, mapNumber, "byNumber");
+});
+mountSlotRoute("/match/map/:map_number/data", async (req, res) => {
+  const mapNumber = parseInt(req.params.map_number);
+  if (isNaN(mapNumber) || mapNumber < 1) { res.status(400).json({ error: "Invalid map number" }); return; }
+  await renderMatchImageData(req, res, mapNumber, "byNumber");
 });
 mountSlotRoute("/mvp", renderFullMatchMvpImage);
 mountSlotRoute("/map/:map_number/mvp", renderMvpImage);
