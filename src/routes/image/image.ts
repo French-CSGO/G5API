@@ -3,14 +3,20 @@
  * resourcePath: /image
  * description: Express API for generating real-time match stat images.
  */
-import { Router, Request, Response } from "express";
+import { Router, Request, Response, NextFunction } from "express";
 
 type MReq = Request & { file?: { originalname: string; buffer: Buffer; mimetype: string; size: number } };
 import path from "path";
 import fs from "fs";
 
 import { db } from "../../services/db.js";
-import { upload, writeFileSafe, resizeImageBuffer, assertDecodableImage } from "./helpers.js";
+import {
+  upload,
+  writeFileSafe,
+  compressImageKeepingAlpha,
+  resizeImageBuffer,
+  assertDecodableImage
+} from "./helpers.js";
 import { loadSettings, saveSettings } from "./settings.js";
 import Utils from "../../utility/utils.js";
 import { generateMatchImage } from "./generators/match.js";
@@ -266,8 +272,17 @@ router.post(
   }
 );
 
+/** Réservé aux utilisateurs avec le rôle cast ou admin. */
+function requireCastOrAdmin(req: Request, res: Response, next: NextFunction) {
+  if (!req.user || (!Utils.castCheck(req.user) && !Utils.adminCheck(req.user))) {
+    res.status(403).json({ error: "Accès réservé aux utilisateurs avec le rôle cast." });
+    return;
+  }
+  next();
+}
+
 /** GET /image/players — liste les images de joueurs dans public/img/players/ */
-router.get("/players", (_req: Request, res: Response) => {
+router.get("/players", Utils.ensureAuthenticated, requireCastOrAdmin, (_req: Request, res: Response) => {
   const playersDir = path.join(process.cwd(), "public", "img", "players");
   try {
     const files = fs.existsSync(playersDir)
@@ -280,7 +295,7 @@ router.get("/players", (_req: Request, res: Response) => {
 });
 
 /** DELETE /image/player/:steamid — supprime l'image d'un joueur dans public/img/players/ */
-router.delete("/player/:steamid", (req: Request, res: Response) => {
+router.delete("/player/:steamid", Utils.ensureAuthenticated, requireCastOrAdmin, (req: Request, res: Response) => {
   const steamId = req.params.steamid;
   if (!steamId || !/^\d{17}$/.test(steamId)) {
     res.status(400).json({ error: "Invalid steam_id (must be 17 digits)." });
@@ -306,6 +321,8 @@ router.delete("/player/:steamid", (req: Request, res: Response) => {
 /** POST /image/upload/player — upload d'une image joueur dans public/img/players/{steamid}.png */
 router.post(
   "/upload/player",
+  Utils.ensureAuthenticated,
+  requireCastOrAdmin,
   upload.single("file") as any,
   async (req: MReq, res: Response) => {
     if (!req.file) { res.status(400).json({ error: "No file received." }); return; }
@@ -320,11 +337,18 @@ router.post(
       res.status(400).json({ error: (err as Error).message });
       return;
     }
+    let compressed: Buffer;
+    try {
+      compressed = await compressImageKeepingAlpha(req.file.buffer);
+    } catch (err) {
+      console.error("[image/upload/player] Error:", err);
+      res.status(400).json({ error: "Invalid image file." });
+      return;
+    }
     const playersDir = path.join(process.cwd(), "public", "img", "players");
     if (!fs.existsSync(playersDir)) fs.mkdirSync(playersDir, { recursive: true });
     const dest = path.join(playersDir, `${steamId}.png`);
-    const resized = await resizeImageBuffer(req.file.buffer, 512);
-    writeFileSafe(dest, resized);
+    writeFileSafe(dest, compressed);
     res.json({ filename: `${steamId}.png` });
   }
 );
@@ -943,6 +967,12 @@ mountSlotRoute("/match/map/:map_number", async (req, res) => {
 });
 mountSlotRoute("/mvp", renderFullMatchMvpImage);
 mountSlotRoute("/map/:map_number/mvp", renderMvpImage);
+mountSlotRoute("/player/:steam_id", (req, res) => renderPlayerImage(req, res, null));
+mountSlotRoute("/map/:map_number/player/:steam_id", async (req, res) => {
+  const mapNumber = parseInt(req.params.map_number);
+  if (isNaN(mapNumber) || mapNumber < 1) { res.status(400).json({ error: "Invalid map number" }); return; }
+  await renderPlayerImage(req, res, mapNumber);
+});
 mountSlotRoute("/team/:team_number", (req, res) => renderTeamMatchImage(req, res, null));
 mountSlotRoute("/map/:map_number/team/:team_number", async (req, res) => {
   const mapNumber = parseInt(req.params.map_number);

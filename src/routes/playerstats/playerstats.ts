@@ -240,11 +240,12 @@ router.get("/unique", async (req, res, next) => {
  *
  * /playerstats/search:
  *   get:
- *     description: Search distinct players by name or Steam ID (or list all when search is omitted). Used by the player avatar upload page.
+ *     description: Search distinct players by name or Steam ID (or list all when search is omitted). Reserved to cast/admin users.
  *     produces:
  *       - application/json
  *     parameters:
  *       - name: search
+ *         description: Search term matched against player name or Steam ID.
  *         required: false
  *         schema:
  *            type: string
@@ -252,7 +253,7 @@ router.get("/unique", async (req, res, next) => {
  *       - playerstats
  *     responses:
  *       200:
- *         description: Matching players.
+ *         description: List of distinct players.
  *         content:
  *           application/json:
  *             schema:
@@ -267,19 +268,25 @@ router.get("/unique", async (req, res, next) => {
  *                         type: string
  *                       name:
  *                         type: string
+ *       403:
+ *         $ref: '#/components/responses/Unauthorized'
  *       500:
  *         $ref: '#/components/responses/Error'
  */
-router.get("/search", async (req, res, next) => {
+router.get("/search", Utils.ensureAuthenticated, async (req, res) => {
   try {
+    if (!req.user || (!Utils.castCheck(req.user) && !Utils.adminCheck(req.user))) {
+      res.status(403).json({ message: "Accès réservé aux utilisateurs avec le rôle cast." });
+      return;
+    }
     const search = typeof req.query.search === "string" ? req.query.search.trim() : "";
-    let sql = "SELECT DISTINCT steam_id, name FROM player_stats";
+    let sql = "SELECT steam_id, MAX(name) AS name FROM player_stats";
     const params: string[] = [];
     if (search) {
       sql += " WHERE steam_id LIKE ? OR name LIKE ?";
       params.push(`%${search}%`, `%${search}%`);
     }
-    sql += " ORDER BY name ASC";
+    sql += " GROUP BY steam_id ORDER BY name ASC";
     const players: RowDataPacket[] = await db.query(sql, params);
     res.json({ players });
   } catch (err) {

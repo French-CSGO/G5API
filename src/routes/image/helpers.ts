@@ -187,6 +187,31 @@ export function tryRegisterFont(fontFile: string, families: string[]): void {
   });
 }
 
+// ─── Compression d'images ──────────────────────────────────────────────────────
+
+const PLAYER_IMAGE_MAX_DIMENSION = 512;
+
+/**
+ * Redimensionne (sans jamais agrandir) et recompresse une image en PNG, en
+ * conservant intégralement le canal alpha (transparence).
+ */
+export async function compressImageKeepingAlpha(
+  buffer: Buffer,
+  maxDimension = PLAYER_IMAGE_MAX_DIMENSION
+): Promise<Buffer> {
+  const img = await loadImage(buffer);
+  const scale = Math.min(1, maxDimension / Math.max(img.width, img.height));
+  const width = Math.max(1, Math.round(img.width * scale));
+  const height = Math.max(1, Math.round(img.height * scale));
+
+  const canvas = createCanvas(width, height);
+  const ctx = canvas.getContext("2d");
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  ctx.drawImage(img as any, 0, 0, width, height);
+
+  return canvas.toBuffer("image/png", { compressionLevel: 9 });
+}
+
 // ─── Multer ───────────────────────────────────────────────────────────────────
 
 export const upload = multer({
