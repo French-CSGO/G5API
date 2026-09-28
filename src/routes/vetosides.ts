@@ -260,9 +260,38 @@ router.post("/", Utils.ensureAuthenticated, async (req, res, next) => {
     return;
   } else {
     try {
-      // Get the veto ID.
+      // team_name here is the team CHOOSING this side. The veto row for this
+      // map was inserted under the OPPOSING team's name (whoever picked/banned
+      // it - see OnMapPicked/OnMapVetoed), so resolve that other team's name
+      // to find it, rather than matching team_name against itself.
+      let matchSql: string = "SELECT team1_id, team2_id FROM `match` WHERE id = ?";
+      const matchRow: RowDataPacket[] = await db.query(matchSql, [req.body[0].match_id]);
+      let teamSql: string = "SELECT name FROM team WHERE id IN (?, ?)";
+      const teamRows: RowDataPacket[] = await db.query(teamSql, [
+        matchRow[0].team1_id,
+        matchRow[0].team2_id
+      ]);
+      const isMatchTeam: boolean = teamRows.some((t) => t.name === req.body[0].team_name);
+      const opposingTeam = isMatchTeam
+        ? teamRows.find((t) => t.name !== req.body[0].team_name)
+        : undefined;
+
+      // Get the veto ID. Fall back to team_name itself when it isn't one of
+      // the match's team names or no row exists under the opposing team.
       let sql: string = "SELECT id FROM veto WHERE match_id = ? AND team_name = ? AND map = ?";
-      const vetoID: RowDataPacket[] = await db.query(sql, [req.body[0].match_id, req.body[0].team_name, req.body[0].map_name]);
+      let vetoID: RowDataPacket[] = [];
+      if (opposingTeam) {
+        vetoID = await db.query(sql, [req.body[0].match_id, opposingTeam.name, req.body[0].map_name]);
+      }
+      if (!vetoID.length) {
+        vetoID = await db.query(sql, [req.body[0].match_id, req.body[0].team_name, req.body[0].map_name]);
+      }
+      if (!vetoID.length) {
+        res
+          .status(404)
+          .json({ message: "No matching veto pick/ban found for this map." });
+        return;
+      }
       let insertStmt: VetoSideObject = {
         match_id: req.body[0].match_id,
         veto_id: vetoID[0].id,
